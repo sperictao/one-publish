@@ -196,6 +196,19 @@ impl Provider for BuiltInProvider {
                     return resolve_output_path(output, self.resolve_working_dir(spec));
                 }
 
+                // prepare 求值的 MSBuild PublishDir（pubxml 直接发布、缺 output 的
+                // 历史重跑）：构建实际写入目录由 pubxml 或 SDK 默认布局决定（含
+                // TFM/RID 段），与下面的静态推断无关；相对路径按项目目录解析。
+                if let Some(resolved) = read_parameter_string(
+                    &spec.parameters,
+                    super::providers::dotnet::DOTNET_PUBLISH_DIR_PARAMETER,
+                )
+                .map(|dir| dir.trim_end_matches(['/', '\\']).to_string())
+                .filter(|dir| !dir.is_empty())
+                {
+                    return resolve_output_path(resolved, self.resolve_working_dir(spec));
+                }
+
                 // 项目内默认输出 {project_dir}/bin/{configuration}/publish：这是 OnePublish
                 // 选定的位置，而非 SDK 默认布局（后者含 TFM/RID 段）；prepare 会把它作为
                 // 显式 --output 传入，构建写入位置与产物收集位置因此一致。
@@ -261,6 +274,22 @@ impl Provider for BuiltInProvider {
                 &self.resolve_working_dir(spec)?,
                 default_output_dir,
             ),
+            _ => None,
+        }
+    }
+
+    fn resolve_implicit_output(&self, spec: &PublishSpec) -> Option<(String, String)> {
+        match self.kind {
+            // dotnet 的输出由 pubxml 或 SDK 默认布局决定（含 TFM/RID 段），
+            // 静态推断不可靠，用 MSBuild 属性求值取构建实际写入目录。
+            BuiltInProviderKind::Dotnet => {
+                super::providers::dotnet::evaluate_msbuild_publish_dir(spec).map(|dir| {
+                    (
+                        super::providers::dotnet::DOTNET_PUBLISH_DIR_PARAMETER.to_string(),
+                        dir,
+                    )
+                })
+            }
             _ => None,
         }
     }
@@ -727,6 +756,59 @@ mod tests {
             Some("/tmp/one-publish-out".to_string())
         );
         assert_eq!(provider.configured_output_dir(&default_spec), None);
+    }
+
+    #[test]
+    fn dotnet_collects_the_msbuild_resolved_publish_dir() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let project_path = repository.path().join("App.csproj");
+        std::fs::write(&project_path, "<Project />").expect("write project file");
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("dotnet").expect("provider");
+
+        // pubxml 直接发布与缺 output 的历史重跑：prepare 把 MSBuild 求值出的
+        // PublishDir 写入保留参数 publish_dir；新版 VS 默认 FolderProfile 的
+        // PublishDir 含 TFM 段，收集目录以它为准，相对路径按项目目录解析。
+        let resolved = output_dir_spec(
+            &project_path,
+            &[(
+                "publish_dir",
+                SpecValue::String("bin/Release/net8.0/publish/".to_string()),
+            )],
+        );
+        assert_eq!(
+            provider.infer_output_dir(&resolved),
+            repository
+                .path()
+                .join("bin/Release/net8.0/publish")
+                .to_string_lossy()
+        );
+
+        // 显式 output 仍然优先：OnePublish 指定输出的派生来源不走 MSBuild 求值。
+        let explicit = output_dir_spec(
+            &project_path,
+            &[
+                ("output", SpecValue::String("/tmp/one-publish-out".to_string())),
+                (
+                    "publish_dir",
+                    SpecValue::String("bin/Release/net8.0/publish/".to_string()),
+                ),
+            ],
+        );
+        assert_eq!(
+            provider.infer_output_dir(&explicit),
+            "/tmp/one-publish-out"
+        );
+
+        // 无效 publish_dir（trim 后为空）不是求值结果，回落静态推断。
+        let empty = output_dir_spec(
+            &project_path,
+            &[("publish_dir", SpecValue::String("/".to_string()))],
+        );
+        assert_eq!(
+            provider.infer_output_dir(&empty),
+            repository.path().join("bin/Release/publish").to_string_lossy()
+        );
     }
 
     #[test]

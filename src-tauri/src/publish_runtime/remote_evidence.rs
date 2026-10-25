@@ -481,7 +481,12 @@ fn unzip_single_json(bytes: &[u8]) -> Result<Vec<u8>, AppError> {
         let mut file = archive
             .by_index(index)
             .map_err(|error| remote_error(format!("artifact zip 无法读取: {error}")))?;
-        if file.name().ends_with(".json") {
+        // zip 9 的 name() 需 UTF-8 校验；非 UTF-8 名字的条目不可能是 JSON 负载。
+        let is_json = file
+            .name()
+            .map(|name| name.ends_with(".json"))
+            .unwrap_or(false);
+        if is_json {
             let mut content = Vec::new();
             file.read_to_end(&mut content)
                 .map_err(|error| remote_error(format!("artifact 负载读取失败: {error}")))?;

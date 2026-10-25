@@ -1459,6 +1459,25 @@ fn insert_declared_output(
     );
 }
 
+/// 输出不由 OnePublish 指定时（项目配置直接发布、缺输出历史重跑），向工具链
+/// 求值构建实际写入目录并写入 Provider 声明的保留参数，供产物收集与 preflight
+/// 使用；求值失败回落静态推断，由构建错误自然暴露。
+fn pin_toolchain_resolved_output(
+    spec: &mut PublishSpec,
+    provider: &dyn crate::provider::Provider,
+    resolve: impl Fn(&PublishSpec) -> Option<(String, String)>,
+) {
+    if provider.configured_output_dir(spec).is_some() {
+        return;
+    }
+    if let Some((parameter, resolved)) =
+        resolve(spec).filter(|(_, dir)| !dir.trim().is_empty())
+    {
+        spec.parameters
+            .insert(parameter, SpecValue::String(resolved));
+    }
+}
+
 fn build_resolved_spec(
     repository: &crate::store::Repository,
     content: &PublishConfigurationContent,
@@ -1739,7 +1758,18 @@ pub async fn prepare_publish_runtime(
 
     let spec = match build_resolved_spec(repository, &content, &request.run_inputs, &request.source)
     {
-        Ok(spec) => spec,
+        Ok(mut spec) => {
+            // pubxml 直接发布与缺 output 的历史重跑：向工具链求值收集目录
+            // （见 pin_toolchain_resolved_output），其余来源派生时已有显式输出。
+            if let Ok(provider) =
+                crate::provider::registry::provider_registry().get(&content.provider_id)
+            {
+                pin_toolchain_resolved_output(&mut spec, provider, |spec| {
+                    provider.resolve_implicit_output(spec)
+                });
+            }
+            spec
+        }
         Err(PublishBuildFailure::Blocked(block)) => {
             return Ok(blocked_prepared_runtime(
                 resolution.configuration_id,
@@ -4568,6 +4598,56 @@ mod tests {
             },
         ));
         assert!(!history.parameters.contains_key("output"));
+    }
+
+    #[test]
+    fn toolchain_resolved_output_pins_only_when_output_is_not_configured() {
+        fn spec(provider_id: &str, parameters: &[(&str, SpecValue)]) -> PublishSpec {
+            PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: provider_id.to_string(),
+                project_path: "/tmp/App.csproj".to_string(),
+                parameters: parameters
+                    .iter()
+                    .map(|(key, value)| (key.to_string(), value.clone()))
+                    .collect(),
+            }
+        }
+        let registry = crate::provider::registry::ProviderRegistry::new();
+        let dotnet = registry.get("dotnet").expect("dotnet provider");
+        let cargo = registry.get("cargo").expect("cargo provider");
+
+        // pubxml 直接发布 / 缺 output 的历史重跑：求值结果写入保留参数。
+        let mut resolved = spec("dotnet", &[]);
+        super::pin_toolchain_resolved_output(&mut resolved, dotnet, |_| {
+            Some(("publish_dir".to_string(), "bin/Release/net8.0/publish".to_string()))
+        });
+        assert_eq!(
+            resolved.parameters.get("publish_dir"),
+            Some(&SpecValue::String("bin/Release/net8.0/publish".to_string()))
+        );
+
+        // 显式 output：输出由 OnePublish 指定，不求值。
+        let mut explicit = spec(
+            "dotnet",
+            &[("output", SpecValue::String("/tmp/out".to_string()))],
+        );
+        super::pin_toolchain_resolved_output(&mut explicit, dotnet, |_| {
+            panic!("configured output must skip toolchain evaluation")
+        });
+        assert!(!explicit.parameters.contains_key("publish_dir"));
+
+        // 求值失败（工具链缺失 / 项目不可求值）：回落静态推断。
+        let mut unevaluated = spec("dotnet", &[]);
+        super::pin_toolchain_resolved_output(&mut unevaluated, dotnet, |_| None);
+        assert!(!unevaluated.parameters.contains_key("publish_dir"));
+
+        // 未声明隐式输出求值能力的 Provider：默认实现不求值（None），不写入。
+        let mut cargo_spec = spec("cargo", &[]);
+        super::pin_toolchain_resolved_output(&mut cargo_spec, cargo, |spec| {
+            cargo.resolve_implicit_output(spec)
+        });
+        assert!(cargo_spec.parameters.is_empty());
     }
 
     #[test]
