@@ -102,3 +102,17 @@ OnePublish 当前是一个**个人本地发布工具**（见 `docs/design-philos
 - README `#roadmap` 表格 Phase 11 行链接到本文档。
 - Phase 11 维持 🚧 In Progress，直至候选 A/B/C 中**至少一个**达到其 Done 判定。
 - 若 maintainer 决定本 Phase 不再推进，则降级为 Planned（删除 🚧，改为 ⏳ Planned）。
+
+## 状态记录（2026-10-26）
+
+**候选 B（CI handoff 格式扩展）已达 Done 判定**，Phase 11 按上述条款升级 ✅ Done：
+
+- `HandoffSnippetFormat` 含 `gitlab-ci`，`buildGitLabCISnippet` 产出可直接粘贴的
+  `publish: stage: deploy: script:` 片段（实现与 8 个单测见
+  `src/lib/handoffSnippet.ts` / `src/lib/__tests__/handoffSnippet.test.ts`）；
+- e2e 覆盖 2 provider（dotnet / cargo）× 2 格式（shell / gitlab-ci），经历史卡片
+  按钮驱动并断言剪贴板内容（`tests/e2e/specs/12-handoff-snippets.spec.ts`）；
+- `resolveCommand()` 的命令行归一化与 provider 回退无回归（单测 + e2e 双覆盖）。
+
+候选 A（团队配置包冲突三选一）与候选 C（单一交接包）未实施；如后续推进，
+按本文档候选定义另开 issue，不再受本 Phase 状态约束。

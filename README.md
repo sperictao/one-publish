@@ -266,20 +266,20 @@ Translation files: `src/i18n/zh.json` | `src/i18n/en.json` (~776 keys each, orga
 
 OnePublish is evolving from a .NET publish GUI into a **commercial-grade, multi-language publishing product**. The master plan spans 11 phases:
 
-| Phase | Theme                                                               | Status         |
-| ----- | ------------------------------------------------------------------- | -------------- |
-| 0     | Engineering foundation (testing, CI)                                | ✅ Done        |
-| 1     | Publish core abstraction (Spec, Plan, Logging)                      | ✅ Done        |
-| 2     | Language providers (Rust/Go/Java)                                   | ✅ Done        |
-| 3     | 100% parameter expressiveness (schema editor)                       | ✅ Done        |
-| 4     | Commercial features (import/export, env checks, signing)            | ✅ Done        |
-| 5     | Release operations UX (checklist wizard, preflight)                 | ✅ Done        |
-| 6     | Multi-provider UX bridge                                            | ✅ Done        |
-| 7     | Execution reliability & DevEx (streaming, cancel, snapshots)        | ✅ Done        |
-| 8     | Run intelligence & recovery (history, re-run, failure grouping)     | ✅ Done        |
-| 9     | Diagnostics deepening & team handoff                                | ✅ Done        |
-| 10    | Collaboration signal & timeline intelligence                        | ✅ Done        |
-| 11    | [Team workflow integration](docs/roadmap/phase-11-team-workflow.md) | 🚧 In Progress |
+| Phase | Theme                                                               | Status  |
+| ----- | ------------------------------------------------------------------- | ------- |
+| 0     | Engineering foundation (testing, CI)                                | ✅ Done |
+| 1     | Publish core abstraction (Spec, Plan, Logging)                      | ✅ Done |
+| 2     | Language providers (Rust/Go/Java)                                   | ✅ Done |
+| 3     | 100% parameter expressiveness (schema editor)                       | ✅ Done |
+| 4     | Commercial features (import/export, env checks, signing)            | ✅ Done |
+| 5     | Release operations UX (checklist wizard, preflight)                 | ✅ Done |
+| 6     | Multi-provider UX bridge                                            | ✅ Done |
+| 7     | Execution reliability & DevEx (streaming, cancel, snapshots)        | ✅ Done |
+| 8     | Run intelligence & recovery (history, re-run, failure grouping)     | ✅ Done |
+| 9     | Diagnostics deepening & team handoff                                | ✅ Done |
+| 10    | Collaboration signal & timeline intelligence                        | ✅ Done |
+| 11    | [Team workflow integration](docs/roadmap/phase-11-team-workflow.md) | ✅ Done |
 
 ---
 
