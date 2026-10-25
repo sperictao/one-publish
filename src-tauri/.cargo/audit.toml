@@ -6,4 +6,12 @@ ignore = [
     # 等待 Tauri 上游升级 plist/quick-xml。复查：2026-10 或 Tauri 下一次 minor 升级时。
     "RUSTSEC-2026-0194",
     "RUSTSEC-2026-0195",
+    # RUSTSEC-2026-0367 / 0368 / 0369: zip 4.6.1（tauri-plugin-updater v2.x 唯一锁定的 zip 4 线）
+    # 修复只存在于 zip >=9.0.0（无 4.x backport）；updater 最新稳定 2.14.0 仍声明 zip ^4，
+    # 3.0 尚在 alpha。漏洞均命中 extract 解压场景；updater 只解包经签名校验的自有 Releases
+    # 更新包，攻击面受签名信任链约束。本地代码已升级 zip 9（本轮）。等 updater 3.0 稳定后
+    # 升级并移除本组 ignore。复查：tauri-plugin-updater 3.0 stable 发布时。
+    "RUSTSEC-2026-0367",
+    "RUSTSEC-2026-0368",
+    "RUSTSEC-2026-0369",
 ]

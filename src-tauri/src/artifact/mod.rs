@@ -416,7 +416,7 @@ mod tests {
         let mut names: Vec<String> = Vec::new();
         for i in 0..archive.len() {
             let file = archive.by_index(i).expect("zip file");
-            names.push(file.name().to_string());
+            names.push(file.name().expect("entry name").to_string());
         }
         names.sort();
 

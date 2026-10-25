@@ -26,9 +26,10 @@ tauri-plugin-log = "2"
 tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"
-# Security floor for the updater TLS stack (RUSTSEC-2026-0285). Keep this
-# exact constraint until the transitive Tauri dependency floor reaches it.
-rustls = { version = "=0.23.45", default-features = false }
+# Security floor for the updater TLS stack (RUSTSEC-2026-0285, 0346-0349).
+# Keep this exact constraint until the transitive Tauri dependency floor
+# reaches it.
+rustls = { version = "=0.23.46", default-features = false }
 tauri-plugin-notification = "2"
 tauri-plugin-decorum = { path = "vendor/tauri-plugin-decorum" }
 dirs = "5.0"
@@ -38,7 +39,7 @@ anyhow = "1.0"
 glob = "0.3"
 open = "5.0"
 walkdir = "2.5"
-zip = "8"
+zip = "9"
 sha2 = "0.10"
 hex = "0.4"
 json5 = "0.4"
