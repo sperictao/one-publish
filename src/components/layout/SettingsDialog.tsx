@@ -834,14 +834,14 @@ export function SettingsDialog({
     });
   }, [translations.version?.restartFailed]);
 
+  const outputDirLabel = translations.outputDir?.label;
   const handleSelectDirectory = useCallback(async () => {
     try {
       const selected = await openDialog({
         directory: true,
         multiple: false,
         title:
-          translations.outputDir?.label ||
-          "\u9009\u62E9\u9ED8\u8BA4\u53D1\u5E03\u76EE\u5F55",
+          outputDirLabel || "\u9009\u62E9\u9ED8\u8BA4\u53D1\u5E03\u76EE\u5F55",
       });
       if (selected) {
         onDefaultOutputDirChange(selected as string);
@@ -849,7 +849,7 @@ export function SettingsDialog({
     } catch (err) {
       console.error("\u9009\u62E9\u76EE\u5F55\u5931\u8D25:", err);
     }
-  }, [onDefaultOutputDirChange, translations.outputDir?.label]);
+  }, [onDefaultOutputDirChange, outputDirLabel]);
 
   const generalSettingsContent = (
     <GeneralSettingsSection

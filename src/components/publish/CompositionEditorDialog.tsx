@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowDown,
@@ -236,10 +236,11 @@ export function CompositionEditorDialog({
     [setDraft]
   );
 
-  const invalidCredential = useMemo(() => {
+  const handleSave = async () => {
     if (!draft) {
-      return null;
+      return;
     }
+    let invalidCredential: { routeId: string; key: string } | null = null;
     for (const route of draft.deliveryRoutes) {
       for (const [key, reference] of Object.entries(
         route.destination.credentials
@@ -248,16 +249,11 @@ export function CompositionEditorDialog({
           reference.trim() &&
           !CREDENTIAL_REFERENCE_PATTERN.test(reference.trim())
         ) {
-          return { routeId: route.routeId, key };
+          invalidCredential = { routeId: route.routeId, key };
+          break;
         }
       }
-    }
-    return null;
-  }, [draft]);
-
-  const handleSave = async () => {
-    if (!draft) {
-      return;
+      if (invalidCredential) break;
     }
     if (invalidCredential) {
       toast.error(

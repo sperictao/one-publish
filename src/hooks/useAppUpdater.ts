@@ -184,6 +184,7 @@ export function useAppUpdater() {
     []
   );
 
+  const autoCheckDescription = translations.version?.autoCheckDescription;
   const checkForUpdates = useCallback(
     async ({
       silent = false,
@@ -234,7 +235,7 @@ export function useAppUpdater() {
             formatMessage(t("version.new"), info.availableVersion),
             {
               description:
-                translations.version?.autoCheckDescription ||
+                autoCheckDescription ||
                 "发现新版本，可前往设置 > 关于安装更新。",
             }
           );
@@ -271,9 +272,10 @@ export function useAppUpdater() {
         setState((prev) => ({ ...prev, isCheckingUpdate: false }));
       }
     },
-    [resolveUpdaterHelpPaths, translations.version?.autoCheckDescription]
+    [resolveUpdaterHelpPaths, autoCheckDescription]
   );
 
+  const availableVersion = state.updateInfo?.availableVersion;
   const installAvailableUpdate = useCallback(async () => {
     if (!isTauri()) {
       return;
@@ -283,9 +285,7 @@ export function useAppUpdater() {
     resetDownloadProgress();
 
     try {
-      const installMessage = await installUpdate(
-        state.updateInfo?.availableVersion
-      );
+      const installMessage = await installUpdate(availableVersion);
       const latestInfo = await checkForUpdates({ silent: true });
       const isRestartRequired =
         installMessage.includes("重启") ||
@@ -329,11 +329,7 @@ export function useAppUpdater() {
       setState((prev) => ({ ...prev, isInstallingUpdate: false }));
       resetDownloadProgress();
     }
-  }, [
-    checkForUpdates,
-    resetDownloadProgress,
-    state.updateInfo?.availableVersion,
-  ]);
+  }, [checkForUpdates, resetDownloadProgress, availableVersion]);
 
   const openUpdaterHelpTarget = useCallback(
     async (target: "docs" | "template") => {
