@@ -40,9 +40,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Install Linux dependencies
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: |
-          # apt mirror 偶发挂死（不产生非零退出码）：Acquire 超时 + timeout 包裹 + 重试。
+          # apt mirror 偶发挂死或持续慢速：Acquire 超时 + timeout 包裹 + 重试。
+          # install 需拉取 ~200MB 依赖，慢镜像下单次尝试可能接近 8 分钟。
           APT_OPTS="-o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=2"
           for attempt in 1 2 3; do
             if timeout 180 sudo apt-get $APT_OPTS update; then
@@ -56,7 +57,7 @@ jobs:
             sleep 10
           done
           for attempt in 1 2 3; do
-            if timeout 300 sudo apt-get $APT_OPTS install -y \
+            if timeout 480 sudo apt-get $APT_OPTS install -y \
               libwebkit2gtk-4.1-dev \
               libgtk-3-dev \
               libappindicator3-dev \
