@@ -1,4 +1,7 @@
-import type { ImportedConfigSummary } from "@/generated/tauri-contracts";
+import type {
+  ImportConflictStrategy,
+  ImportedConfigSummary,
+} from "@/generated/tauri-contracts";
 import type { ConfigParameters, ConfigProfile } from "@/lib/store/types";
 
 export interface TranslationMap {
@@ -38,7 +41,8 @@ export interface ProfileManagementActions {
   /** 返回实际写入的路径（后端可能补齐 `.json` 扩展名）。 */
   exportProfiles: (filePath: string) => Promise<string>;
   applyImportedProfiles: (
-    profiles: ConfigProfile[]
+    profiles: ConfigProfile[],
+    conflictStrategy: ImportConflictStrategy
   ) => Promise<ImportedConfigSummary>;
 }
 

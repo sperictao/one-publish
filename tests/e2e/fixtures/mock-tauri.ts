@@ -1222,18 +1222,59 @@ export async function installMockTauri(
               return args?.filePath as string;
 
             case "import_config":
+              // 返回与 repo-a 现有 FolderProfile 同名的导入项，供冲突策略 e2e 使用。
               return {
                 version: 2,
                 exported_at: new Date().toISOString(),
-                profiles: [],
+                profiles: [
+                  {
+                    name: "FolderProfile",
+                    provider_id: "dotnet",
+                    contract_version: 1,
+                    provider_version: "1",
+                    settings_version: 1,
+                    parameters: { configuration: "Imported" },
+                    profile_group: null,
+                    created_at: "2026-04-02T10:00:00.000Z",
+                    is_system_default: false,
+                  },
+                ],
               };
 
-            case "apply_imported_config":
+            case "apply_imported_config": {
+              // 与 repo-a 现有 FolderProfile 同名：按策略返回对应计数。
+              const strategy =
+                (args?.conflictStrategy ?? args?.conflict_strategy) ===
+                undefined
+                  ? "skip"
+                  : ((args?.conflictStrategy ??
+                      args?.conflict_strategy) as string);
+              if (strategy === "overwrite") {
+                return {
+                  imported: 0,
+                  skippedExisting: 0,
+                  skippedProviderMismatch: 0,
+                  overwritten: 1,
+                  renamed: 0,
+                };
+              }
+              if (strategy === "rename") {
+                return {
+                  imported: 0,
+                  skippedExisting: 0,
+                  skippedProviderMismatch: 0,
+                  overwritten: 0,
+                  renamed: 1,
+                };
+              }
               return {
                 imported: 0,
-                skippedExisting: 0,
+                skippedExisting: 1,
                 skippedProviderMismatch: 0,
+                overwritten: 0,
+                renamed: 0,
               };
+            }
 
             // ── Artifact ──
             case "package_artifact":

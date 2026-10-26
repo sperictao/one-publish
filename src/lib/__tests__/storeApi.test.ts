@@ -197,7 +197,9 @@ describe("store api wrappers", () => {
     };
     invokeMock.mockResolvedValue(summary);
 
-    await expect(applyImportedConfig("repo-1", [])).resolves.toEqual(summary);
+    await expect(
+      applyImportedConfig("repo-1", [], "overwrite")
+    ).resolves.toEqual(summary);
   });
 
   // 键名覆盖由 tauriCommandContract.test.ts 从 Rust 签名自动推导；
@@ -224,10 +226,10 @@ describe("store api wrappers", () => {
     },
     {
       name: "applyImportedConfig",
-      call: () => applyImportedConfig("repo-1", []),
+      call: () => applyImportedConfig("repo-1", [], "skip"),
       response: { imported: 0, skippedExisting: 0, skippedProviderMismatch: 0 },
       command: "apply_imported_config",
-      args: { repoId: "repo-1", profiles: [] },
+      args: { repoId: "repo-1", profiles: [], conflictStrategy: "skip" },
     },
     {
       name: "setExecutionRecordSnapshot",

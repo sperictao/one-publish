@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
 
 import type {
+  ImportConflictStrategy,
   ImportedConfigSummary,
   PublishEditStateUpdate,
 } from "@/generated/tauri-contracts";
@@ -78,7 +79,8 @@ export interface UseProfileCrudParams {
   }) => Promise<string>;
   applyImportedConfigFn: (
     repoId: string,
-    profiles: ConfigProfile[]
+    profiles: ConfigProfile[],
+    conflictStrategy: ImportConflictStrategy
   ) => Promise<ImportedConfigSummary>;
 }
 
@@ -91,7 +93,8 @@ export interface UseProfileCrudReturn {
   deleteProfileById: (repoId: string, profileId: string) => Promise<void>;
   exportProfiles: (filePath: string) => Promise<string>;
   applyImportedProfiles: (
-    profiles: ConfigProfile[]
+    profiles: ConfigProfile[],
+    conflictStrategy: ImportConflictStrategy
   ) => Promise<ImportedConfigSummary>;
   handleCreateProfileFromProjectProfile: (
     sourceProfileName: string,
@@ -270,14 +273,21 @@ export function useProfileCrud({
   );
 
   const applyImportedProfiles = useCallback(
-    async (importedProfiles: ConfigProfile[]) => {
+    async (
+      importedProfiles: ConfigProfile[],
+      conflictStrategy: ImportConflictStrategy
+    ) => {
       if (!selectedRepoId) {
         throw new Error(profileT.importFailed || "导入配置失败");
       }
 
       const repoId = selectedRepoId;
 
-      const summary = await applyImportedConfigFn(repoId, importedProfiles);
+      const summary = await applyImportedConfigFn(
+        repoId,
+        importedProfiles,
+        conflictStrategy
+      );
       await refreshProfilesAfterMutation(repoId);
       return summary;
     },

@@ -26,6 +26,7 @@ import type {
   AppState as TauriAppState,
   ConfigExport as TauriConfigExport,
   ExecutionRecord as TauriExecutionRecord,
+  ImportConflictStrategy,
   ImportedConfigSummary,
   ProjectInfo,
   ProjectPublishProfileFile,
@@ -411,11 +412,13 @@ export async function importConfig(filePath: string): Promise<ConfigExport> {
 
 export async function applyImportedConfig(
   repoId: string,
-  profiles: ConfigProfile[]
+  profiles: ConfigProfile[],
+  conflictStrategy: ImportConflictStrategy
 ): Promise<ImportedConfigSummary> {
   return await invoke<ImportedConfigSummary>("apply_imported_config", {
     repoId,
     profiles: profiles.map(toExportConfigProfile),
+    conflictStrategy,
   });
 }
 
