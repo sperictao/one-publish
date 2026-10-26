@@ -15,6 +15,7 @@ export default tseslint.config(
       "test-results",
       "node_modules",
       ".pi",
+      ".claude",
     ],
   },
   js.configs.recommended,
