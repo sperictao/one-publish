@@ -103,6 +103,24 @@ describe("MapParameter", () => {
     expect(updatedValue).not.toHaveProperty("oldKey");
   });
 
+  it("renames a key in place, preserving entry order", () => {
+    const handleChange = vi.fn();
+    render(
+      <MapParameter
+        definition={definition}
+        value={{ first: "v1", second: "v2", third: "v3" }}
+        onChange={handleChange}
+      />
+    );
+
+    const keyInput = screen.getAllByRole("textbox")[2];
+    fireEvent.change(keyInput, { target: { value: "renamed" } });
+
+    const updatedValue = handleChange.mock.calls[0][0];
+    expect(updatedValue).toEqual({ first: "v1", renamed: "v2", third: "v3" });
+    expect(Object.keys(updatedValue)).toEqual(["first", "renamed", "third"]);
+  });
+
   it("updates value when input changes", () => {
     const handleChange = vi.fn();
     render(
