@@ -11,9 +11,10 @@ const LANGUAGE_STORAGE_KEY = "app-language";
 const LANGUAGE_CHANGED_EVENT = "app-language-changed";
 
 // 导入翻译文件
-type TranslationLeaf = string;
-type TranslationTree = Record<string, any>;
-type TranslationNode = TranslationLeaf | TranslationTree;
+// 翻译树为有意松散的嵌套结构：消费方一律以 `?.` + 回退文案访问，
+// 测试夹具只提供局部子树；强类型（字面量/递归联合）会破坏该约定。
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type TranslationTree = Record<string, any>;
 type TranslationModule = { default: TranslationTree };
 
 const translations: Record<Language, () => Promise<TranslationModule>> = {
@@ -91,7 +92,7 @@ function t(key: string, params?: Record<string, string | number>): string {
 
   const value = key
     .split(".")
-    .reduce<TranslationNode | undefined>((acc, part) => {
+    .reduce<TranslationTree | string | undefined>((acc, part) => {
       if (!acc || typeof acc === "string") {
         return undefined;
       }
