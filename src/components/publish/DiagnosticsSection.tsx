@@ -24,6 +24,7 @@ export interface DiagnosticsSectionProps {
     record: ExecutionRecord
   ) => ProviderPublishSpec | null;
   rerunFromHistory: (record: ExecutionRecord) => Promise<void>;
+  promoteFromHistory?: (record: ExecutionRecord) => Promise<void>;
 }
 
 export function DiagnosticsSection({
@@ -39,6 +40,7 @@ export function DiagnosticsSection({
   trackHistoryExport,
   extractSpecFromRecord,
   rerunFromHistory,
+  promoteFromHistory,
 }: DiagnosticsSectionProps) {
   const {
     historyFilterProvider,
@@ -108,6 +110,7 @@ export function DiagnosticsSection({
     clearHistoryFilters,
     openSnapshotFromRecord,
     rerunFromHistory,
+    promoteFromHistory,
     copyHandoffSnippet,
     exportHandoffBundle,
   });

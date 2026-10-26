@@ -37,6 +37,7 @@ interface UseExecutionHistoryCardPropsParams {
   clearHistoryFilters: () => void;
   openSnapshotFromRecord: (record: ExecutionRecord) => Promise<void>;
   rerunFromHistory: (record: ExecutionRecord) => Promise<void>;
+  promoteFromHistory?: (record: ExecutionRecord) => Promise<void>;
   copyHandoffSnippet: (
     record: ExecutionRecord,
     format: HandoffSnippetFormat
@@ -73,6 +74,7 @@ export function useExecutionHistoryCardProps(
       onClearFilters: params.clearHistoryFilters,
       onOpenSnapshotFromRecord: params.openSnapshotFromRecord,
       onRerunFromHistory: params.rerunFromHistory,
+      onPromoteFromHistory: params.promoteFromHistory,
       onCopyHandoffSnippet: params.copyHandoffSnippet,
       onExportHandoffBundle: params.exportHandoffBundle,
     }),

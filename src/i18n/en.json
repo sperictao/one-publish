@@ -705,6 +705,8 @@
     "completedAt": "Completed at",
     "failureReason": "Failure reason",
     "rerun": "Rerun",
+    "promote": "Redeliver",
+    "promoteDesc": "Redeliver the sealed artifact set without rebuilding (manifest {{digest}}…)",
     "copyShellSnippet": "Copy shell snippet",
     "copyGhaSnippet": "Copy GHA snippet",
     "copyGitlabSnippet": "Copy GitLab CI snippet",

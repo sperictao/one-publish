@@ -160,4 +160,64 @@ describe("usePublishExecute invoke 失败本地化", () => {
     );
     expect(failed[0].record.error).toBe(failed[0].error);
   });
+
+  it("再交付把 promotedManifestDigest 注入 prepare 请求 runInputs", async () => {
+    mocks.synchronizePublishRuntime.mockResolvedValue({ result: null });
+    mocks.preparePublishRuntime.mockResolvedValue({
+      status: "ready",
+      runtimeToken: "runtime-1",
+      resolvedSpec: { provider_id: "dotnet" },
+      command: "dotnet publish",
+    });
+    // 预检未通过即停在 prepare 之后：digest 断言只看请求载荷本身。
+    vi.mocked(validate.runPublishPreflight).mockResolvedValue(false);
+
+    const { result } = renderHook(() => usePublishExecute(params));
+
+    await act(async () => {
+      await result.current.runPublishSpec(
+        { kind: "history", recordId: "record-1" } as Parameters<
+          typeof result.current.runPublishSpec
+        >[0],
+        { promotedManifestDigest: "digest-abc" }
+      );
+    });
+
+    expect(mocks.preparePublishRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: { kind: "history", recordId: "record-1" },
+        runInputs: expect.objectContaining({
+          promotedManifestDigest: "digest-abc",
+        }),
+      })
+    );
+  });
+
+  it("默认发布不传 promotedManifestDigest", async () => {
+    mocks.synchronizePublishRuntime.mockResolvedValue({ result: null });
+    mocks.preparePublishRuntime.mockResolvedValue({
+      status: "ready",
+      runtimeToken: "runtime-1",
+      resolvedSpec: { provider_id: "dotnet" },
+      command: "dotnet publish",
+    });
+    vi.mocked(validate.runPublishPreflight).mockResolvedValue(false);
+
+    const { result } = renderHook(() => usePublishExecute(params));
+
+    await act(async () => {
+      await result.current.runPublishSpec({
+        kind: "empty",
+        providerId: "dotnet",
+      } as Parameters<typeof result.current.runPublishSpec>[0]);
+    });
+
+    expect(mocks.preparePublishRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runInputs: expect.objectContaining({
+          promotedManifestDigest: undefined,
+        }),
+      })
+    );
+  });
 });
