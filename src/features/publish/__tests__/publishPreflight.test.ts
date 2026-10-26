@@ -28,6 +28,7 @@ import { createPublishPreflightPipeline } from "@/features/publish/publishPrefli
 const spec = { provider_id: "dotnet" } as ProviderPublishSpec;
 const options = {
   runRevision: 1,
+  isCurrentPresentationRevision: () => true,
   feedbackMode: "toast" as const,
   restoreWindowOnFailure: false,
   trayStatusEffect: false,
@@ -50,7 +51,6 @@ function createPipeline(getTranslations: () => Record<string, unknown>) {
     syncTrayPublishStatus: vi.fn(),
     restoreMainWindowIfNeeded: vi.fn(),
     resetLogCapture: vi.fn(),
-    isCurrentPresentationRevision: () => true,
     openEnvironmentDialog: vi.fn(),
     setEnvironmentLastCheck: vi.fn(),
   });

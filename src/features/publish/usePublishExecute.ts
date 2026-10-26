@@ -327,6 +327,7 @@ export function usePublishExecute({
           ready.resolvedSpec,
           {
             runRevision,
+            isCurrentPresentationRevision,
             feedbackMode: transaction.feedbackMode,
             restoreWindowOnFailure: transaction.restoreWindowOnFailure,
             trayStatusEffect: transaction.trayStatusEffect,
