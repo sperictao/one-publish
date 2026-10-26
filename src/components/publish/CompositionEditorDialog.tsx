@@ -189,22 +189,37 @@ export function CompositionEditorDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [isRebinding, setIsRebinding] = useState(false);
 
+  const [prevDraftInitKey, setPrevDraftInitKey] = useState<{
+    open: boolean;
+    profile: typeof profile | null;
+    initialBackendId: typeof initialBackendId;
+  }>({ open: false, profile: null, initialBackendId });
+  if (
+    prevDraftInitKey.open !== open ||
+    prevDraftInitKey.profile !== profile ||
+    prevDraftInitKey.initialBackendId !== initialBackendId
+  ) {
+    setPrevDraftInitKey({ open, profile, initialBackendId });
+    if (open) {
+      const draft = profile.composition
+        ? (structuredClone(profile.composition) as PublishComposition)
+        : null;
+      if (
+        draft &&
+        initialBackendId &&
+        draft.executionBackend.adapterId !== initialBackendId
+      ) {
+        draft.executionBackend = newBinding(initialBackendId);
+      }
+      setDraft(draft);
+      setExpandedRouteId(null);
+    }
+  }
+
   useEffect(() => {
     if (!open) {
       return;
     }
-    const draft = profile.composition
-      ? (structuredClone(profile.composition) as PublishComposition)
-      : null;
-    if (
-      draft &&
-      initialBackendId &&
-      draft.executionBackend.adapterId !== initialBackendId
-    ) {
-      draft.executionBackend = newBinding(initialBackendId);
-    }
-    setDraft(draft);
-    setExpandedRouteId(null);
     let cancelled = false;
     void listPublishAdapterCatalog()
       .then((result) => {
