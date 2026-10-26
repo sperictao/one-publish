@@ -68,9 +68,21 @@ jobs:
 
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          # apt mirror 偶发挂死（不产生非零退出码）：timeout 包裹 + 重试。
+          for attempt in 1 2 3; do
+            if timeout 180 sudo apt-get update; then
+              break
+            fi
+            if [ "$attempt" = "3" ]; then
+              echo "apt-get update timed out after 3 attempts"
+              exit 1
+            fi
+            echo "apt-get update timed out (attempt $attempt); retrying"
+            sleep 10
+          done
+          timeout 300 sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             libgtk-3-dev \
             libappindicator3-dev \
