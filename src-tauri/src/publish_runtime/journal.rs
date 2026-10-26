@@ -1044,7 +1044,11 @@ fn sanitize_event(mut event: PublishEvent) -> Result<PublishEvent, PublishError>
     if let Some(value) = envelope_evidence.as_ref() {
         reject_sensitive_envelope_keys(value)?;
     }
-    crate::security::sanitize_json_map(&mut event.payload);
+    // The journal is local-private (0600) evidence: mask secrets only and keep
+    // paths so reloaded resume/synchronize errors stay diagnosable. Path masking
+    // happens at the export boundary (`sanitize_export_value`), matching the
+    // execution-history persistence policy.
+    crate::security::sanitize_evidence_json_map(&mut event.payload);
     if let Some(value) = envelope_evidence {
         event
             .payload
