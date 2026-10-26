@@ -41,6 +41,7 @@ interface UseExecutionHistoryCardPropsParams {
     record: ExecutionRecord,
     format: HandoffSnippetFormat
   ) => Promise<void>;
+  exportHandoffBundle: (record: ExecutionRecord) => Promise<void>;
 }
 
 export function useExecutionHistoryCardProps(
@@ -73,6 +74,7 @@ export function useExecutionHistoryCardProps(
       onOpenSnapshotFromRecord: params.openSnapshotFromRecord,
       onRerunFromHistory: params.rerunFromHistory,
       onCopyHandoffSnippet: params.copyHandoffSnippet,
+      onExportHandoffBundle: params.exportHandoffBundle,
     }),
     [params]
   );

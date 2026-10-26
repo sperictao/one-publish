@@ -349,6 +349,15 @@ pub(crate) fn write_private_text_file(path: &Path, content: &str) -> io::Result<
     harden_private_path(path)
 }
 
+pub(crate) fn write_private_binary_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut file = open_private_file(path, false, true)?;
+    file.write_all(bytes)?;
+    file.flush()?;
+    file.sync_all()?;
+    drop(file);
+    harden_private_path(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{sanitize_export_value, sanitize_freeform_text, sanitize_secrets_in_text};

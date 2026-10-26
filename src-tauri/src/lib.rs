@@ -155,6 +155,7 @@ pub fn run() {
             commands::export_preflight_report,
             commands::export_execution_snapshot,
             commands::export_failure_group_bundle,
+            commands::export_handoff_bundle,
             commands::export_execution_history,
             commands::export_diagnostics_index,
             commands::open_directory,
