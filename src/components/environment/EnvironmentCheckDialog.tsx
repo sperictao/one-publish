@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -128,10 +128,10 @@ export function EnvironmentCheckContent({
   const [pendingRun, setPendingRun] = useState<FixAction | null>(null);
   const [runningFix, setRunningFix] = useState(false);
   const [lastFixResult, setLastFixResult] = useState<FixResult | null>(null);
-  const prevActiveRef = useRef(active);
+  const [prevActive, setPrevActive] = useState(active);
 
-  if (prevActiveRef.current !== active) {
-    prevActiveRef.current = active;
+  if (prevActive !== active) {
+    setPrevActive(active);
     if (active) {
       setSelectedProviderIds(normalizeVisibleProviderIds(defaultProviderIds));
       setResult(initialCheck?.result || null);
@@ -203,6 +203,7 @@ export function EnvironmentCheckContent({
   useEffect(() => {
     if (!active) return;
     if (result) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void handleCheck();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);

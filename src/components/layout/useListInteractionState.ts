@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface UseListInteractionStateOptions {
   filteredItemIds: string[];
@@ -35,28 +28,28 @@ export function useListInteractionState({
   const [pointerInsideList, setPointerInsideList] = useState(false);
   const activeMenuItemIdRef = useRef<string | null>(null);
   const pointerInsideListRef = useRef(false);
-  const previousResetKeyRef = useRef<string | null | undefined>(resetKey);
 
   const filteredItemIdsSignature = useMemo(
     () => filteredItemIds.join("|"),
     [filteredItemIds]
   );
 
-  useLayoutEffect(() => {
+  const [prevFilterSignature, setPrevFilterSignature] = useState(
+    filteredItemIdsSignature
+  );
+  if (prevFilterSignature !== filteredItemIdsSignature) {
+    setPrevFilterSignature(filteredItemIdsSignature);
     const filteredItemIdSet = new Set(filteredItemIds);
-
-    setHoveredItemId((prev) =>
-      prev && !filteredItemIdSet.has(prev) ? null : prev
-    );
-    setFocusedItemId((prev) =>
-      prev && !filteredItemIdSet.has(prev) ? null : prev
-    );
-    setActiveMenuItemId((prev) => {
-      const nextValue = prev && !filteredItemIdSet.has(prev) ? null : prev;
-      activeMenuItemIdRef.current = nextValue;
-      return nextValue;
-    });
-  }, [filteredItemIdsSignature, filteredItemIds]);
+    if (hoveredItemId && !filteredItemIdSet.has(hoveredItemId)) {
+      setHoveredItemId(null);
+    }
+    if (focusedItemId && !filteredItemIdSet.has(focusedItemId)) {
+      setFocusedItemId(null);
+    }
+    if (activeMenuItemId && !filteredItemIdSet.has(activeMenuItemId)) {
+      setActiveMenuItemId(null);
+    }
+  }
 
   const visualTargetItemId = useMemo(
     () =>
@@ -82,19 +75,14 @@ export function useListInteractionState({
     pointerInsideListRef.current = pointerInsideList;
   }, [pointerInsideList]);
 
-  useLayoutEffect(() => {
-    if (previousResetKeyRef.current === resetKey) {
-      return;
-    }
-
-    previousResetKeyRef.current = resetKey;
-    activeMenuItemIdRef.current = null;
-    pointerInsideListRef.current = false;
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey);
     setHoveredItemId(null);
     setFocusedItemId(null);
     setActiveMenuItemId(null);
     setPointerInsideList(false);
-  }, [resetKey]);
+  }
 
   const handleRowMouseEnter = useCallback((itemId: string) => {
     setHoveredItemId((prev) => (prev === itemId ? prev : itemId));
