@@ -12,7 +12,7 @@ export const EMPTY_PROFILE_LIST_SNAPSHOT: ProfileListSnapshot = {
   fingerprint: "",
 };
 
-export function buildProfileListFingerprint(
+function buildProfileListFingerprint(
   profiles: readonly ConfigProfile[]
 ): string {
   return profiles

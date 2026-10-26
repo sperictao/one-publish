@@ -149,7 +149,7 @@ export function parseProjectPublishProfileXml(
   };
 }
 
-export const DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEYS = [
+const DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEYS = [
   "Configuration",
   "Define",
   "ExcludeApp_Data",
@@ -173,7 +173,7 @@ const DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEY_SET = new Set(
   DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEYS.map((key) => key.toLowerCase())
 );
 
-export function sanitizeDotnetPublishProperties(
+function sanitizeDotnetPublishProperties(
   properties: Record<string, string>
 ): Record<string, string> {
   return Object.fromEntries(

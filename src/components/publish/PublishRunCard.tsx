@@ -39,7 +39,7 @@ import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import { SectionLabel } from "@/components/ui/section-label";
 import { cn } from "@/lib/utils";
 
-export interface PublishRunCardActions {
+interface PublishRunCardActions {
   publishCommand?: string | null;
   publishCommandLabel?: string;
   startLabel?: string;

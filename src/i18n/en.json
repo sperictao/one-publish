@@ -154,16 +154,7 @@
     "error": "Error: {{error}}",
     "configurationBlocked": "The current publish profile cannot run"
   },
-  "branchPanel": {
-    "expandRepoList": "Expand repository list",
-    "collapsePanel": "Collapse panel",
-    "searchWorktree": "Search worktree",
-    "selectRepository": "Select a repository",
-    "newWorktree": "Create worktree",
-    "refresh": "Refresh",
-    "mainBadge": "MAIN",
-    "currentBranch": "Current branch"
-  },
+
   "repositoryList": {
     "collapsePanel": "Collapse panel",
     "repositories": "Repositories",

@@ -22,7 +22,7 @@ import {
   localizeInvokeError,
 } from "@/lib/tauri/invokeErrors";
 
-export function buildPublishPresentationScopeKey(params: {
+function buildPublishPresentationScopeKey(params: {
   selectedRepoId: string | null;
   selectedRepoPath: string | null;
   activeProviderId: string;
@@ -41,7 +41,7 @@ export function buildPublishPresentationScopeKey(params: {
   });
 }
 
-export function shouldDeferRuntimePreparationOnStartup(): boolean {
+function shouldDeferRuntimePreparationOnStartup(): boolean {
   return (
     typeof navigator !== "undefined" &&
     /Windows/i.test(navigator.userAgent ?? "")

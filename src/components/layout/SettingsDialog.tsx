@@ -348,152 +348,150 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
   );
 });
 
-export interface AppearanceSettingsSectionProps {
+interface AppearanceSettingsSectionProps {
   translations: TranslationTree;
   theme: "light" | "dark" | "auto";
   onThemeChange: (theme: "light" | "dark" | "auto") => void;
 }
 
-export const AppearanceSettingsSection = memo(
-  function AppearanceSettingsSection({
-    translations,
-    theme,
-    onThemeChange,
-  }: AppearanceSettingsSectionProps) {
-    const themeCardBase =
-      "group relative flex flex-col items-center gap-2.5 rounded-sm border p-2.5 text-center transition-colors duration-150 ease-geist focus-ring";
-    const themeCardSelected =
-      "border-interactive bg-interactive/10 shadow-raised";
-    const themeCardUnselected =
-      "border-border bg-card hover:bg-gray-alpha-100 active:bg-gray-alpha-200";
-    const themeCheckBadge =
-      "absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-interactive text-interactive-foreground border border-border animate-fade-in z-10";
+const AppearanceSettingsSection = memo(function AppearanceSettingsSection({
+  translations,
+  theme,
+  onThemeChange,
+}: AppearanceSettingsSectionProps) {
+  const themeCardBase =
+    "group relative flex flex-col items-center gap-2.5 rounded-sm border p-2.5 text-center transition-colors duration-150 ease-geist focus-ring";
+  const themeCardSelected =
+    "border-interactive bg-interactive/10 shadow-raised";
+  const themeCardUnselected =
+    "border-border bg-card hover:bg-gray-alpha-100 active:bg-gray-alpha-200";
+  const themeCheckBadge =
+    "absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-interactive text-interactive-foreground border border-border animate-fade-in z-10";
 
-    return (
-      <div className="space-y-6">
-        {/* 主题选择卡片 */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <Label
-              htmlFor="settings-theme"
-              className="text-heading-14 font-semibold text-foreground"
-            >
-              {translations.theme?.label || "外观主题"}
-            </Label>
-            <select
-              id="settings-theme"
-              value={theme}
-              onChange={(e) =>
-                onThemeChange(e.target.value as "light" | "dark" | "auto")
-              }
-              className="sr-only"
-            >
-              <option value="auto">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </div>
+  return (
+    <div className="space-y-6">
+      {/* 主题选择卡片 */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <Label
+            htmlFor="settings-theme"
+            className="text-heading-14 font-semibold text-foreground"
+          >
+            {translations.theme?.label || "外观主题"}
+          </Label>
+          <select
+            id="settings-theme"
+            value={theme}
+            onChange={(e) =>
+              onThemeChange(e.target.value as "light" | "dark" | "auto")
+            }
+            className="sr-only"
+          >
+            <option value="auto">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            {/* 跟随系统 */}
-            <button
-              type="button"
-              className={cn(
-                themeCardBase,
-                theme === "auto" ? themeCardSelected : themeCardUnselected
-              )}
-              onClick={() => onThemeChange("auto")}
-            >
-              {theme === "auto" && (
-                <div className={themeCheckBadge}>
-                  <Check className="size-2.5 stroke-[3.5]" />
-                </div>
-              )}
-
-              {/* 自动主题微缩图 */}
-              <div className="relative h-20 w-full overflow-hidden rounded-sm border border-border flex select-none pointer-events-none">
-                <div className="w-1/2 border-r border-border">
-                  <ThemePreviewMock
-                    theme="light"
-                    sidebarWidth={14}
-                    showAllSidebarLines={false}
-                    className="rounded-none border-none shadow-none"
-                  />
-                </div>
-                <div className="w-1/2">
-                  <ThemePreviewMock
-                    theme="dark"
-                    hideSidebar
-                    showAllSidebarLines={false}
-                    className="rounded-none border-none shadow-none"
-                  />
-                </div>
+        <div className="grid grid-cols-3 gap-4">
+          {/* 跟随系统 */}
+          <button
+            type="button"
+            className={cn(
+              themeCardBase,
+              theme === "auto" ? themeCardSelected : themeCardUnselected
+            )}
+            onClick={() => onThemeChange("auto")}
+          >
+            {theme === "auto" && (
+              <div className={themeCheckBadge}>
+                <Check className="size-2.5 stroke-[3.5]" />
               </div>
-              <span className="text-label-12 font-semibold text-foreground">
-                {translations.theme?.auto || "跟随系统"}
-              </span>
-            </button>
+            )}
 
-            {/* 亮色 */}
-            <button
-              type="button"
-              className={cn(
-                themeCardBase,
-                theme === "light" ? themeCardSelected : themeCardUnselected
-              )}
-              onClick={() => onThemeChange("light")}
-            >
-              {theme === "light" && (
-                <div className={themeCheckBadge}>
-                  <Check className="size-2.5 stroke-[3.5]" />
-                </div>
-              )}
-              {/* 亮色主题微缩图 */}
-              <ThemePreviewMock theme="light" />
-              <span className="text-label-12 font-semibold text-foreground">
-                {translations.theme?.light || "亮色"}
-              </span>
-            </button>
+            {/* 自动主题微缩图 */}
+            <div className="relative h-20 w-full overflow-hidden rounded-sm border border-border flex select-none pointer-events-none">
+              <div className="w-1/2 border-r border-border">
+                <ThemePreviewMock
+                  theme="light"
+                  sidebarWidth={14}
+                  showAllSidebarLines={false}
+                  className="rounded-none border-none shadow-none"
+                />
+              </div>
+              <div className="w-1/2">
+                <ThemePreviewMock
+                  theme="dark"
+                  hideSidebar
+                  showAllSidebarLines={false}
+                  className="rounded-none border-none shadow-none"
+                />
+              </div>
+            </div>
+            <span className="text-label-12 font-semibold text-foreground">
+              {translations.theme?.auto || "跟随系统"}
+            </span>
+          </button>
 
-            {/* 暗色 */}
-            <button
-              type="button"
-              className={cn(
-                themeCardBase,
-                theme === "dark" ? themeCardSelected : themeCardUnselected
-              )}
-              onClick={() => onThemeChange("dark")}
-            >
-              {theme === "dark" && (
-                <div className={themeCheckBadge}>
-                  <Check className="size-2.5 stroke-[3.5]" />
-                </div>
-              )}
-              {/* 暗色主题微缩图 */}
-              <ThemePreviewMock theme="dark" />
-              <span className="text-label-12 font-semibold text-foreground">
-                {translations.theme?.dark || "暗色"}
-              </span>
-            </button>
-          </div>
-        </Card>
+          {/* 亮色 */}
+          <button
+            type="button"
+            className={cn(
+              themeCardBase,
+              theme === "light" ? themeCardSelected : themeCardUnselected
+            )}
+            onClick={() => onThemeChange("light")}
+          >
+            {theme === "light" && (
+              <div className={themeCheckBadge}>
+                <Check className="size-2.5 stroke-[3.5]" />
+              </div>
+            )}
+            {/* 亮色主题微缩图 */}
+            <ThemePreviewMock theme="light" />
+            <span className="text-label-12 font-semibold text-foreground">
+              {translations.theme?.light || "亮色"}
+            </span>
+          </button>
 
-        <p className="text-label-12 text-muted-foreground px-1">
-          {translations.settings?.sections?.appearanceDescription ||
-            "主题切换会立即作用到当前窗口与后续打开的设置面板。"}
-        </p>
-      </div>
-    );
-  }
-);
+          {/* 暗色 */}
+          <button
+            type="button"
+            className={cn(
+              themeCardBase,
+              theme === "dark" ? themeCardSelected : themeCardUnselected
+            )}
+            onClick={() => onThemeChange("dark")}
+          >
+            {theme === "dark" && (
+              <div className={themeCheckBadge}>
+                <Check className="size-2.5 stroke-[3.5]" />
+              </div>
+            )}
+            {/* 暗色主题微缩图 */}
+            <ThemePreviewMock theme="dark" />
+            <span className="text-label-12 font-semibold text-foreground">
+              {translations.theme?.dark || "暗色"}
+            </span>
+          </button>
+        </div>
+      </Card>
 
-export interface ShortcutsSettingsSectionProps {
+      <p className="text-label-12 text-muted-foreground px-1">
+        {translations.settings?.sections?.appearanceDescription ||
+          "主题切换会立即作用到当前窗口与后续打开的设置面板。"}
+      </p>
+    </div>
+  );
+});
+
+interface ShortcutsSettingsSectionProps {
   translations: TranslationTree;
   shortcutsItems: Array<{ key: string; description: string }>;
   onOpenShortcuts?: () => void;
 }
 
-export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
+const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
   translations,
   shortcutsItems,
   onOpenShortcuts,

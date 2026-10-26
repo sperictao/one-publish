@@ -43,7 +43,7 @@ function pathSegmentsMatch(
   return true;
 }
 
-export function isWindowsLikePath(path: string): boolean {
+function isWindowsLikePath(path: string): boolean {
   return (
     WINDOWS_DRIVE_RE.test(path) ||
     path.includes("\\") ||

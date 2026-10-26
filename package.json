@@ -8,6 +8,7 @@
     "build": "pnpm tauri build",
     "build:updater": "node scripts/build-updater.mjs",
     "generate:contracts": "cargo run --manifest-path src-tauri/Cargo.toml --example generate_tauri_contracts",
+    "generate:icons": "node scripts/generate-icons.mjs && node scripts/generate-tray-icons.mjs",
     "check:contracts": "node scripts/check-tauri-contracts.mjs",
     "release": "node scripts/release.mjs",
     "tauri": "tauri",

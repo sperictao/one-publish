@@ -50,11 +50,3 @@ export function on<T = unknown>(
     }
   };
 }
-
-/** 取消订阅。 */
-export function off<T = unknown>(
-  event: string,
-  handler: EventHandler<T>
-): void {
-  listeners.get(event)?.delete(handler as EventHandler);
-}

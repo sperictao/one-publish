@@ -2,11 +2,10 @@ import type {
   JsonValue,
   ParameterDefinition as TauriParameterDefinition,
   ParameterSchema as TauriParameterSchema,
-  ParameterType,
   SpecValue,
 } from "@/generated/tauri-contracts";
 
-export type { ParameterType, SpecValue };
+export type { SpecValue };
 
 export type SpecParameters = Record<string, SpecValue>;
 
@@ -26,11 +25,11 @@ export interface ParameterSchema extends Omit<
   parameters: Record<string, ParameterDefinition>;
 }
 
-export interface ParameterValueObject {
+interface ParameterValueObject {
   [key: string]: ParameterValue;
 }
 
-export type ParameterValueArray = Array<ParameterValue>;
+type ParameterValueArray = Array<ParameterValue>;
 
 export type ParameterValue =
   JsonValue | ParameterValueArray | ParameterValueObject;
@@ -55,47 +54,6 @@ export function toSpecValue(value: ParameterValue): SpecValue {
   const normalized: Record<string, SpecValue> = {};
   for (const [key, item] of Object.entries(value)) {
     normalized[key] = toSpecValue(item);
-  }
-  return normalized;
-}
-
-export function fromSpecValue(spec: SpecValue): ParameterValue {
-  if (
-    spec === null ||
-    typeof spec === "string" ||
-    typeof spec === "number" ||
-    typeof spec === "boolean"
-  ) {
-    return spec;
-  }
-
-  if (Array.isArray(spec)) {
-    return spec.map((item) => fromSpecValue(item));
-  }
-
-  const normalized: Record<string, ParameterValue> = {};
-  for (const [key, value] of Object.entries(spec)) {
-    normalized[key] = fromSpecValue(value);
-  }
-  return normalized;
-}
-
-export function toSpecParameters(
-  params: Record<string, ParameterValue>
-): SpecParameters {
-  const normalized: SpecParameters = {};
-  for (const [key, value] of Object.entries(params)) {
-    normalized[key] = toSpecValue(value);
-  }
-  return normalized;
-}
-
-export function fromSpecParameters(
-  params: SpecParameters
-): Record<string, ParameterValue> {
-  const normalized: Record<string, ParameterValue> = {};
-  for (const [key, value] of Object.entries(params)) {
-    normalized[key] = fromSpecValue(value);
   }
   return normalized;
 }

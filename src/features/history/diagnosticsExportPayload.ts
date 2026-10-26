@@ -118,7 +118,7 @@ export function createExecutionHistoryExportPlan(
   };
 }
 
-export interface FailureGroupBundleGroup {
+interface FailureGroupBundleGroup {
   key: string;
   providerId: string;
   signature: string;

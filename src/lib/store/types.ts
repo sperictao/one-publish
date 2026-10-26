@@ -1,4 +1,3 @@
-import { type EnvironmentCheckResult } from "@/features/environment/environment";
 import type {
   AppState as TauriAppState,
   Branch as TauriBranch,
@@ -7,14 +6,12 @@ import type {
   ExecutionRecord as TauriExecutionRecord,
   JsonValue,
   ProjectInfo,
-  ProjectPublishProfileFile,
   ProjectScanCandidates as TauriProjectScanCandidates,
   ProviderProjectPathKind,
   ProviderTemplateSummary,
   PublishComposition,
   PublishConfigStore,
   Repository as TauriRepository,
-  RepositoryBranchConnectivityResult,
   RepositoryBranchScanResult,
   RepoPublishConfig as TauriRepoPublishConfig,
   ShortcutHelp,
@@ -26,8 +23,6 @@ export type { JsonValue, PublishConfigStore };
 export type {
   ProviderProjectPathKind,
   ProjectInfo,
-  ProjectPublishProfileFile,
-  RepositoryBranchConnectivityResult,
   RepositoryBranchScanResult,
   ShortcutHelp,
   UpdaterConfigHealth,
@@ -117,7 +112,7 @@ export interface Repository extends Omit<
   publishConfig: RepoPublishConfig;
 }
 
-export type BootstrapState = Omit<AppState, "executionHistory">;
+type BootstrapState = Omit<AppState, "executionHistory">;
 
 export interface AppState extends Omit<
   TauriAppState,
@@ -171,7 +166,7 @@ function normalizeConfigParameters(
   return isJsonRecord(value) ? value : {};
 }
 
-export function normalizeConfigProfile(
+function normalizeConfigProfile(
   profile: TauriConfigProfile,
   externalBindingIds: string[] = []
 ): ConfigProfile {
@@ -300,7 +295,7 @@ export function normalizeAppState(state: TauriAppState): AppState {
   };
 }
 
-export const defaultBootstrapState: BootstrapState = {
+const defaultBootstrapState: BootstrapState = {
   repositories: [],
   selectedRepoId: null,
   leftPanelWidth: 220,
@@ -317,22 +312,6 @@ export const defaultBootstrapState: BootstrapState = {
   startupNotice: null,
 };
 
-export const defaultPublishConfigStore: PublishConfigStore = {
-  configuration: "Release",
-  runtime: "",
-  framework: "",
-  selfContained: false,
-  outputDir: "",
-  noBuild: false,
-  noRestore: false,
-  verbosity: "",
-  noLogo: false,
-  deleteExistingFiles: false,
-  properties: {},
-  useProfile: false,
-  profileName: "",
-};
-
 export const defaultAppState: AppState = {
   ...defaultBootstrapState,
   executionHistory: [],
@@ -344,5 +323,3 @@ export const defaultRepoPublishConfig: RepoPublishConfig = {
   appliedBundles: [],
   drafts: [],
 };
-
-export type { EnvironmentCheckResult };
