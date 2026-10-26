@@ -113,12 +113,12 @@ export function ReleaseChecklistDialog({
   const [updaterError, setUpdaterError] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [exporting, setExporting] = useState(false);
-  const prevOpenRef = useRef(open);
+  const [prevOpen, setPrevOpen] = useState(open);
 
   const checklistTranslations = translations.releaseChecklist || {};
 
-  if (prevOpenRef.current !== open) {
-    prevOpenRef.current = open;
+  if (prevOpen !== open) {
+    setPrevOpen(open);
     if (open) {
       setUpdaterLoading(true);
       setUpdaterError(null);
@@ -301,10 +301,14 @@ export function ReleaseChecklistDialog({
     return index >= 0 ? index : 0;
   }, [checklistItems]);
 
-  useEffect(() => {
-    if (!open) return;
-    setActiveStepIndex(firstIncompleteStep);
-  }, [firstIncompleteStep, open]);
+  const [prevStepSync, setPrevStepSync] = useState({
+    open,
+    step: firstIncompleteStep,
+  });
+  if (prevStepSync.open !== open || prevStepSync.step !== firstIncompleteStep) {
+    setPrevStepSync({ open, step: firstIncompleteStep });
+    if (open) setActiveStepIndex(firstIncompleteStep);
+  }
 
   const activeStep = checklistItems[activeStepIndex] || checklistItems[0];
   const passedCount = checklistItems.filter(
