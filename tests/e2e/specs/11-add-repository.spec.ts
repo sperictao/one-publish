@@ -67,6 +67,52 @@ test.describe("添加仓库", () => {
     await expect(page.locator("#repo-edit-provider")).toBeVisible();
   });
 
+  test("混仓多候选时成功反馈附备选 Provider 与检测依据（Issue #164）", async ({
+    page,
+  }) => {
+    await gotoApp(page, { dialogOpenPath: "/workspace/mixed-repo" });
+
+    // 注入 dotnet+tauri 混仓检测结果：默认绑定 dotnet，候选含 tauri 依据。
+    await page.evaluate(() => {
+      const internals = (
+        window as unknown as {
+          __TAURI_INTERNALS__: {
+            invoke: (
+              cmd: string,
+              args?: Record<string, unknown>
+            ) => Promise<unknown>;
+          };
+        }
+      ).__TAURI_INTERNALS__;
+      const invoke = internals.invoke;
+      internals.invoke = async (cmd, args) => {
+        if (cmd === "detect_repository_provider") {
+          return {
+            providerId: "dotnet",
+            candidates: [
+              { providerId: "dotnet", matchedMarkers: ["*.csproj"] },
+              {
+                providerId: "tauri",
+                matchedMarkers: ["src-tauri/tauri.conf.json"],
+              },
+            ],
+          };
+        }
+        return invoke(cmd, args);
+      };
+    });
+
+    await addButton(page).click();
+
+    await expect(toast(page)).toContainText("仓库已添加");
+    await expect(toast(page)).toContainText("同时检测到 tauri");
+    await expect(toast(page)).toContainText("src-tauri/tauri.conf.json");
+    // 默认绑定不变：列表按 dotnet 入库。
+    await expect(
+      page.locator("[data-list-item-id]", { hasText: "mixed-repo" })
+    ).toBeVisible();
+  });
+
   test("检测耗时期间添加按钮呈现 busy 状态并在完成后恢复", async ({ page }) => {
     await gotoApp(page, { dialogOpenPath: "/workspace/new-repo" });
 

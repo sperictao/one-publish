@@ -128,7 +128,10 @@ describe("handleAddRepoRuntime", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.openDialog.mockResolvedValue("/tmp/demo-repo");
-    mocks.detectRepositoryProvider.mockResolvedValue("dotnet");
+    mocks.detectRepositoryProvider.mockResolvedValue({
+      providerId: "dotnet",
+      candidates: [{ providerId: "dotnet", matchedMarkers: ["*.csproj"] }],
+    });
     mocks.listProviders.mockResolvedValue(providers);
     mocks.scanProjectCandidates.mockResolvedValue({
       rootPath: "/tmp/demo-repo",
@@ -317,6 +320,30 @@ describe("handleAddRepoRuntime", () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith("仓库已添加", {
       id: expect.any(String),
       description: ".NET (dotnet) · feature/auto-detect · /tmp/demo-repo",
+    });
+  });
+
+  it("混仓多候选时在成功反馈中附备选 Provider 与检测依据", async () => {
+    mocks.detectRepositoryProvider.mockResolvedValue({
+      providerId: "dotnet",
+      candidates: [
+        { providerId: "dotnet", matchedMarkers: ["*.csproj"] },
+        {
+          providerId: "tauri",
+          matchedMarkers: ["src-tauri/tauri.conf.json"],
+        },
+      ],
+    });
+
+    await runAddRepo();
+
+    expect(mocks.addRepository).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "dotnet" })
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("仓库已添加", {
+      id: expect.any(String),
+      description:
+        ".NET (dotnet) · feature/auto-detect · /tmp/demo-repo\n同时检测到 tauri (src-tauri/tauri.conf.json)",
     });
   });
 
@@ -644,7 +671,10 @@ describe("invoke 失败按界面语言本地化 toast 描述", () => {
 
   it("添加仓库写库失败：store 错误码本地化并附加底层 IO 错误", async () => {
     mocks.openDialog.mockResolvedValue("/tmp/demo-repo");
-    mocks.detectRepositoryProvider.mockResolvedValue("java");
+    mocks.detectRepositoryProvider.mockResolvedValue({
+      providerId: "java",
+      candidates: [{ providerId: "java", matchedMarkers: ["build.gradle"] }],
+    });
     mocks.listProviders.mockResolvedValue([]);
     mocks.scanProjectCandidates.mockResolvedValue(null);
     mocks.scanRepositoryBranches.mockResolvedValue({

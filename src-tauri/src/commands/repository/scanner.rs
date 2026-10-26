@@ -1,7 +1,5 @@
 use crate::provider::registry::provider_registry;
-use crate::provider::{
-    ProviderProjectFileMatcher, ProviderRepositoryDiscovery, ProviderRepositoryMarker,
-};
+use crate::provider::{ProviderProjectFileMatcher, ProviderRepositoryMarker};
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 use walkdir::WalkDir;
@@ -301,25 +299,46 @@ pub fn matches_project_file(path: &Path, matcher: &ProviderProjectFileMatcher) -
     }
 }
 
-pub fn detect_provider_discovery_from_path(
-    path: &Path,
-) -> Option<&'static ProviderRepositoryDiscovery> {
-    provider_registry()
-        .repository_discoveries()
-        .find(|discovery| {
-            discovery
-                .repository_markers
-                .iter()
-                .any(|marker| matches_repository_marker(path, marker))
-        })
+fn describe_repository_marker(marker: &ProviderRepositoryMarker) -> String {
+    match marker {
+        ProviderRepositoryMarker::FileName(name) => name.clone(),
+        ProviderRepositoryMarker::RecursiveFileName(name) => format!("**/{name}"),
+        ProviderRepositoryMarker::Extension(extension) => format!("*.{extension}"),
+        ProviderRepositoryMarker::NestedExtension {
+            directory,
+            extension,
+        } => format!("{directory}/**/*.{extension}"),
+    }
 }
 
-pub fn detect_provider_from_path(path: &Path) -> Option<String> {
-    detect_provider_discovery_from_path(path).map(|discovery| discovery.provider_id.clone())
+/// 收集全部命中的 Provider 候选（注册表顺序），各保留命中标记作为检测依据（ADR-0005）。
+/// 首个命中即默认绑定；多命中由前端呈现给用户，检测顺序不吞掉其他候选。
+pub fn detect_provider_candidates_from_path(path: &Path) -> Vec<RepositoryProviderCandidate> {
+    provider_registry()
+        .repository_discoveries()
+        .filter_map(|discovery| {
+            let matched_markers: Vec<String> = discovery
+                .repository_markers
+                .iter()
+                .filter(|marker| matches_repository_marker(path, marker))
+                .map(describe_repository_marker)
+                .collect();
+            if matched_markers.is_empty() {
+                None
+            } else {
+                Some(RepositoryProviderCandidate {
+                    provider_id: discovery.provider_id.clone(),
+                    matched_markers,
+                })
+            }
+        })
+        .collect()
 }
 
 #[tauri::command]
-pub async fn detect_repository_provider(path: String) -> Result<String, crate::errors::AppError> {
+pub async fn detect_repository_provider(
+    path: String,
+) -> Result<RepositoryProviderDetection, crate::errors::AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new(
         "commands::repository::scanner::detect_repository_provider",
     );
@@ -346,11 +365,16 @@ pub async fn detect_repository_provider(path: String) -> Result<String, crate::e
         .with_details(err.to_string()));
     }
 
-    detect_provider_from_path(&repo_path).ok_or_else(|| {
-        repository_error(
+    let candidates = detect_provider_candidates_from_path(&repo_path);
+    let Some(first) = candidates.first() else {
+        return Err(repository_error(
             "cannot detect provider from repository path",
             "unsupported_provider",
-        )
+        ));
+    };
+    Ok(RepositoryProviderDetection {
+        provider_id: first.provider_id.clone(),
+        candidates,
     })
 }
 

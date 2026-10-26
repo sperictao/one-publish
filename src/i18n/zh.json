@@ -555,6 +555,7 @@
     "repositoryAlreadyExistsNamed": "该目录已添加为仓库「{{name}}」",
     "repositoryPathRequired": "输入 Project Root 路径",
     "providerDetected": "Provider 检测完成",
+    "alsoDetectedProviders": "同时检测到 {{providers}}",
     "detectProviderFailed": "自动检测 Provider 失败",
     "providerDetectPathNotFound": "Project Root 路径不存在",
     "providerDetectPathNotFoundDesc": "确认 Project Root 路径存在且可访问。",

@@ -199,6 +199,22 @@ export type SynchronizePublishRuntimeResult = { attemptId: string, acceptedEvent
 
 export type ProjectScanCandidates = { rootPath: string, solutionFiles: Array<string>, projectFiles: Array<string>, recommendedProjectFile: string | null, };
 
+export type RepositoryProviderCandidate = { providerId: string, 
+/**
+ * 命中的仓库标记（人类可读，如 `*.csproj`、`tauri.conf.json`），按声明顺序保留。
+ */
+matchedMarkers: Array<string>, };
+
+export type RepositoryProviderDetection = { 
+/**
+ * 默认绑定的 Provider：注册表顺序中的首个命中（与此前的单返回值一致）。
+ */
+providerId: string, 
+/**
+ * 全部命中的 Provider 候选（注册表顺序），各带检测依据（ADR-0005）。
+ */
+candidates: Array<RepositoryProviderCandidate>, };
+
 export type RepositoryBranchConnectivityResult = { canConnect: boolean, };
 
 export type RepositoryBranchScanResult = { branches: Array<Branch>, current_branch: string, };

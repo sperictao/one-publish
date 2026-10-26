@@ -74,6 +74,8 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::publish_runtime::PublishRuntimeResult>(&mut declarations);
     push_contract::<crate::publish_runtime::SynchronizePublishRuntimeResult>(&mut declarations);
     push_contract::<crate::commands::ProjectScanCandidates>(&mut declarations);
+    push_contract::<crate::commands::RepositoryProviderCandidate>(&mut declarations);
+    push_contract::<crate::commands::RepositoryProviderDetection>(&mut declarations);
     push_contract::<crate::commands::RepositoryBranchConnectivityResult>(&mut declarations);
     push_contract::<crate::commands::RepositoryBranchScanResult>(&mut declarations);
     push_contract::<crate::commands::UpdateDownloadProgressPayload>(&mut declarations);

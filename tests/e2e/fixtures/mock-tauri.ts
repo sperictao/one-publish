@@ -759,9 +759,19 @@ export async function installMockTauri(
               return { canConnect: true };
 
             case "detect_repository_provider": {
-              // 后端契约：path 存在时返回 provider id 字符串（scanner.rs）。
+              // 后端契约（Issue #164）：返回结构化检测结果——默认绑定 + 全部
+              // 命中候选（各带 matchedMarkers 检测依据）。mock 默认单候选 dotnet；
+              // spec 可覆盖 __TAURI_INTERNALS__.invoke 注入多候选混仓。
               const repoPath = args?.path as string | undefined;
-              return repoPath ? "dotnet" : "";
+              if (!repoPath) {
+                throw new Error("cannot detect provider from repository path");
+              }
+              return {
+                providerId: "dotnet",
+                candidates: [
+                  { providerId: "dotnet", matchedMarkers: ["*.csproj"] },
+                ],
+              };
             }
 
             case "scan_project": {

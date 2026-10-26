@@ -33,6 +33,7 @@ import type {
 import type { ProjectScanCandidates } from "@/lib/store/types";
 import type { Branch, Repository } from "@/lib/store/types";
 import type { RepositoryBranchScanResult } from "@/lib/store/types";
+import type { RepositoryProviderDetection } from "@/generated/tauri-contracts";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -248,6 +249,29 @@ function resolveProviderDetectFailureCopy(
 }
 
 /** 成功反馈里显式回显「识别到了什么」，Provider + 分支 + 完整路径。 */
+/**
+ * 混仓提示：默认绑定之外仍命中的 Provider 候选，附检测依据（ADR-0005）。
+ * 返回 null 表示单命中，界面无需呈现。
+ */
+function describeAlternativeProviders(
+  detection: RepositoryProviderDetection | null,
+  boundProviderId: string | null
+): string | null {
+  const alternatives = (detection?.candidates ?? []).filter(
+    (candidate) => candidate.providerId !== boundProviderId
+  );
+  if (alternatives.length === 0) {
+    return null;
+  }
+  return alternatives
+    .map((candidate) =>
+      candidate.matchedMarkers.length > 0
+        ? `${candidate.providerId} (${candidate.matchedMarkers.join(", ")})`
+        : candidate.providerId
+    )
+    .join(", ");
+}
+
 function buildAddedRepositoryDescription(
   repo: Repository,
   providers: ProviderManifest[]
@@ -307,8 +331,10 @@ export async function handleAddRepoRuntime(params: {
   // 「未识别到支持的 Provider」不再中断成死路：继续落库，随后由编辑窗口手动选择。
   // 其余失败（路径不存在/不是目录/无权限/读取失败）确实无法继续，按原因给出文案。
   let providerId: string | null = null;
+  let detection: RepositoryProviderDetection | null = null;
   try {
-    providerId = await detectRepositoryProvider(path);
+    detection = await detectRepositoryProvider(path);
+    providerId = detection.providerId;
   } catch (error) {
     const failureReason = analyzeProviderDetectFailure(error);
 
@@ -392,9 +418,25 @@ export async function handleAddRepoRuntime(params: {
     return { status: "needs-provider", repoId: newRepo.id, name, path };
   }
 
+  // 混仓：多命中时把备选 Provider 及其检测依据一并告知（Issue #164），
+  // 用户可随后在编辑窗口改绑；默认绑定仍是注册表首个命中。
+  const alternativeProviders = describeAlternativeProviders(
+    detection,
+    providerId
+  );
   toast.success(appT.repositoryAdded || "仓库已添加", {
     id: toastId,
-    description: buildAddedRepositoryDescription(newRepo, providers),
+    description: [
+      buildAddedRepositoryDescription(newRepo, providers),
+      alternativeProviders
+        ? fillTemplate(
+            appT.alsoDetectedProviders || "同时检测到 {{providers}}",
+            { providers: alternativeProviders }
+          )
+        : null,
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join("\n"),
   });
   return { status: "added", repoId: newRepo.id, name, path };
 }
@@ -554,11 +596,21 @@ export async function handleDetectRepoProviderRuntime(params: {
   }
 
   try {
-    const providerId = await detectRepositoryProvider(nextPath);
+    const detection = await detectRepositoryProvider(nextPath);
+    const providerId = detection.providerId;
 
     if (!silentSuccess) {
+      const alternativeProviders = describeAlternativeProviders(
+        detection,
+        providerId
+      );
       toast.success(appT.providerDetected || "已自动检测 Provider", {
-        description: providerId,
+        description: alternativeProviders
+          ? `${providerId} (${fillTemplate(
+              appT.alsoDetectedProviders || "同时检测到 {{providers}}",
+              { providers: alternativeProviders }
+            )})`
+          : providerId,
       });
     }
 
