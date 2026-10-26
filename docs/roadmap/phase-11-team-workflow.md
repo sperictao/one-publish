@@ -114,5 +114,18 @@ OnePublish 当前是一个**个人本地发布工具**（见 `docs/design-philos
   按钮驱动并断言剪贴板内容（`tests/e2e/specs/12-handoff-snippets.spec.ts`）；
 - `resolveCommand()` 的命令行归一化与 provider 回退无回归（单测 + e2e 双覆盖）。
 
-候选 A（团队配置包冲突三选一）与候选 C（单一交接包）未实施；如后续推进，
-按本文档候选定义另开 issue，不再受本 Phase 状态约束。
+**候选 C（历史导出用于交接）已达 Done 判定**（同日补记）：
+
+- 一次（失败）运行产出一个单一交接包 zip：`export_handoff_bundle` 写入
+  `README.md`（运行概要 + 命令 + 错误 + 文件清单）、`snapshot.md`、
+  `failure-groups.md`，离线可阅（实现与 zip 解包断言见
+  `src-tauri/src/commands/export/mod.rs`）；
+- 交接包不含未脱敏本地绝对路径：快照路径解析先于 `sanitize_export_value`
+  脱敏，后端测试钉住「包内无 `/Users/secret` 泄漏」；
+- e2e 覆盖「失败运行 -> 导出交接包 -> toast 反馈写入路径」及「取消保存
+  不导出」（`tests/e2e/specs/14-handoff-bundle-export.spec.ts`）；zip 内
+  `failure-groups.md` 含失败分组标题由后端解包测试钉死。
+
+候选 A（团队配置包冲突三选一）已实现（PR #158；e2e 见
+`tests/e2e/specs/13-config-import-conflict.spec.ts`），其 Done 判定待
+maintainer 复核确认。

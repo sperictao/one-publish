@@ -35,3 +35,15 @@ export async function exportFailureGroupBundleFile(params: {
     filePath: params.filePath,
   });
 }
+
+export async function exportHandoffBundleFile(params: {
+  record: unknown;
+  failureBundle: unknown | null;
+  filePath: string;
+}): Promise<string> {
+  return await invoke<string>("export_handoff_bundle", {
+    record: params.record,
+    failureBundle: params.failureBundle,
+    filePath: params.filePath,
+  });
+}

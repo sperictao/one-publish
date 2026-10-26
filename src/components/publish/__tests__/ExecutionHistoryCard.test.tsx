@@ -70,6 +70,7 @@ describe("ExecutionHistoryCard", () => {
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
         onCopyHandoffSnippet={vi.fn(async () => undefined)}
+        onExportHandoffBundle={vi.fn(async () => undefined)}
       />
     );
 
@@ -124,6 +125,7 @@ describe("ExecutionHistoryCard", () => {
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
         onCopyHandoffSnippet={vi.fn(async () => undefined)}
+        onExportHandoffBundle={vi.fn(async () => undefined)}
       />
     );
 
@@ -189,6 +191,7 @@ describe("ExecutionHistoryCard", () => {
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
         onCopyHandoffSnippet={vi.fn(async () => undefined)}
+        onExportHandoffBundle={vi.fn(async () => undefined)}
       />
     );
 
@@ -240,6 +243,7 @@ describe("ExecutionHistoryCard", () => {
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
         onCopyHandoffSnippet={vi.fn(async () => undefined)}
+        onExportHandoffBundle={vi.fn(async () => undefined)}
       />
     );
 
@@ -280,6 +284,7 @@ describe("ExecutionHistoryCard", () => {
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
         onCopyHandoffSnippet={vi.fn(async () => undefined)}
+        onExportHandoffBundle={vi.fn(async () => undefined)}
       />
     );
 

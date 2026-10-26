@@ -400,6 +400,8 @@ export interface MockTauriOptions {
   errors?: Record<string, string>;
   /** Value returned by `plugin:dialog|open`（目录选择）。null 表示用户取消。 */
   dialogOpenPath?: string | null;
+  /** Value returned by `plugin:dialog|save`（保存路径）。null 表示用户取消。 */
+  dialogSavePath?: string | null;
   /** Whether to log all invoke calls to console (for debugging) */
   debug?: boolean;
 }
@@ -414,6 +416,7 @@ export async function installMockTauri(
     providers,
     errors,
     dialogOpenPath,
+    dialogSavePath,
     debug,
   } = options;
 
@@ -473,6 +476,7 @@ export async function installMockTauri(
       const envCheck = clone(opts.envCheck) as EnvironmentCheckResult;
       const errMap = (opts.errors ?? {}) as Record<string, string>;
       const dialogOpen = (opts.dialogOpenPath ?? null) as string | null;
+      const dialogSave = (opts.dialogSavePath ?? null) as string | null;
       const d = (opts.debug ?? false) as boolean;
 
       // 后端 PublishConfigStore::default()（configuration 恒为 Release）。
@@ -486,9 +490,13 @@ export async function installMockTauri(
 
       const win = window as unknown as Record<string, unknown>;
 
+      // 记录全部 invoke 命令名，供 spec 断言某命令是否被调用（如导出/写文件）。
+      win.__MOCK_INVOCATIONS__ = [] as string[];
+
       win.__TAURI_INTERNALS__ = {
         invoke: async (cmd: string, args?: Record<string, unknown>) => {
           log("invoke:", cmd, args);
+          (win.__MOCK_INVOCATIONS__ as string[]).push(cmd);
 
           // Error injection: throw if this command is in the errors map.
           // Special case: a `blocked:` prefix on prepare_publish_runtime
@@ -1276,6 +1284,9 @@ export async function installMockTauri(
               };
             }
 
+            case "export_handoff_bundle":
+              return args?.filePath as string;
+
             // ── Artifact ──
             case "package_artifact":
               return {
@@ -1339,6 +1350,12 @@ export async function installMockTauri(
             case "plugin:dialog|open":
               return dialogOpen;
 
+            case "plugin:dialog|save": {
+              // spec 可用 window.__MOCK_DIALOG_SAVE__ 覆盖返回值（null = 用户取消）。
+              const override = win.__MOCK_DIALOG_SAVE__;
+              return override === undefined ? dialogSave : override;
+            }
+
             case "plugin:dialog|ask":
               return true;
 
@@ -1363,6 +1380,7 @@ export async function installMockTauri(
       envCheck: clone(DEFAULT_ENV_CHECK),
       errors: clone(errors ?? {}),
       dialogOpenPath: dialogOpenPath ?? null,
+      dialogSavePath: dialogSavePath ?? null,
       debug,
     } as unknown as Record<string, unknown>
   );

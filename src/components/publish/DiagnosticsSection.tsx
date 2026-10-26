@@ -60,11 +60,12 @@ export function DiagnosticsSection({
     selectedRepo,
   });
 
-  const { copyHandoffSnippet, openSnapshotFromRecord } = useHistoryActions({
-    appT,
-    historyT,
-    extractSpecFromRecord,
-  });
+  const { copyHandoffSnippet, openSnapshotFromRecord, exportHandoffBundle } =
+    useHistoryActions({
+      appT,
+      historyT,
+      extractSpecFromRecord,
+    });
 
   const {
     isExportingHistory,
@@ -108,6 +109,7 @@ export function DiagnosticsSection({
     openSnapshotFromRecord,
     rerunFromHistory,
     copyHandoffSnippet,
+    exportHandoffBundle,
   });
   const hasExecutionHistory =
     executionHistoryCardProps.scopedExecutionHistory.length > 0;

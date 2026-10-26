@@ -65,6 +65,7 @@ export interface ExecutionHistoryCardProps {
     record: ExecutionRecord,
     format: HandoffSnippetFormat
   ) => Promise<void>;
+  onExportHandoffBundle: (record: ExecutionRecord) => Promise<void>;
 }
 
 export function ExecutionHistoryCard({
@@ -93,6 +94,7 @@ export function ExecutionHistoryCard({
   onOpenSnapshotFromRecord,
   onRerunFromHistory,
   onCopyHandoffSnippet,
+  onExportHandoffBundle,
 }: ExecutionHistoryCardProps) {
   const { language } = useI18n();
   const dateLocale = getLanguageLocale(language);
@@ -341,6 +343,14 @@ export function ExecutionHistoryCard({
                     disabled={isPublishing}
                   >
                     {historyT.rerun || "重新执行"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void onExportHandoffBundle(record)}
+                  >
+                    {historyT.handoffBundle || "导出交接包"}
                   </Button>
                   {record.success && (
                     <>

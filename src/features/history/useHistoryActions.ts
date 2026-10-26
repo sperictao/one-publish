@@ -8,6 +8,10 @@ import {
   type HandoffSnippetFormat,
 } from "@/lib/handoffSnippet";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
+import { save } from "@tauri-apps/plugin-dialog";
+
+import { createFailureGroupBundleExportPlan } from "@/features/history/diagnosticsExportPayload";
+import { exportHandoffBundleFile } from "@/features/history/diagnosticsExportRuntime";
 import { useI18n } from "@/hooks/useI18n";
 import { openExecutionSnapshot } from "@/lib/store/api";
 import { type ExecutionRecord } from "@/lib/store/types";
@@ -174,8 +178,49 @@ export function useHistoryActions({
     ]
   );
 
+  const exportHandoffBundle = useCallback(
+    async (record: ExecutionRecord) => {
+      // 失败/取消的运行按单记录构造失败分组，包内含 failure-groups.md；
+      // 成功运行没有失败分组，交接包只含命令与快照。
+      const failureBundle = record.success
+        ? null
+        : createFailureGroupBundleExportPlan({
+            records: [record],
+            selectedRepoPath: "",
+          }).payload;
+      const stamp = record.finishedAt
+        ? record.finishedAt.replace(/[:.]/g, "-")
+        : "run";
+      const selected = await save({
+        title: historyT.handoffBundleTitle || "导出交接包",
+        defaultPath: `one-publish-handoff-${stamp}.zip`,
+        filters: [{ name: "ZIP", extensions: ["zip"] }],
+      });
+      if (!selected) {
+        return;
+      }
+
+      try {
+        const writtenPath = await exportHandoffBundleFile({
+          record,
+          failureBundle,
+          filePath: selected,
+        });
+        toast.success(historyT.handoffBundleExported || "交接包已导出", {
+          description: writtenPath,
+        });
+      } catch (err) {
+        toast.error(historyT.handoffBundleExportFailed || "导出交接包失败", {
+          description: localizeInvokeError(err, translations),
+        });
+      }
+    },
+    [historyT, translations]
+  );
+
   return {
     copyHandoffSnippet,
     openSnapshotFromRecord,
+    exportHandoffBundle,
   };
 }
