@@ -240,6 +240,7 @@ fn repo_publish_config_selection_and_identity_references_survive_rename() {
             recovery_snapshot: None,
             file_count: 0,
             warnings: None,
+            manifest_digest: None,
         }],
         ..AppState::default()
     };
@@ -515,6 +516,7 @@ fn bootstrap_state_serialization_excludes_execution_history() {
             recovery_snapshot: None,
             file_count: 2,
             warnings: None,
+            manifest_digest: None,
         }],
         ..AppState::default()
     };
@@ -978,6 +980,7 @@ fn load_from_path_scrubs_legacy_plaintext_history_once() {
             recovery_snapshot: None,
             file_count: 0,
             warnings: None,
+            manifest_digest: None,
         }],
         ..AppState::default()
     };

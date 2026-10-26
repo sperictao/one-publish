@@ -943,6 +943,7 @@ mod tests {
             recovery_snapshot: None,
             file_count: 0,
             warnings: None,
+            manifest_digest: None,
         }
     }
 

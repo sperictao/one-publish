@@ -61,6 +61,7 @@ export interface ExecutionHistoryCardProps {
   onClearFilters: () => void;
   onOpenSnapshotFromRecord: (record: ExecutionRecord) => Promise<void>;
   onRerunFromHistory: (record: ExecutionRecord) => Promise<void>;
+  onPromoteFromHistory?: (record: ExecutionRecord) => Promise<void>;
   onCopyHandoffSnippet: (
     record: ExecutionRecord,
     format: HandoffSnippetFormat
@@ -93,6 +94,7 @@ export function ExecutionHistoryCard({
   onClearFilters,
   onOpenSnapshotFromRecord,
   onRerunFromHistory,
+  onPromoteFromHistory,
   onCopyHandoffSnippet,
   onExportHandoffBundle,
 }: ExecutionHistoryCardProps) {
@@ -344,6 +346,24 @@ export function ExecutionHistoryCard({
                   >
                     {historyT.rerun || "重新执行"}
                   </Button>
+                  {record.manifestDigest && onPromoteFromHistory && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      title={(
+                        historyT.promoteDesc ||
+                        "复用该次封存产物直接再交付（跳过构建）"
+                      ).replace(
+                        "{{digest}}",
+                        record.manifestDigest.slice(0, 8)
+                      )}
+                      onClick={() => void onPromoteFromHistory(record)}
+                      disabled={isPublishing}
+                    >
+                      {historyT.promote || "再交付"}
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     size="sm"

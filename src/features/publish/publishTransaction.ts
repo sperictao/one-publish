@@ -15,6 +15,8 @@ export interface PublishTransactionRunOptions {
   restoreWindowOnFailure?: boolean;
   feedbackMode?: "toast" | "system";
   trayStatusEffect?: boolean;
+  /** Artifact Promotion：绑定既有封存 Manifest 的再交付（ADR-0040）。 */
+  promotedManifestDigest?: string | null;
 }
 
 export type RunPublishOptions = PublishTransactionRunOptions;

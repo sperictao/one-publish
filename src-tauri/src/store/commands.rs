@@ -922,6 +922,7 @@ mod tests {
             recovery_snapshot: None,
             file_count: 2,
             warnings: None,
+            manifest_digest: None,
         }
     }
 

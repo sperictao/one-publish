@@ -22,5 +22,24 @@ export function useRerunFlow({ runPublishSpec }: UseRerunFlowParams) {
     [runPublishSpec]
   );
 
-  return { rerunFromHistory };
+  const promoteFromHistory = useCallback(
+    async (record: ExecutionRecord) => {
+      if (!record.manifestDigest) {
+        return;
+      }
+      // Promotion 复用 history 来源恢复原配置，另绑定既有封存 Manifest：
+      // planner 跳过 Provider 构建与 Processor 节点，只执行 Store+Delivery
+      // 纯交付链（ADR-0040）。repoId 显式携带，历史记录可与当前选中仓库不同。
+      await runPublishSpec(
+        { kind: "history", recordId: record.id },
+        {
+          promotedManifestDigest: record.manifestDigest,
+          repoId: record.repoId,
+        }
+      );
+    },
+    [runPublishSpec]
+  );
+
+  return { rerunFromHistory, promoteFromHistory };
 }

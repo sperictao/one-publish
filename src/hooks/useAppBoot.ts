@@ -209,7 +209,7 @@ export function useAppBoot() {
   // ============================================================
 
   // Rerun flow
-  const { rerunFromHistory } = useRerunFlow({
+  const { rerunFromHistory, promoteFromHistory } = useRerunFlow({
     runPublishSpec: publish.runPublishSpec,
   });
 
@@ -247,8 +247,9 @@ export function useAppBoot() {
     return {
       ...publish.diagnosticsSectionProps,
       rerunFromHistory,
+      promoteFromHistory,
     };
-  }, [publish.diagnosticsSectionProps, rerunFromHistory]);
+  }, [publish.diagnosticsSectionProps, rerunFromHistory, promoteFromHistory]);
 
   // ============================================================
   // 10. Compute shouldLoadAppDialogsHost (includes publish/rurun dialogs)

@@ -64,6 +64,8 @@ export function createPublishExecutionRecord(params: {
   configurationRevisionId?: string | null;
   /** 关联的运行时 Attempt；start 之前失败的记录为空。 */
   attemptId?: string;
+  /** Attempt 封存的 Artifact Manifest 摘要；供 Promotion 再交付引用。 */
+  manifestDigest?: string | null;
   /** prepare ready 携带的版本化恢复快照（§3.3）。 */
   recoverySnapshot?: JsonValue;
   startedAt: string;
@@ -103,6 +105,7 @@ export function createPublishExecutionRecord(params: {
     outputExcerpt,
     spec: params.spec ? toStoredSpecValue(params.spec) : null,
     attemptId: params.attemptId,
+    manifestDigest: params.manifestDigest ?? undefined,
     recoverySnapshot: params.recoverySnapshot,
     fileCount: params.result.file_count,
     warnings: params.result.warnings ?? null,

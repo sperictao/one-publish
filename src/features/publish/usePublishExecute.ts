@@ -281,7 +281,7 @@ export function usePublishExecute({
         runInputs: {
           defaultOutputDir:
             source.kind === "history" ? "" : (defaultOutputDir ?? ""),
-          promotedManifestDigest: undefined,
+          promotedManifestDigest: options?.promotedManifestDigest ?? undefined,
         },
       };
       const isCancelled = () => {
@@ -425,6 +425,7 @@ export function usePublishExecute({
           configurationId: ready.configurationId,
           configurationRevisionId: ready.configurationRevisionId,
           attemptId: completedRuntime.attempt.attemptId,
+          manifestDigest: completedRuntime.attempt.manifestDigest,
           recoverySnapshot: ready.recoverySnapshot,
           startedAt: transaction.startedAt,
           finishedAt: new Date().toISOString(),

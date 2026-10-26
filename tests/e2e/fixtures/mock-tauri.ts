@@ -492,11 +492,22 @@ export async function installMockTauri(
 
       // 记录全部 invoke 命令名，供 spec 断言某命令是否被调用（如导出/写文件）。
       win.__MOCK_INVOCATIONS__ = [] as string[];
+      // 并行记录 { cmd, args }，供 spec 断言请求载荷（如 runInputs.promotedManifestDigest）。
+      win.__MOCK_INVOKE_ARGS__ = [] as {
+        cmd: string;
+        args?: Record<string, unknown>;
+      }[];
 
       win.__TAURI_INTERNALS__ = {
         invoke: async (cmd: string, args?: Record<string, unknown>) => {
           log("invoke:", cmd, args);
           (win.__MOCK_INVOCATIONS__ as string[]).push(cmd);
+          (
+            win.__MOCK_INVOKE_ARGS__ as {
+              cmd: string;
+              args?: Record<string, unknown>;
+            }[]
+          ).push({ cmd, args });
 
           // Error injection: throw if this command is in the errors map.
           // Special case: a `blocked:` prefix on prepare_publish_runtime

@@ -368,7 +368,12 @@ attemptId?: string,
  * 版本化恢复快照（§3.3）：历史重跑据此恢复原配置与已记录输入，
  * 不依赖草稿修订存活，也不依赖当前选中配置。
  */
-recoverySnapshot?: JsonValue, fileCount: number, warnings: Array<string> | null, };
+recoverySnapshot?: JsonValue, fileCount: number, warnings: Array<string> | null, 
+/**
+ * 本次 Attempt 封存的 Artifact Manifest 摘要；未走到 persist 阶段或
+ * 旧记录为空。Artifact Promotion 再交付以此为绑定身份（ADR-0040）。
+ */
+manifestDigest?: string, };
 
 export type CancelPublishRuntimeRequest = { runtimeToken?: string, attemptId?: string, };
 

@@ -705,6 +705,8 @@
     "completedAt": "完成时间",
     "failureReason": "失败原因",
     "rerun": "重新执行",
+    "promote": "再交付",
+    "promoteDesc": "复用该次封存产物直接再交付（跳过构建），Manifest {{digest}}…",
     "copyShellSnippet": "复制 Shell 片段",
     "copyGhaSnippet": "复制 GHA 片段",
     "copyGitlabSnippet": "复制 GitLab CI 片段",
