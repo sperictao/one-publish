@@ -29,7 +29,6 @@ const mocks = vi.hoisted(() => ({
   setTrayPublishStatus: vi.fn(),
   showMainWindow: vi.fn(),
   updatePublishEditState: vi.fn(),
-  renderPublishCommand: vi.fn(),
   preparePublishRuntime: vi.fn(),
   startPublishRuntime: vi.fn(),
   resumePublishRuntime: vi.fn(),
@@ -85,19 +84,11 @@ vi.mock("@/lib/systemNotification", () => ({
   showSystemNotification: mocks.showSystemNotification,
 }));
 
-vi.mock("@/features/publish/renderPublishCommand", () => ({
-  renderPublishCommand: mocks.renderPublishCommand,
-}));
-
 vi.mock("@/features/publish/publishRuntime", async () => ({
   ...(await vi.importActual<typeof import("@/features/publish/publishRuntime")>(
     "@/features/publish/publishRuntime"
   )),
-  executeProviderPublish: (spec: unknown) =>
-    mocks.invoke("execute_provider_publish", { spec }),
-  cancelProviderPublish: () => mocks.invoke("cancel_provider_publish"),
   cancelPublishRuntime: mocks.cancelPublishRuntime,
-  renderProviderPublish: mocks.renderPublishCommand,
   preflightProviderPublishOutput: mocks.preflightPublishOutput,
   preparePublishRuntime: mocks.preparePublishRuntime,
   startPublishRuntime: mocks.startPublishRuntime,
@@ -537,7 +528,7 @@ describe("usePublishRunner", () => {
     );
     mocks.analyzePublishExecutionFailure.mockReturnValue("process_failed");
     mocks.setTrayPublishStatus.mockResolvedValue(true);
-    mocks.renderPublishCommand.mockResolvedValue(createRenderedCommand());
+
     // 统一 prepare 合同：按 source.kind 返回 ready 形状（对齐后端行为）。
     mocks.preparePublishRuntime.mockImplementation(
       async (request: PreparePublishRuntimeRequest) => {
@@ -1658,7 +1649,7 @@ describe("usePublishRunner", () => {
       await result.current.cancelPublish();
     });
     expect(usePublishStore.getState().isPublishing).toBe(false);
-    expect(mocks.invoke).not.toHaveBeenCalledWith("cancel_provider_publish");
+    expect(mocks.cancelPublishRuntime).not.toHaveBeenCalled();
 
     await act(async () => {
       resolveEnvironmentCheck(readyEnvironment);
@@ -1704,7 +1695,6 @@ describe("usePublishRunner", () => {
     expect(mocks.cancelPublishRuntime).toHaveBeenCalledWith({
       runtimeToken: "token-revision-runtime-cancel",
     });
-    expect(mocks.invoke).not.toHaveBeenCalledWith("cancel_provider_publish");
 
     await act(async () => {
       const completed = createRuntimeResult("revision-runtime-cancel");

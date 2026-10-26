@@ -105,12 +105,6 @@ pub async fn get_repository(repo_id: String) -> Result<Repository, AppError> {
 }
 
 #[tauri::command]
-pub async fn save_app_state(state: AppState) -> Result<(), AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::save_app_state");
-    update_state(state)
-}
-
-#[tauri::command]
 pub async fn add_repository(app: tauri::AppHandle, repo: Repository) -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::add_repository");
     let mut state = get_state();
@@ -432,19 +426,6 @@ fn upsert_edit_draft(
         repo.publish_config.drafts.push(draft);
     }
     Ok(project_binding)
-}
-
-#[tauri::command]
-pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::get_profiles");
-    with_read_state(|state| {
-        Ok(find_repository(&state.repositories, &repo_id)?
-            .publish_config
-            .active_profiles()
-            .into_iter()
-            .cloned()
-            .collect())
-    })
 }
 
 /// 保存修订时解析仓库当前的 Project Candidate 并固化进修订（决议 #78）。

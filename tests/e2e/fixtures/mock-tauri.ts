@@ -625,15 +625,6 @@ export async function installMockTauri(
                 diagnostics: [],
               };
 
-            case "get_profiles": {
-              // Return profiles from the selected repo's publishConfig
-              const repoId = (args?.repoId || args?.repo_id) as string;
-              const repo = appState.repositories?.find(
-                (r: Repository) => r.id === repoId
-              );
-              return clone(repo?.publishConfig?.profiles ?? []);
-            }
-
             case "get_execution_history":
               return clone(appState.executionHistory ?? []);
 
@@ -670,7 +661,6 @@ export async function installMockTauri(
               );
             }
 
-            case "save_app_state":
             case "remove_repository":
             case "reorder_repositories":
             case "save_profile":
@@ -680,7 +670,6 @@ export async function installMockTauri(
             case "reorder_recent_publish_configs":
             case "reorder_profiles":
             case "replace_recent_publish_config_key":
-            case "update_tray_menu":
               return null;
 
             case "update_repository": {

@@ -52,7 +52,6 @@ pub(crate) async fn execute_provider_publish(
     execute_publish_spec(&app, spec, cancellation).await
 }
 
-#[tauri::command]
 pub fn render_provider_publish(
     spec: PublishSpec,
 ) -> Result<RenderedPublishCommand, crate::errors::AppError> {
