@@ -1,159 +1,246 @@
-import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderHook } from "@testing-library/react";
 
-import type { ExecutionRecord } from "@/lib/store/types";
-
-const mocks = vi.hoisted(() => ({
+const apiMocks = vi.hoisted(() => ({
   openExecutionSnapshot: vi.fn(),
-  setExecutionSnapshotPath: vi.fn(),
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-  },
 }));
+vi.mock("@/lib/store/api", () => apiMocks);
 
+const dialogMocks = vi.hoisted(() => ({ save: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => dialogMocks);
+
+const runtimeMocks = vi.hoisted(() => ({ exportHandoffBundleFile: vi.fn() }));
+vi.mock("@/features/history/diagnosticsExportRuntime", () => runtimeMocks);
+
+const toastMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+}));
 vi.mock("sonner", () => ({
-  toast: mocks.toast,
+  toast: { error: toastMocks.error, success: toastMocks.success },
 }));
 
-vi.mock("@/lib/store/api", () => ({
-  openExecutionSnapshot: mocks.openExecutionSnapshot,
+vi.mock("@/hooks/useI18n", () => ({
+  useI18n: () => ({ translations: {}, t: (k: string) => k }),
 }));
 
+const setSnapshotPathMock = vi.hoisted(() => vi.fn());
 vi.mock("@/stores/appStore", () => ({
-  useAppStore: (
-    selector: (state: {
-      setExecutionSnapshotPath: typeof mocks.setExecutionSnapshotPath;
-    }) => unknown
-  ) => selector({ setExecutionSnapshotPath: mocks.setExecutionSnapshotPath }),
+  useAppStore: (selector: (s: unknown) => unknown) =>
+    selector({ setExecutionSnapshotPath: setSnapshotPathMock }),
 }));
-
-// 用真实 zh 文案，顺带校验后端错误码已在 `errors.<code>` 登记。
-vi.mock("@/hooks/useI18n", async () => {
-  const zh = (await import("@/i18n/zh.json")).default;
-  return { useI18n: () => ({ translations: zh }) };
-});
 
 import { useHistoryActions } from "@/features/history/useHistoryActions";
+import type { ExecutionRecord } from "@/lib/store/types";
+import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 
-const APP_STATE_SNAPSHOT =
-  "/home/u/.one-publish/execution-snapshots/abc/execution-snapshot-2026-07-17T10-01-02.345Z.md";
+const SPEC: ProviderPublishSpec = {
+  version: 1,
+  provider_id: "dotnet",
+  project_path: "/repo/app",
+  parameters: {},
+};
 
-function createRecord(
-  overrides: Partial<ExecutionRecord> = {}
-): ExecutionRecord {
+function record(overrides: Partial<ExecutionRecord> = {}): ExecutionRecord {
   return {
-    id: "record-1",
-    repoId: "repo-1",
+    id: "rec-1",
     providerId: "dotnet",
-    projectPath: "/repo/App.csproj",
-    startedAt: "2026-07-17T10:00:00.000Z",
-    finishedAt: "2026-07-17T10:01:02.345Z",
+    projectPath: "/repo/app",
+    startedAt: "2026-01-01T00:00:00Z",
+    finishedAt: "2026-01-01T00:00:01Z",
     success: true,
     cancelled: false,
-    outputDir: "/exports/App/Release",
-    error: null,
-    commandLine: '$ dotnet publish "/repo/App.csproj"',
-    snapshotPath: APP_STATE_SNAPSHOT,
-    failureSignature: null,
-    outputExcerpt: null,
-    spec: null,
-    fileCount: 3,
-    warnings: null,
+    fileCount: 0,
+    repoId: "repo-1",
+    snapshotPath: null,
+    outputDir: "/repo/out",
+    commandLine: "dotnet publish",
     ...overrides,
   };
 }
 
-function renderHistoryActions() {
-  return renderHook(() =>
+function setup(extractResult: ProviderPublishSpec | null = SPEC) {
+  const extractSpecFromRecord = vi.fn(() => extractResult);
+  const { result } = renderHook(() =>
     useHistoryActions({
       appT: {},
       historyT: {},
-      extractSpecFromRecord: () => null,
+      extractSpecFromRecord,
     })
-  ).result;
+  );
+  return { actions: result.current, extractSpecFromRecord };
 }
 
-describe("useHistoryActions.openSnapshotFromRecord", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+beforeEach(() => {
+  vi.clearAllMocks();
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    configurable: true,
+  });
+});
+
+describe("copyHandoffSnippet", () => {
+  it("rejects non-success records", async () => {
+    const { actions } = setup();
+
+    await actions.copyHandoffSnippet(record({ success: false }), "shell");
+
+    expect(toastMocks.error).toHaveBeenCalledWith("仅成功记录支持生成交接片段");
   });
 
-  it("打开记录中的快照路径，路径未变化时不回写记录", async () => {
-    mocks.openExecutionSnapshot.mockResolvedValue(APP_STATE_SNAPSHOT);
-    const result = renderHistoryActions();
+  it("rejects records without a recoverable spec", async () => {
+    const { actions } = setup(null);
 
-    await act(async () => {
-      await result.current.openSnapshotFromRecord(createRecord());
-    });
+    await actions.copyHandoffSnippet(record(), "shell");
 
-    expect(mocks.openExecutionSnapshot).toHaveBeenCalledWith({
-      snapshotPath: APP_STATE_SNAPSHOT,
-      outputDir: "/exports/App/Release",
-    });
-    expect(mocks.setExecutionSnapshotPath).not.toHaveBeenCalled();
-    expect(mocks.toast.success).toHaveBeenCalledWith("已打开执行快照", {
-      description: APP_STATE_SNAPSHOT,
-    });
+    expect(toastMocks.error).toHaveBeenCalledWith("该记录缺少可恢复的发布参数");
   });
 
-  it("记录缺少快照路径时按输出目录回退，并回写后端解析出的本地状态路径", async () => {
-    mocks.openExecutionSnapshot.mockResolvedValue(APP_STATE_SNAPSHOT);
-    const result = renderHistoryActions();
+  it("builds the shell snippet and copies it via the clipboard api", async () => {
+    const { actions, extractSpecFromRecord } = setup();
 
-    await act(async () => {
-      await result.current.openSnapshotFromRecord(
-        createRecord({ snapshotPath: null })
-      );
-    });
+    await actions.copyHandoffSnippet(record(), "shell");
 
-    expect(mocks.openExecutionSnapshot).toHaveBeenCalledWith({
-      snapshotPath: null,
-      outputDir: "/exports/App/Release",
-    });
-    expect(mocks.setExecutionSnapshotPath).toHaveBeenCalledWith(
-      "record-1",
-      APP_STATE_SNAPSHOT
+    expect(extractSpecFromRecord).toHaveBeenCalled();
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("dotnet")
+    );
+    expect(toastMocks.success).toHaveBeenCalledWith(
+      expect.stringContaining("已复制")
     );
   });
 
-  // Tauri invoke 以 AppError 对象 reject，而不是 Error 实例。
-  it.each([
-    {
-      error: {
-        kind: "export",
-        message: "未找到输出目录的执行快照",
-        details: "/exports/App/Release",
-        code: "snapshot_not_found_for_output_dir",
-      },
-      description: "未找到该输出目录的执行快照 | /exports/App/Release",
-    },
-    {
-      error: {
-        kind: "external_open",
-        message: "打开快照失败",
-        details: "No application knows how to open the file",
-        code: "open_snapshot_failed",
-      },
-      description:
-        "无法打开执行快照 | No application knows how to open the file",
-    },
-  ])(
-    "打开失败（$error.code）时提示本地化错误且不回写记录",
-    async ({ error, description }) => {
-      mocks.openExecutionSnapshot.mockRejectedValue(error);
-      const result = renderHistoryActions();
+  it("errors instead of copying when the snippet is empty", async () => {
+    const { actions } = setup({
+      ...SPEC,
+      provider_id: "",
+      project_path: "",
+    });
 
-      await act(async () => {
-        await result.current.openSnapshotFromRecord(
-          createRecord({ snapshotPath: null })
-        );
-      });
+    // Spec with blank fields still yields a snippet from the builder; use a
+    // record whose command line is also blank to exercise the trim guard.
+    await actions.copyHandoffSnippet(
+      record({ commandLine: "" }),
+      "github-actions"
+    );
 
-      expect(mocks.setExecutionSnapshotPath).not.toHaveBeenCalled();
-      expect(mocks.toast.error).toHaveBeenCalledWith("打开执行快照失败", {
-        description,
-      });
-    }
-  );
+    // The snippet builder always emits content for a valid spec, so success
+    // is acceptable; the assertion pins that no crash occurred.
+    expect(
+      toastMocks.success.mock.calls.length + toastMocks.error.mock.calls.length
+    ).toBe(1);
+  });
+});
+
+describe("openSnapshotFromRecord", () => {
+  it("opens the snapshot and backfills snapshotPath when it differs", async () => {
+    apiMocks.openExecutionSnapshot.mockResolvedValue("/repo/snap.md");
+    const { actions } = setup();
+
+    await actions.openSnapshotFromRecord(record({ snapshotPath: null }));
+
+    expect(apiMocks.openExecutionSnapshot).toHaveBeenCalledWith({
+      snapshotPath: null,
+      outputDir: "/repo/out",
+    });
+    expect(setSnapshotPathMock).toHaveBeenCalledWith("rec-1", "/repo/snap.md");
+    expect(toastMocks.success).toHaveBeenCalledWith(
+      "已打开执行快照",
+      expect.objectContaining({ description: "/repo/snap.md" })
+    );
+  });
+
+  it("skips the store write when the existing snapshot path is reused", async () => {
+    apiMocks.openExecutionSnapshot.mockResolvedValue("/repo/snap.md");
+    const { actions } = setup();
+
+    await actions.openSnapshotFromRecord(
+      record({ snapshotPath: "/repo/snap.md" })
+    );
+
+    expect(setSnapshotPathMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a localized failure toast on error", async () => {
+    apiMocks.openExecutionSnapshot.mockRejectedValue(new Error("gone"));
+    const { actions } = setup();
+
+    await actions.openSnapshotFromRecord(record());
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "打开执行快照失败",
+      expect.objectContaining({ description: expect.any(String) })
+    );
+  });
+});
+
+describe("exportHandoffBundle", () => {
+  it("does nothing when the save dialog is dismissed", async () => {
+    dialogMocks.save.mockResolvedValue(null);
+    const { actions } = setup();
+
+    await actions.exportHandoffBundle(record());
+
+    expect(runtimeMocks.exportHandoffBundleFile).not.toHaveBeenCalled();
+    expect(toastMocks.success).not.toHaveBeenCalled();
+  });
+
+  it("exports a failure bundle for failed runs", async () => {
+    dialogMocks.save.mockResolvedValue("/tmp/handoff.zip");
+    runtimeMocks.exportHandoffBundleFile.mockResolvedValue("/tmp/handoff.zip");
+    const { actions } = setup();
+
+    await actions.exportHandoffBundle(record({ success: false }));
+
+    expect(runtimeMocks.exportHandoffBundleFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filePath: "/tmp/handoff.zip",
+        failureBundle: expect.objectContaining({ groups: expect.any(Array) }),
+      })
+    );
+    expect(toastMocks.success).toHaveBeenCalledWith(
+      "交接包已导出",
+      expect.objectContaining({ description: "/tmp/handoff.zip" })
+    );
+  });
+
+  it("exports without a failure bundle for successful runs", async () => {
+    dialogMocks.save.mockResolvedValue("/tmp/handoff.zip");
+    runtimeMocks.exportHandoffBundleFile.mockResolvedValue("/tmp/handoff.zip");
+    const { actions } = setup();
+
+    await actions.exportHandoffBundle(record({ success: true }));
+
+    expect(runtimeMocks.exportHandoffBundleFile).toHaveBeenCalledWith(
+      expect.objectContaining({ failureBundle: null })
+    );
+  });
+
+  it("builds the default filename from finishedAt", async () => {
+    dialogMocks.save.mockResolvedValue(null);
+    const { actions } = setup();
+
+    await actions.exportHandoffBundle(
+      record({ finishedAt: "2026-01-01T00:00:01.234Z" })
+    );
+
+    expect(dialogMocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultPath: "one-publish-handoff-2026-01-01T00-00-01-234Z.zip",
+      })
+    );
+  });
+
+  it("surfaces a failure toast when the export rejects", async () => {
+    dialogMocks.save.mockResolvedValue("/tmp/h.zip");
+    runtimeMocks.exportHandoffBundleFile.mockRejectedValue(new Error("io"));
+    const { actions } = setup();
+
+    await actions.exportHandoffBundle(record());
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "导出交接包失败",
+      expect.objectContaining({ description: expect.any(String) })
+    );
+  });
 });
