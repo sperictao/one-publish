@@ -123,6 +123,7 @@ export function useProfileListState(params: {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadProfiles();
   }, [loadProfiles]);
 
