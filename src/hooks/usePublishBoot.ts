@@ -8,6 +8,7 @@ import {
   QUICK_CREATE_PROFILE_GROUP_DEFAULT,
 } from "@/features/config/useProfiles";
 import { useCommandImport } from "@/hooks/useCommandImport";
+import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { useScopedConfigs } from "@/features/config/useScopedConfigs";
 import { useProviderPresentationState } from "@/features/provider/useProviderPresentationState";
 import { usePublishConfigPanelProps } from "@/hooks/usePublishConfigPanelProps";
@@ -346,6 +347,12 @@ export function usePublishBoot(params: UsePublishBootParams) {
       selectedConfiguration?.blockedReason ?? null,
   });
 
+  // 历史重跑/再交付与主发布共用同一 runPublishSpec 事务管线，在发布域内
+  // 构造真实回调——不再由 App 层事后修补 props。
+  const { rerunFromHistory, promoteFromHistory } = useRerunFlow({
+    runPublishSpec,
+  });
+
   const { activeImportFeedback, handleCommandImport } = useCommandImport({
     activeProviderId: params.activeProviderId,
     appT: params.appT,
@@ -438,7 +445,8 @@ export function usePublishBoot(params: UsePublishBootParams) {
           recentHistoryExports: params.recentHistoryExports,
           trackHistoryExport: params.trackHistoryExport,
           extractSpecFromRecord: params.extractSpecFromRecord,
-          rerunFromHistory: params.extractSpecFromRecord as any, // overridden by useAppBoot
+          rerunFromHistory,
+          promoteFromHistory,
         }
       : null;
 

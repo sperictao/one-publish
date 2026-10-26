@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { useAppState } from "@/hooks/useAppState";
 import { useShellBoot, type UseShellBootReturn } from "@/hooks/useShellBoot";
 import { useRepoBoot, type UseRepoBootReturn } from "@/hooks/useRepoBoot";
@@ -11,7 +10,6 @@ import { useProviderParametersState } from "@/features/provider/useProviderParam
 import { usePublishHistoryState } from "@/features/history/usePublishHistoryState";
 import { useEditorProviderState } from "@/features/provider/useEditorProviderState";
 import { useProviderPresentationState } from "@/features/provider/useProviderPresentationState";
-import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { useTrayRecentPublish } from "@/hooks/useTrayRecentPublish";
 import { extractSpecFromRecord } from "@/features/history/specFromRecord";
 import { usePublishStore } from "@/stores/publishStore";
@@ -208,11 +206,6 @@ export function useAppBoot() {
   // 7. Cross-domain hooks (need both repo and publish values)
   // ============================================================
 
-  // Rerun flow
-  const { rerunFromHistory, promoteFromHistory } = useRerunFlow({
-    runPublishSpec: publish.runPublishSpec,
-  });
-
   // Tray recent publish
   useTrayRecentPublish({
     appT: shell.appT,
@@ -238,21 +231,7 @@ export function useAppBoot() {
   });
 
   // ============================================================
-  // 9. Fix up diagnosticsSectionProps with actual rerunFromHistory
-  // ============================================================
-  const diagnosticsSectionProps = useMemo(() => {
-    if (!publish.diagnosticsSectionProps) {
-      return null;
-    }
-    return {
-      ...publish.diagnosticsSectionProps,
-      rerunFromHistory,
-      promoteFromHistory,
-    };
-  }, [publish.diagnosticsSectionProps, rerunFromHistory, promoteFromHistory]);
-
-  // ============================================================
-  // 10. Compute shouldLoadAppDialogsHost (includes publish/rurun dialogs)
+  // 9. Compute shouldLoadAppDialogsHost (includes publish/rurun dialogs)
   // ============================================================
   const shouldLoadAppDialogsHost =
     shell.shouldLoadAppDialogsHost ||
@@ -294,8 +273,6 @@ export function useAppBoot() {
     },
     publish: {
       ...publish,
-      diagnosticsSectionProps,
-      rerunFromHistory,
     },
   };
 }
