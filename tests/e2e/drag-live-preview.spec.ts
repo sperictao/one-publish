@@ -315,8 +315,6 @@ async function installMockTauri(page: Page) {
             ];
           case "get_provider_schema":
             return clone(dotnetSchema);
-          case "get_profiles":
-            return clone(profilesByRepo[String(args?.repoId ?? "")] ?? []);
           case "get_repository": {
             const repoId = String(args?.repoId ?? "");
             const repository = appState.repositories.find(

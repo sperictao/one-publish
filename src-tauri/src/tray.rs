@@ -594,8 +594,7 @@ pub async fn show_main_window(app: AppHandle) -> Result<bool, crate::errors::App
 }
 
 /// 更新托盘菜单
-#[tauri::command]
-pub async fn update_tray_menu(app: AppHandle) -> Result<bool, crate::errors::AppError> {
+pub(crate) async fn update_tray_menu(app: AppHandle) -> Result<bool, crate::errors::AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("tray::update_tray_menu");
     match create_tray_menu(&app) {
         Ok(new_menu) => {

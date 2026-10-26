@@ -170,7 +170,6 @@ pub fn run() {
             commands::sign_artifact,
             store::get_app_state,
             store::get_repository,
-            store::save_app_state,
             store::add_repository,
             store::remove_repository,
             store::update_repository,
@@ -178,7 +177,6 @@ pub fn run() {
             store::update_ui_state,
             store::update_publish_edit_state,
             store::update_preferences,
-            store::get_profiles,
             store::save_profile,
             store::update_profile,
             store::load_release_settings_draft,
@@ -193,7 +191,6 @@ pub fn run() {
             store::get_execution_history,
             store::add_execution_record,
             store::set_execution_record_snapshot,
-            tray::update_tray_menu,
             tray::show_main_window,
             tray::set_tray_publish_status
         ])
