@@ -1609,6 +1609,8 @@ describe("usePublishRunner", () => {
             provider_id: "dotnet",
             issue_type: "missing_tool",
             description: ".NET SDK missing",
+            current_value: null,
+            expected_value: null,
             fixes: [],
           },
         ],

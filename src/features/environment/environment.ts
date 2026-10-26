@@ -1,54 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  EnvironmentCheckResult,
+  EnvironmentIssue,
+  FixAction,
+  FixResult,
+  IssueSeverity,
+} from "@/generated/tauri-contracts";
 
-export type IssueSeverity = "critical" | "warning" | "info";
-
-type IssueType =
-  | "missing_tool"
-  | "outdated_version"
-  | "missing_dependency"
-  | "incompatible_version";
-
-type FixType = "open_url" | "run_command" | "copy_command" | "manual";
-
-export interface FixAction {
-  action_type: FixType;
-  label: string;
-  command?: string | null;
-  url?: string | null;
-}
-
-export type FixResult =
-  | { result: "OpenedUrl"; data: string }
-  | {
-      result: "CommandExecuted";
-      data: { stdout: string; stderr: string; exit_code: number };
-    }
-  | { result: "CopiedToClipboard"; data: string }
-  | { result: "Manual"; data: string };
-
-export interface EnvironmentIssue {
-  severity: IssueSeverity;
-  provider_id: string;
-  issue_type: IssueType;
-  description: string;
-  current_value?: string | null;
-  expected_value?: string | null;
-  fixes: FixAction[];
-}
-
-interface ProviderStatus {
-  provider_id: string;
-  installed: boolean;
-  version?: string | null;
-  path?: string | null;
-}
-
-export interface EnvironmentCheckResult {
-  is_ready: boolean;
-  providers: ProviderStatus[];
-  issues: EnvironmentIssue[];
-  checked_at: string;
-}
+export type {
+  EnvironmentCheckResult,
+  EnvironmentIssue,
+  FixAction,
+  FixResult,
+  IssueSeverity,
+};
 
 export interface EnvironmentCheckSnapshot {
   providerIds: string[];

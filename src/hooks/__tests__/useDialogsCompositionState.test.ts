@@ -30,6 +30,8 @@ describe("useDialogsCompositionState", () => {
           {
             provider_id: "dotnet",
             installed: true,
+            version: null,
+            path: null,
           },
         ],
         issues: [],
