@@ -829,6 +829,48 @@ impl RepoPublishConfig {
             return Ok(None);
         }
 
+        self.append_imported_profile(import)
+    }
+
+    /// 导入覆盖：同名 profile 保留身份（id、收藏与历史关联），追加一个 imported
+    /// 修订使其内容更新为导入参数；系统默认配置不可覆盖，返回 None 交由调用方
+    /// 按跳过计数。无同名时与 `import_profile` 一样新建。
+    pub(crate) fn import_profile_overwriting(
+        &mut self,
+        import: ConfigurationImport,
+    ) -> Result<Option<&ConfigProfile>, crate::errors::AppError> {
+        let Some(profile) = self.profiles.iter_mut().find(|profile| {
+            profile.deleted_at.is_none() && profile.name == import.name
+        }) else {
+            return self.append_imported_profile(import);
+        };
+
+        if profile.is_system_default {
+            return Ok(None);
+        }
+
+        let revision = PublishConfigurationRevision::new_imported(
+            import.provider_id,
+            import.parameters,
+            import.created_at,
+            import.contract_version,
+            import.provider_version,
+            import.settings_version,
+            import.composition,
+            import.project_binding,
+        );
+        profile.current_revision_id = revision.id.clone();
+        profile.blocked_reason = ConfigProfile::revision_blocked_reason(&revision);
+        profile.profile_group = import.profile_group;
+        let profile_id = profile.id.clone();
+        profile.revisions.push(revision);
+        Ok(self.profiles.iter().find(|candidate| candidate.id == profile_id))
+    }
+
+    fn append_imported_profile(
+        &mut self,
+        import: ConfigurationImport,
+    ) -> Result<Option<&ConfigProfile>, crate::errors::AppError> {
         let revision = PublishConfigurationRevision::new_imported(
             import.provider_id,
             import.parameters,
@@ -854,6 +896,13 @@ impl RepoPublishConfig {
         self.profiles
             .iter()
             .find(|profile| profile.id == profile_id)
+    }
+
+    /// 是否存在指定名称的活跃配置（导入冲突判定）。
+    pub fn has_active_profile_named(&self, name: &str) -> bool {
+        self.profiles
+            .iter()
+            .any(|profile| profile.deleted_at.is_none() && profile.name == name)
     }
 
     pub fn active_profiles(&self) -> Vec<&ConfigProfile> {

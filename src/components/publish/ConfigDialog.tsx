@@ -27,7 +27,10 @@ import {
 import { toast } from "sonner";
 import { isProviderCompatibleWithRepository } from "@/features/config/providerCompatibility";
 import type { TranslationMap } from "@/features/config/types";
-import type { ImportedConfigSummary } from "@/generated/tauri-contracts";
+import type {
+  ImportConflictStrategy,
+  ImportedConfigSummary,
+} from "@/generated/tauri-contracts";
 import { importConfig } from "@/lib/store/api";
 import { type ConfigParameters, type ConfigProfile } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
@@ -48,7 +51,8 @@ interface ConfigManagementContentProps {
   onDeleteProfile: (profile: ConfigProfile) => Promise<void>;
   onExportProfiles: (filePath: string) => Promise<string>;
   onApplyImportedProfiles: (
-    profiles: ConfigProfile[]
+    profiles: ConfigProfile[],
+    conflictStrategy: ImportConflictStrategy
   ) => Promise<ImportedConfigSummary>;
   /** 返回是否已加载；被拒绝（如 Provider 不一致）时保持对话框打开。 */
   onLoadProfile: (profile: ConfigProfile) => boolean;
@@ -128,6 +132,22 @@ function formatImportSummary(
       )
     );
   }
+  if (summary.overwritten > 0) {
+    parts.push(
+      withCount(
+        profileT.importSummaryOverwritten || "同名覆盖：{{count}}",
+        summary.overwritten
+      )
+    );
+  }
+  if (summary.renamed > 0) {
+    parts.push(
+      withCount(
+        profileT.importSummaryRenamed || "重命名导入：{{count}}",
+        summary.renamed
+      )
+    );
+  }
   return parts.join(" · ");
 }
 
@@ -145,7 +165,8 @@ interface ConfigDialogProps {
   onDeleteProfile: (profile: ConfigProfile) => Promise<void>;
   onExportProfiles: (filePath: string) => Promise<string>;
   onApplyImportedProfiles: (
-    profiles: ConfigProfile[]
+    profiles: ConfigProfile[],
+    conflictStrategy: ImportConflictStrategy
   ) => Promise<ImportedConfigSummary>;
   /** 返回是否已加载；被拒绝（如 Provider 不一致）时保持对话框打开。 */
   onLoadProfile: (profile: ConfigProfile) => boolean;
@@ -184,6 +205,8 @@ export function ConfigManagementContent({
   const [pendingImport, setPendingImport] = useState<PendingImportState | null>(
     null
   );
+  const [conflictStrategy, setConflictStrategy] =
+    useState<ImportConflictStrategy>("skip");
   const [isImportLoading, setIsImportLoading] = useState(false);
   const [isApplyingImport, setIsApplyingImport] = useState(false);
   const [pendingDeleteProfile, setPendingDeleteProfile] =
@@ -202,6 +225,9 @@ export function ConfigManagementContent({
   );
   const importableCount = importPreview.filter(
     (item) => item.status === "importable"
+  ).length;
+  const existingCount = importPreview.filter(
+    (item) => item.status === "existing"
   ).length;
   const providerMismatchCount = importPreview.filter(
     (item) => item.status === "providerMismatch"
@@ -304,9 +330,12 @@ export function ConfigManagementContent({
     setIsApplyingImport(true);
     try {
       // 后端按同一规则最终裁决，提示以其返回的计数为准。
-      const summary = await onApplyImportedProfiles(pendingImport.profiles);
+      const summary = await onApplyImportedProfiles(
+        pendingImport.profiles,
+        conflictStrategy
+      );
       const description = formatImportSummary(summary, profileT);
-      if (summary.imported > 0) {
+      if (summary.imported + summary.overwritten + summary.renamed > 0) {
         toast.success(profileT.importSuccess || "配置已导入", { description });
       } else {
         toast.warning(profileT.importNothingImported || "没有导入任何配置", {
@@ -321,7 +350,14 @@ export function ConfigManagementContent({
     } finally {
       setIsApplyingImport(false);
     }
-  }, [onApplyImportedProfiles, pendingImport, profileT, repoId, translations]);
+  }, [
+    conflictStrategy,
+    onApplyImportedProfiles,
+    pendingImport,
+    profileT,
+    repoId,
+    translations,
+  ]);
 
   const handleImportConfig = async () => {
     if (!repoId) return;
@@ -339,6 +375,7 @@ export function ConfigManagementContent({
         setIsImportLoading(true);
         try {
           const config = await importConfig(filePath as string);
+          setConflictStrategy("skip");
           setPendingImport({
             profiles: config.profiles,
           });
@@ -545,7 +582,12 @@ export function ConfigManagementContent({
                 <Button
                   type="button"
                   onClick={() => void confirmImportConfig()}
-                  disabled={isApplyingImport || importableCount === 0}
+                  disabled={
+                    isApplyingImport ||
+                    (conflictStrategy === "skip"
+                      ? importableCount === 0
+                      : importableCount + existingCount === 0)
+                  }
                 >
                   {isApplyingImport ? (
                     <>
@@ -576,6 +618,48 @@ export function ConfigManagementContent({
                       .replace("{{count}}", String(providerMismatchCount))
                       .replace("{{provider}}", repositoryProviderId ?? "")}
                   </p>
+                </div>
+              ) : null}
+              {existingCount > 0 ? (
+                <div className="rounded-sm border border-warning/20 bg-warning/5 px-3 py-2.5">
+                  <p className="text-copy-14 font-normal">
+                    {(
+                      profileT.importConflictStrategyTitle ||
+                      "{{count}} 个配置与仓库内现有配置同名，选择处理方式："
+                    ).replace("{{count}}", String(existingCount))}
+                  </p>
+                  <div
+                    role="radiogroup"
+                    aria-label={(
+                      profileT.importConflictStrategyTitle ||
+                      "{{count}} 个配置与仓库内现有配置同名，选择处理方式："
+                    ).replace("{{count}}", String(existingCount))}
+                    className="mt-2 flex flex-wrap gap-2"
+                  >
+                    {(
+                      [
+                        ["skip", "跳过（保留现有配置）"],
+                        ["overwrite", "覆盖（现有配置更新为导入内容）"],
+                        ["rename", "重命名（以“名称 (2)”导入）"],
+                      ] as const
+                    ).map(([value, fallback]) => (
+                      <Button
+                        key={value}
+                        type="button"
+                        size="sm"
+                        variant={
+                          conflictStrategy === value ? "default" : "outline"
+                        }
+                        role="radio"
+                        aria-checked={conflictStrategy === value}
+                        onClick={() => setConflictStrategy(value)}
+                      >
+                        {profileT[
+                          `importConflictStrategy${value[0].toUpperCase()}${value.slice(1)}` as keyof typeof profileT
+                        ] || fallback}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               ) : null}
               <div className="flex items-start gap-3">

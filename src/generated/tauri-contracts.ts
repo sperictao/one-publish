@@ -232,7 +232,17 @@ skippedExisting: number,
 /**
  * 配置 Provider 与仓库声明的 Provider 不一致，拒绝导入。
  */
-skippedProviderMismatch: number, };
+skippedProviderMismatch: number, 
+/**
+ * 同名配置被导入内容覆盖（已有 profile 追加 imported 修订）。
+ */
+overwritten: number, 
+/**
+ * 同名配置以派生名（`name (n)`）导入。
+ */
+renamed: number, };
+
+export type ImportConflictStrategy = "skip" | "overwrite" | "rename";
 
 export type EnvironmentCheckResult = { is_ready: boolean, providers: Array<ProviderStatus>, issues: Array<EnvironmentIssue>, checked_at: string, };
 

@@ -14,6 +14,21 @@ pub struct ImportedConfigSummary {
     pub skipped_existing: usize,
     /// 配置 Provider 与仓库声明的 Provider 不一致，拒绝导入。
     pub skipped_provider_mismatch: usize,
+    /// 同名配置被导入内容覆盖（已有 profile 追加 imported 修订）。
+    pub overwritten: usize,
+    /// 同名配置以派生名（`name (n)`）导入。
+    pub renamed: usize,
+}
+
+/// 同名导入冲突策略（Phase 11 候选 A）：跳过保留原配置、覆盖为导入内容
+/// （保留 profile 身份，追加修订）、或以派生名导入。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum ImportConflictStrategy {
+    Skip,
+    Overwrite,
+    Rename,
 }
 
 /// 导入对话框只列出 `.json` 文件；Linux (GTK) 保存对话框不会按过滤器补扩展名，
@@ -113,13 +128,15 @@ fn validate_profiles_for_apply(
     Ok(config.profiles)
 }
 
-/// 将导入的 profile 合并进指定仓库：Provider 与仓库不一致的拒绝导入，同名的
-/// 保留原配置、不覆盖，其余追加。
+/// 将导入的 profile 合并进指定仓库：Provider 与仓库不一致的拒绝导入，同名
+/// 冲突按 `strategy` 处理（跳过保留原配置 / 覆盖为导入修订 / 派生名导入），
+/// 其余追加。
 ///
 /// 纯函数：仅操作传入的 `Repository`，返回各处理方式的计数。
 pub(crate) fn merge_imported_profiles(
     repo: &mut crate::store::Repository,
     profiles: Vec<ConfigProfile>,
+    strategy: ImportConflictStrategy,
 ) -> Result<ImportedConfigSummary, crate::errors::AppError> {
     let mut summary = ImportedConfigSummary::default();
     for profile in profiles {
@@ -129,25 +146,57 @@ pub(crate) fn merge_imported_profiles(
             continue;
         }
         let parameters = serde_json::Value::Object(profile.parameters.into_iter().collect());
-        let imported = repo
-            .publish_config
-            .import_profile(crate::store::ConfigurationImport {
-                name: profile.name,
-                provider_id: profile.provider_id,
-                contract_version: profile.contract_version,
-                provider_version: profile.provider_version,
-                settings_version: profile.settings_version,
-                parameters,
-                // 旧备份没有组合字段：按迁移默认组合物化，与存量修订一致。
-                composition: profile
-                    .composition
-                    .unwrap_or_else(crate::store::PublishComposition::local_default),
-                project_binding: profile.project_binding,
-                profile_group: profile.profile_group,
-                created_at: profile.created_at.to_rfc3339(),
-                is_system_default: profile.is_system_default,
-            })?
-            .is_some();
+        // 旧备份没有组合字段：按迁移默认组合物化，与存量修订一致。
+        let composition = profile
+            .composition
+            .unwrap_or_else(crate::store::PublishComposition::local_default);
+        let mut import = crate::store::ConfigurationImport {
+            name: profile.name.clone(),
+            provider_id: profile.provider_id,
+            contract_version: profile.contract_version,
+            provider_version: profile.provider_version,
+            settings_version: profile.settings_version,
+            parameters,
+            composition,
+            project_binding: profile.project_binding,
+            profile_group: profile.profile_group,
+            created_at: profile.created_at.to_rfc3339(),
+            is_system_default: profile.is_system_default,
+        };
+
+        let name_taken = repo.publish_config.has_active_profile_named(&import.name);
+        match strategy {
+            ImportConflictStrategy::Skip if name_taken => {
+                summary.skipped_existing += 1;
+                continue;
+            }
+            ImportConflictStrategy::Overwrite if name_taken => {
+                // 系统默认配置不可覆盖，回落为跳过。
+                let overwritten = repo
+                    .publish_config
+                    .import_profile_overwriting(import)?
+                    .is_some();
+                if overwritten {
+                    summary.overwritten += 1;
+                } else {
+                    summary.skipped_existing += 1;
+                }
+                continue;
+            }
+            ImportConflictStrategy::Rename if name_taken => {
+                import.name = derive_imported_profile_name(&repo.publish_config, &import.name);
+                let imported = repo
+                    .publish_config
+                    .import_profile(import)?
+                    .is_some();
+                debug_assert!(imported, "派生名不应再冲突");
+                summary.renamed += 1;
+                continue;
+            }
+            _ => {}
+        }
+
+        let imported = repo.publish_config.import_profile(import)?.is_some();
         if imported {
             summary.imported += 1;
         } else {
@@ -157,12 +206,29 @@ pub(crate) fn merge_imported_profiles(
     Ok(summary)
 }
 
+/// 派生不冲突的导入名：`name (2)`、`name (3)` 递增。
+fn derive_imported_profile_name(
+    config: &crate::store::RepoPublishConfig,
+    base_name: &str,
+) -> String {
+    let mut suffix = 2usize;
+    loop {
+        let candidate = format!("{base_name} ({suffix})");
+        if !config.has_active_profile_named(&candidate) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
 /// 应用导入的配置（按仓库隔离）；任一配置写入失败时整体不落盘。
+/// 同名冲突按 `conflict_strategy` 处理。
 #[tauri::command]
 pub async fn apply_imported_config(
     app: tauri::AppHandle,
     repo_id: String,
     profiles: Vec<ConfigProfile>,
+    conflict_strategy: ImportConflictStrategy,
 ) -> Result<ImportedConfigSummary, crate::errors::AppError> {
     let _timer =
         crate::commands::middleware::CommandTimer::new("commands::config::apply_imported_config");
@@ -179,8 +245,8 @@ pub async fn apply_imported_config(
             )
         })?;
 
-    let summary = merge_imported_profiles(repo, profiles)?;
-    if summary.imported == 0 {
+    let summary = merge_imported_profiles(repo, profiles, conflict_strategy)?;
+    if summary.imported == 0 && summary.overwritten == 0 && summary.renamed == 0 {
         return Ok(summary);
     }
 
@@ -298,7 +364,8 @@ mod tests {
             provider_id: Some("tauri".to_string()),
             ..test_repo("repo-2")
         };
-        let summary = merge_imported_profiles(&mut target, profiles).expect("merge backup");
+        let summary = merge_imported_profiles(&mut target, profiles, super::ImportConflictStrategy::Skip)
+            .expect("merge backup");
         assert_eq!(summary.imported, 1);
 
         let revision = target.publish_config.profiles[0]
@@ -369,7 +436,8 @@ mod tests {
             },
         ];
 
-        let summary = merge_imported_profiles(&mut repo, profiles).expect("merge profiles");
+        let summary = merge_imported_profiles(&mut repo, profiles, ImportConflictStrategy::Skip)
+            .expect("merge profiles");
 
         assert_eq!(
             summary,
@@ -445,14 +513,15 @@ mod tests {
             import_profile("new"),
         ];
 
-        let summary = merge_imported_profiles(&mut repo, profiles).expect("merge profiles");
+        let summary = merge_imported_profiles(&mut repo, profiles, ImportConflictStrategy::Skip)
+            .expect("merge profiles");
 
         assert_eq!(
             summary,
             ImportedConfigSummary {
                 imported: 1,
                 skipped_existing: 1,
-                skipped_provider_mismatch: 0,
+                ..ImportedConfigSummary::default()
             },
             "仅新名 profile 应被导入，重名计入跳过"
         );
@@ -494,7 +563,8 @@ mod tests {
         // 两个导入项均与已存在的 "dup" 重名
         let profiles = vec![import_profile("dup"), import_profile("dup")];
 
-        let summary = merge_imported_profiles(&mut repo, profiles).expect("merge profiles");
+        let summary = merge_imported_profiles(&mut repo, profiles, ImportConflictStrategy::Skip)
+            .expect("merge profiles");
 
         assert_eq!(summary.imported, 0, "全部重名应返回 0");
         assert_eq!(summary.skipped_existing, 2);
@@ -521,11 +591,165 @@ mod tests {
                 false,
             ));
 
-        let summary = merge_imported_profiles(&mut repo, Vec::new()).expect("merge profiles");
+        let summary = merge_imported_profiles(&mut repo, Vec::new(), ImportConflictStrategy::Skip)
+            .expect("merge profiles");
 
         assert_eq!(summary, ImportedConfigSummary::default());
         assert_eq!(repo.publish_config.profiles.len(), 1);
         assert_eq!(repo.publish_config.profiles[0].name, "existing");
+    }
+
+    /// 预置同名 profile，返回其 id 与当前修订参数，供三策略测试复用。
+    fn repo_with_existing_profile(
+        name: &str,
+        parameters: serde_json::Value,
+        is_system_default: bool,
+    ) -> (Repository, String) {
+        let mut repo = test_repo("repo-1");
+        repo.publish_config
+            .create_profile(
+                name.to_string(),
+                "dotnet".to_string(),
+                parameters,
+                None,
+                None,
+                "2026-01-01T00:00:00+00:00".to_string(),
+            )
+            .expect("create existing profile");
+        let profile = &repo.publish_config.profiles[0];
+        let profile_id = profile.id.clone();
+        let profile = &mut repo.publish_config.profiles[0];
+        profile.is_system_default = is_system_default;
+        (repo, profile_id)
+    }
+
+    fn conflicting_import(name: &str) -> ConfigProfile {
+        ConfigProfile {
+            name: name.to_string(),
+            provider_id: "dotnet".to_string(),
+            parameters: BTreeMap::from([(
+                "configuration".to_string(),
+                serde_json::Value::String("Imported".to_string()),
+            )]),
+            profile_group: Some("imported-group".to_string()),
+            created_at: chrono::Utc.with_ymd_and_hms(2026, 7, 18, 10, 0, 0).unwrap(),
+            is_system_default: false,
+            ..ConfigProfile::default()
+        }
+    }
+
+    #[test]
+    fn overwrite_strategy_appends_imported_revision_and_keeps_identity() {
+        let (mut repo, profile_id) = repo_with_existing_profile(
+            "dup",
+            serde_json::json!({ "configuration": "Original" }),
+            false,
+        );
+
+        let summary =
+            merge_imported_profiles(&mut repo, vec![conflicting_import("dup")], ImportConflictStrategy::Overwrite)
+                .expect("merge profiles");
+
+        assert_eq!(summary.overwritten, 1);
+        assert_eq!(summary.imported + summary.renamed + summary.skipped_existing, 0);
+        assert_eq!(repo.publish_config.profiles.len(), 1, "覆盖不新建 profile");
+
+        let profile = &repo.publish_config.profiles[0];
+        assert_eq!(profile.id, profile_id, "覆盖保留 profile 身份");
+        assert_eq!(profile.revisions.len(), 2, "覆盖追加一个 imported 修订");
+        let revision = profile.current_revision().expect("current revision");
+        assert_eq!(
+            revision.parameters.get("configuration"),
+            Some(&serde_json::Value::String("Imported".to_string())),
+            "当前修订应为导入参数"
+        );
+        assert_eq!(profile.profile_group.as_deref(), Some("imported-group"));
+    }
+
+    #[test]
+    fn overwrite_strategy_falls_back_to_skip_for_system_default() {
+        let (mut repo, _) = repo_with_existing_profile(
+            "system",
+            serde_json::json!({ "configuration": "Original" }),
+            true,
+        );
+
+        let summary = merge_imported_profiles(
+            &mut repo,
+            vec![conflicting_import("system")],
+            ImportConflictStrategy::Overwrite,
+        )
+        .expect("merge profiles");
+
+        assert_eq!(summary.skipped_existing, 1);
+        assert_eq!(summary.overwritten, 0);
+        let revision = repo.publish_config.profiles[0]
+            .current_revision()
+            .expect("current revision");
+        assert_eq!(
+            revision.parameters.get("configuration"),
+            Some(&serde_json::Value::String("Original".to_string())),
+            "系统默认配置保持原值"
+        );
+    }
+
+    #[test]
+    fn rename_strategy_imports_under_derived_suffix() {
+        let (mut repo, _) = repo_with_existing_profile(
+            "dup",
+            serde_json::json!({ "configuration": "Original" }),
+            false,
+        );
+        repo.publish_config
+            .create_profile(
+                "dup (2)".to_string(),
+                "dotnet".to_string(),
+                serde_json::Value::Object(serde_json::Map::new()),
+                None,
+                None,
+                "2026-01-01T00:00:00+00:00".to_string(),
+            )
+            .expect("create taken suffix");
+
+        let summary = merge_imported_profiles(
+            &mut repo,
+            vec![conflicting_import("dup"), conflicting_import("dup")],
+            ImportConflictStrategy::Rename,
+        )
+        .expect("merge profiles");
+
+        assert_eq!(summary.renamed, 2);
+        assert_eq!(repo.publish_config.profiles.len(), 4, "两条派生名均导入");
+        let names = repo
+            .publish_config
+            .profiles
+            .iter()
+            .map(|profile| profile.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["dup", "dup (2)", "dup (3)", "dup (4)"]);
+        // 原配置不被改写。
+        let original = repo.publish_config.profiles[0]
+            .current_revision()
+            .expect("original revision");
+        assert_eq!(
+            original.parameters.get("configuration"),
+            Some(&serde_json::Value::String("Original".to_string()))
+        );
+    }
+
+    #[test]
+    fn rename_strategy_keeps_new_names_untouched() {
+        let mut repo = test_repo("repo-1");
+        let summary = merge_imported_profiles(
+            &mut repo,
+            vec![import_profile("fresh")],
+            ImportConflictStrategy::Rename,
+        )
+        .expect("merge profiles");
+
+        assert_eq!(summary.imported, 1);
+        assert_eq!(summary.renamed, 0);
+        assert_eq!(repo.publish_config.profiles[0].name, "fresh");
     }
 
     #[test]
@@ -550,14 +774,15 @@ mod tests {
             },
         ];
 
-        let summary = merge_imported_profiles(&mut repo, profiles).expect("merge profiles");
+        let summary = merge_imported_profiles(&mut repo, profiles, ImportConflictStrategy::Skip)
+            .expect("merge profiles");
 
         assert_eq!(
             summary,
             ImportedConfigSummary {
                 imported: 1,
-                skipped_existing: 0,
                 skipped_provider_mismatch: 1,
+                ..ImportedConfigSummary::default()
             }
         );
         let names = repo
@@ -631,7 +856,8 @@ mod tests {
             ..ConfigProfile::default()
         }];
 
-        let summary = merge_imported_profiles(&mut repo, profiles).expect("merge profiles");
+        let summary = merge_imported_profiles(&mut repo, profiles, ImportConflictStrategy::Skip)
+            .expect("merge profiles");
 
         assert_eq!(summary.imported, 1);
         let stored = &repo.publish_config.profiles[0];

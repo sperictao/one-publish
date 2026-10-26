@@ -646,15 +646,16 @@ describe("useProfiles", () => {
 
     let summary: unknown;
     await act(async () => {
-      summary =
-        await result.current.profileManagement.applyImportedProfiles(
-          importedProfiles
-        );
+      summary = await result.current.profileManagement.applyImportedProfiles(
+        importedProfiles,
+        "skip"
+      );
     });
 
     expect(mocks.applyImportedConfig).toHaveBeenCalledWith(
       "repo-1",
-      importedProfiles
+      importedProfiles,
+      "skip"
     );
     // 后端计数原样返回给对话框展示，不再被丢弃。
     expect(summary).toEqual({

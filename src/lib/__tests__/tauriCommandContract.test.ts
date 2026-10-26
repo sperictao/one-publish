@@ -248,6 +248,11 @@ describe("Tauri IPC contract (derived from Rust command signatures)", () => {
     expect(rustCommands.get("apply_imported_config")).toEqual([
       { key: "repoId", required: true, rustType: "String" },
       { key: "profiles", required: true, rustType: "Vec<ConfigProfile>" },
+      {
+        key: "conflictStrategy",
+        required: true,
+        rustType: "ImportConflictStrategy",
+      },
     ]);
   });
 

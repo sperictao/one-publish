@@ -117,6 +117,8 @@ describe("ConfigManagementContent", () => {
       imported: 2,
       skippedExisting: 0,
       skippedProviderMismatch: 0,
+      overwritten: 0,
+      renamed: 0,
     });
   });
 
@@ -336,7 +338,8 @@ describe("ConfigManagementContent", () => {
 
     await waitFor(() => {
       expect(mocks.applyImportedProfiles).toHaveBeenCalledWith(
-        importedProfiles
+        importedProfiles,
+        "skip"
       );
     });
     expect(mocks.toastSuccess).toHaveBeenCalledWith("配置已导入", {
@@ -362,6 +365,8 @@ describe("ConfigManagementContent", () => {
       imported: 1,
       skippedExisting: 0,
       skippedProviderMismatch: 1,
+      overwritten: 0,
+      renamed: 0,
     });
     renderConfigManagementContent({ repositoryProviderId: "cargo" });
     const profiles = [
@@ -384,7 +389,10 @@ describe("ConfigManagementContent", () => {
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(mocks.applyImportedProfiles).toHaveBeenCalledWith(profiles);
+      expect(mocks.applyImportedProfiles).toHaveBeenCalledWith(
+        profiles,
+        "skip"
+      );
     });
     expect(mocks.toastSuccess).toHaveBeenCalledWith("配置已导入", {
       description: "已导入：1 · Provider 不一致未导入：1",
@@ -420,6 +428,8 @@ describe("ConfigManagementContent", () => {
       imported: 1,
       skippedExisting: 1,
       skippedProviderMismatch: 0,
+      overwritten: 0,
+      renamed: 0,
     });
     renderConfigManagementContent({ profiles: [savedProfile("Release")] });
 
