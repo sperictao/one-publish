@@ -15,6 +15,20 @@ export default defineConfig({
       "test-results/**",
       ".claude/**",
     ],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "text-summary", "html"],
+      reportsDirectory: "./coverage",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/generated/**",
+        "src/**/*.d.ts",
+        "src/test/**",
+        "**/__tests__/**",
+        "**/*.test.{ts,tsx}",
+        "src/i18n/**",
+      ],
+    },
   },
   resolve: {
     alias: {

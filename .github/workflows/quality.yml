@@ -22,7 +22,14 @@ jobs:
       - run: pnpm exec tsc --noEmit
       - run: pnpm lint
       - run: pnpm format:check
-      - run: pnpm test
+      - run: pnpm test:coverage
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: vitest-coverage
+          path: coverage/
+          retention-days: 14
       - run: pnpm check:i18n
       - run: pnpm check:design
 
