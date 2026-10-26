@@ -71,6 +71,7 @@ export function PublishLogView({
   useEffect(() => {
     if (active) {
       followRef.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowJump(false);
       scrollToBottom();
     }

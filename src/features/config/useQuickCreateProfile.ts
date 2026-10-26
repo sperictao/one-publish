@@ -147,10 +147,24 @@ export function useQuickCreateProfile({
     };
   }, [selectedRepoId, activeProviderId, projectBinding]);
 
-  useEffect(() => {
+  const [prevQuickCreateKey, setPrevQuickCreateKey] = useState({
+    selectedRepoId,
+    activeProviderId,
+    projectBinding,
+  });
+  if (
+    prevQuickCreateKey.selectedRepoId !== selectedRepoId ||
+    prevQuickCreateKey.activeProviderId !== activeProviderId ||
+    prevQuickCreateKey.projectBinding !== projectBinding
+  ) {
+    setPrevQuickCreateKey({
+      selectedRepoId,
+      activeProviderId,
+      projectBinding,
+    });
     setTemplateLoading(false);
     setQuickCreateProfileOpen(false);
-  }, [selectedRepoId, activeProviderId, projectBinding]);
+  }
 
   const resetQuickCreateProfileState = useCallback(() => {
     invalidateTemplateRequest();
