@@ -7450,6 +7450,10 @@ mod tests {
                 serde_json::Value::String("very-secret".to_string()),
             ),
             (
+                "outputDir".to_string(),
+                serde_json::Value::String("/tmp/private/out".to_string()),
+            ),
+            (
                 "error".to_string(),
                 serde_json::Value::String(
                     "remote failed ApiToken=very-secret at /tmp/private".to_string(),
@@ -7573,12 +7577,19 @@ mod tests {
                 crate::security::REDACTED_VALUE.to_string()
             ))
         );
-        assert!(!sanitized
+        let sanitized_error = sanitized
             .payload
             .get("error")
             .and_then(serde_json::Value::as_str)
-            .expect("sanitized error")
-            .contains("very-secret"));
+            .expect("sanitized error");
+        assert!(!sanitized_error.contains("very-secret"));
+        // Journal 是本地证据：密钥照遮，但路径原值必须保留——回读的
+        // resume/synchronize 错误要靠真实路径诊断（#148 方案 A）。
+        assert!(sanitized_error.contains("/tmp/private"), "{sanitized_error}");
+        assert_eq!(
+            sanitized.payload.get("outputDir"),
+            Some(&serde_json::Value::String("/tmp/private/out".to_string()))
+        );
 
         // 同一 Receipt revision 的冲突引用必须在写盘前被拒绝。
         let receipt = reloaded.view.receipts.first().expect("published receipt");

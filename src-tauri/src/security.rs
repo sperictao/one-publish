@@ -221,7 +221,7 @@ pub(crate) fn sanitize_secrets_in_text(text: &str) -> String {
     output
 }
 
-fn sanitize_json_value(value: &mut Value, key_hint: Option<&str>) {
+fn sanitize_json_value(value: &mut Value, key_hint: Option<&str>, mask_paths: bool) {
     match value {
         Value::String(text) => {
             if let Some(key) = key_hint {
@@ -230,19 +230,23 @@ fn sanitize_json_value(value: &mut Value, key_hint: Option<&str>) {
                     return;
                 }
 
-                if is_path_like_key(key) && looks_like_absolute_path(text) {
+                if mask_paths && is_path_like_key(key) && looks_like_absolute_path(text) {
                     *text = LOCAL_PATH_VALUE.to_string();
                     return;
                 }
 
                 if is_freeform_text_key(key) {
-                    *text = sanitize_freeform_text(text);
+                    *text = if mask_paths {
+                        sanitize_freeform_text(text)
+                    } else {
+                        sanitize_secrets_in_text(text)
+                    };
                 }
             }
         }
         Value::Array(items) => {
             for item in items {
-                sanitize_json_value(item, key_hint);
+                sanitize_json_value(item, key_hint, mask_paths);
             }
         }
         Value::Object(map) => {
@@ -251,7 +255,7 @@ fn sanitize_json_value(value: &mut Value, key_hint: Option<&str>) {
                     *item = Value::String(REDACTED_VALUE.to_string());
                     continue;
                 }
-                sanitize_json_value(item, Some(key));
+                sanitize_json_value(item, Some(key), mask_paths);
             }
         }
         Value::Null | Value::Bool(_) | Value::Number(_) => {}
@@ -259,17 +263,28 @@ fn sanitize_json_value(value: &mut Value, key_hint: Option<&str>) {
 }
 
 pub(crate) fn sanitize_export_value(value: &mut Value) {
-    sanitize_json_value(value, None);
+    sanitize_json_value(value, None, true);
 }
 
-pub(crate) fn sanitize_json_map(map: &mut BTreeMap<String, Value>) {
+fn sanitize_json_map_with(map: &mut BTreeMap<String, Value>, mask_paths: bool) {
     for (key, value) in map {
         if is_sensitive_key(key) {
             *value = Value::String(REDACTED_VALUE.to_string());
             continue;
         }
-        sanitize_json_value(value, Some(key));
+        sanitize_json_value(value, Some(key), mask_paths);
     }
+}
+
+pub(crate) fn sanitize_json_map(map: &mut BTreeMap<String, Value>) {
+    sanitize_json_map_with(map, true);
+}
+
+/// 本地证据持久化（journal）专用：密钥照遮、路径原样保留——续跑/同步回读的
+/// 错误诊断依赖真实路径。路径遮蔽只发生在导出边界 `sanitize_export_value`，
+/// 与执行历史存储的口径一致（参见 `sanitize_secrets_in_text`）。
+pub(crate) fn sanitize_evidence_json_map(map: &mut BTreeMap<String, Value>) {
+    sanitize_json_map_with(map, false);
 }
 
 #[cfg(unix)]
@@ -360,8 +375,12 @@ pub(crate) fn write_private_binary_file(path: &Path, bytes: &[u8]) -> io::Result
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_export_value, sanitize_freeform_text, sanitize_secrets_in_text};
+    use super::{
+        sanitize_evidence_json_map, sanitize_export_value, sanitize_freeform_text,
+        sanitize_secrets_in_text,
+    };
     use serde_json::json;
+    use std::collections::BTreeMap;
 
     #[test]
     fn secrets_in_text_redacts_assignments_but_preserves_paths() {
@@ -432,5 +451,35 @@ mod tests {
             "I/O operation inspect provider output <local-path> failed"
         );
         assert_eq!(payload["warnings"][0], "output written to <local-path>");
+    }
+
+    #[test]
+    fn evidence_map_keeps_paths_and_redacts_secrets() {
+        // journal 持久化口径：路径原值保留（续跑/同步回读要靠它定位现场），
+        // 密钥类键与自由文本中的 key=value 密钥赋值仍遮蔽。
+        let mut payload = BTreeMap::from([
+            (
+                "error".to_string(),
+                json!("publish /Users/demo/App.csproj failed -p:ApiToken=hunter2"),
+            ),
+            ("outputDir".to_string(), json!("/Users/demo/bin/publish")),
+            ("apiToken".to_string(), json!("very-secret")),
+            (
+                "nested".to_string(),
+                json!({ "clientSecret": "s3cr3t", "log": "wrote /Users/demo/out" }),
+            ),
+        ]);
+
+        sanitize_evidence_json_map(&mut payload);
+
+        assert_eq!(payload["apiToken"], "<redacted>");
+        assert_eq!(payload["nested"]["clientSecret"], "<redacted>");
+        assert_eq!(payload["outputDir"], "/Users/demo/bin/publish");
+        let error = payload["error"].as_str().expect("error text");
+        assert!(error.contains("/Users/demo/App.csproj"), "{error}");
+        assert!(error.contains("-p:ApiToken=<redacted>"), "{error}");
+        assert!(!error.contains("hunter2"), "{error}");
+        assert!(!error.contains("<local-path>"), "{error}");
+        assert_eq!(payload["nested"]["log"], "wrote /Users/demo/out");
     }
 }
