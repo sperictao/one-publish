@@ -99,6 +99,7 @@ export function useTrayRecentPublish(params: {
     options?: RunPublishOptions
   ) => Promise<void>;
 }) {
+  const { appT, runPublishSpec } = params;
   const { translations } = useI18n();
   // 错误文案只在通知时读取最新翻译；不进入 effect 依赖，避免翻译加载完成时重新订阅托盘事件。
   const translationsRef = useRef(translations);
@@ -122,12 +123,12 @@ export function useTrayRecentPublish(params: {
             payload: event.payload,
           });
           if (!disposed) {
-            await params.runPublishSpec(resolved.source, resolved.options);
+            await runPublishSpec(resolved.source, resolved.options);
           }
         } catch (error) {
           await setTrayPublishStatus("failure").catch(() => {});
           const notified = await showSystemNotification({
-            title: params.appT.trayPublishFailed || "状态栏发布启动失败",
+            title: appT.trayPublishFailed || "状态栏发布启动失败",
             body: localizeInvokeError(error, translationsRef.current),
           });
           if (!notified) {
@@ -147,5 +148,5 @@ export function useTrayRecentPublish(params: {
       disposed = true;
       unlisten?.();
     };
-  }, [params.appT, params.runPublishSpec]);
+  }, [appT, runPublishSpec]);
 }

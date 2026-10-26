@@ -59,31 +59,27 @@ export function useShellBoot(params: UseShellBootParams) {
   } = useAppUpdater();
 
   // Language preference sync
+  const { preferenceLanguage, setPreferenceLanguage, isStateLoading } = params;
   const normalizedPreferenceLanguage: Language =
-    params.preferenceLanguage === "en" ? "en" : "zh";
+    preferenceLanguage === "en" ? "en" : "zh";
 
   const handleLanguageChange = useCallback(
     async (nextLanguage: Language) => {
       if (nextLanguage === language) {
         return;
       }
-      params.setPreferenceLanguage(nextLanguage);
+      setPreferenceLanguage(nextLanguage);
       await setI18nLanguage(nextLanguage);
     },
-    [language, params.setPreferenceLanguage, setI18nLanguage]
+    [language, setPreferenceLanguage, setI18nLanguage]
   );
 
   useEffect(() => {
-    if (params.isStateLoading || language === normalizedPreferenceLanguage) {
+    if (isStateLoading || language === normalizedPreferenceLanguage) {
       return;
     }
     void setI18nLanguage(normalizedPreferenceLanguage);
-  }, [
-    params.isStateLoading,
-    language,
-    normalizedPreferenceLanguage,
-    setI18nLanguage,
-  ]);
+  }, [isStateLoading, language, normalizedPreferenceLanguage, setI18nLanguage]);
 
   // Startup recovery notice
   const shownNoticeRef = useRef<string | null>(null);

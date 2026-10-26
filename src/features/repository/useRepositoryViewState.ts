@@ -53,7 +53,9 @@ export function useRepositoryViewState(params: {
   );
 
   const repositoriesRef = useRef(params.repositories);
-  repositoriesRef.current = params.repositories;
+  useEffect(() => {
+    repositoriesRef.current = params.repositories;
+  });
 
   // 仅当仓库集合（id + 路径）变化时重新扫描实际分支
   const actualBranchScanKey = useMemo(
@@ -133,7 +135,9 @@ export function useRepositoryViewState(params: {
       .join("\u0001");
   }, [branchConnectivityTargets]);
   const branchConnectivityTargetsRef = useRef(branchConnectivityTargets);
-  branchConnectivityTargetsRef.current = branchConnectivityTargets;
+  useEffect(() => {
+    branchConnectivityTargetsRef.current = branchConnectivityTargets;
+  });
   const cachedBranchCacheKeyByRepoIdRef = useRef<Record<string, string>>({});
   const cachedBranchConnectivityByRepoIdRef = useRef<Record<string, boolean>>(
     {}
@@ -145,7 +149,7 @@ export function useRepositoryViewState(params: {
   ) {
     prevBranchConnectivityCacheKeyRef.current = branchConnectivityCacheKey;
 
-    const connectivityTargets = branchConnectivityTargetsRef.current;
+    const connectivityTargets = branchConnectivityTargets;
     const cachedCacheKeys = cachedBranchCacheKeyByRepoIdRef.current;
     const cachedConnectivity = cachedBranchConnectivityByRepoIdRef.current;
 

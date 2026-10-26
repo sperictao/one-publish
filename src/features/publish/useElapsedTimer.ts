@@ -8,6 +8,15 @@ import { useEffect, useRef, useState } from "react";
 export function useElapsedTimer(active: boolean): number {
   const [elapsedMs, setElapsedMs] = useState(0);
   const startRef = useRef<number | null>(null);
+  const [wasActive, setWasActive] = useState(active);
+
+  // active 翻转为真时在渲染期同步归零，避免 effect 内同步 setState 的级联渲染。
+  if (wasActive !== active) {
+    setWasActive(active);
+    if (active) {
+      setElapsedMs(0);
+    }
+  }
 
   useEffect(() => {
     if (!active) {
@@ -16,7 +25,6 @@ export function useElapsedTimer(active: boolean): number {
     }
 
     startRef.current = performance.now();
-    setElapsedMs(0);
 
     const tick = () => {
       if (startRef.current != null) {

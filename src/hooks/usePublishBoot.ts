@@ -23,7 +23,10 @@ import {
 } from "@/lib/store/api";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import type { CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
-import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
+import type {
+  ProviderPublishSpec,
+  PublishResult,
+} from "@/features/publish/publishRuntime";
 import type { ParameterValue, ParameterSchema } from "@/types/parameters";
 import type { ResourceState } from "@/features/provider/useProviderRuntime";
 import type {
@@ -119,7 +122,7 @@ interface UsePublishBootParams {
   // Lifted publish store state
   isPublishing: boolean;
   isCancellingPublish: boolean;
-  publishResult: any;
+  publishResult: PublishResult | null;
   releaseChecklistOpen: boolean;
   setReleaseChecklistOpen: (open: boolean) => void;
   artifactActionState: ArtifactActionState;
@@ -375,14 +378,15 @@ export function usePublishBoot(params: UsePublishBootParams) {
     activeProviderUsesProjectFile &&
     (params.isProjectInfoRefreshing || isResolvingSelectedProjectProfile);
 
+  const { publishResult, setArtifactActionState } = params;
   const handleArtifactStateChange = useCallback(
     (state: ArtifactActionState) => {
       // 异步打包或签名只能更新发起操作的那次发布结果。
-      if (usePublishStore.getState().publishResult === params.publishResult) {
-        params.setArtifactActionState(state);
+      if (usePublishStore.getState().publishResult === publishResult) {
+        setArtifactActionState(state);
       }
     },
-    [params.publishResult, params.setArtifactActionState]
+    [publishResult, setArtifactActionState]
   );
 
   // Memoized publish run card props

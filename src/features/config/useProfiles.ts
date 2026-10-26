@@ -185,6 +185,7 @@ export function useProfiles({
     profileT,
   });
 
+  const { deleteProfileById } = crud;
   const handleDeleteProfileFromPanel = useCallback(
     async (profileId: string) => {
       if (!selectedRepoId) {
@@ -192,12 +193,12 @@ export function useProfiles({
       }
 
       try {
-        await crud.deleteProfileById(selectedRepoId, profileId);
+        await deleteProfileById(selectedRepoId, profileId);
       } catch (err) {
         console.error("删除配置文件失败:", err);
       }
     },
-    [crud.deleteProfileById, selectedRepoId]
+    [deleteProfileById, selectedRepoId]
   );
 
   const profileManagement = useMemo<ProfileManagementActions>(

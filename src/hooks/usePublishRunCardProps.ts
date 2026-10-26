@@ -8,6 +8,7 @@ import type {
 } from "@/generated/tauri-contracts";
 import {
   canRequestRuntimeOutputAccess,
+  type PublishResult,
   type ReadyPublishRuntime,
 } from "@/features/publish/publishRuntime";
 type TranslationMap = Record<string, string | undefined>;
@@ -15,7 +16,7 @@ type TranslationMap = Record<string, string | undefined>;
 interface UsePublishRunCardPropsParams {
   outputLog: string;
   getOutputLogSnapshot: () => string;
-  publishResult: any;
+  publishResult: PublishResult | null;
   appT: TranslationMap;
   publishT: TranslationMap;
   configT: TranslationMap;

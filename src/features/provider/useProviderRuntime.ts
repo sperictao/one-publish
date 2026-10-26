@@ -109,7 +109,10 @@ export function useProviderRuntime() {
     void loadProviderSchema(activeProviderId);
   }, [activeProviderId, loadProviderSchema, providerSchemaStates]);
 
-  const availableProviders = providerListState.data ?? [];
+  const availableProviders = useMemo(
+    () => providerListState.data ?? [],
+    [providerListState.data]
+  );
   const activeProvider = useMemo(
     () =>
       availableProviders.find((provider) => provider.id === activeProviderId) ||

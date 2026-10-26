@@ -25,11 +25,16 @@ export function useProfileListState(params: {
   const selectedRepoIdRef = useLazyRef<string | null>(() => selectedRepoId);
   const profiles = visibleProfilesSnapshot.profiles;
   const profilesRevision = visibleProfilesSnapshot.revision;
-  selectedRepoIdRef.current = selectedRepoId;
+  useEffect(() => {
+    selectedRepoIdRef.current = selectedRepoId;
+  });
 
-  const isCurrentRepo = useCallback((repoId: string) => {
-    return selectedRepoIdRef.current === repoId;
-  }, []);
+  const isCurrentRepo = useCallback(
+    (repoId: string) => {
+      return selectedRepoIdRef.current === repoId;
+    },
+    [selectedRepoIdRef]
+  );
 
   const commitProfilesSnapshot = useCallback(
     (repoId: string, nextProfiles: ConfigProfile[]) => {
@@ -48,7 +53,7 @@ export function useProfileListState(params: {
 
       return nextSnapshot;
     },
-    []
+    [profilesCacheRef, selectedRepoIdRef]
   );
 
   const loadProfiles = useCallback(async () => {
@@ -91,7 +96,13 @@ export function useProfileListState(params: {
       console.error("加载配置文件列表失败:", err);
       return [];
     }
-  }, [commitProfilesSnapshot, selectedRepoId]);
+  }, [
+    commitProfilesSnapshot,
+    loadProfilesRequestIdRef,
+    profilesCacheRef,
+    selectedRepoId,
+    selectedRepoIdRef,
+  ]);
 
   const refreshProfilesAfterMutation = useCallback(
     async (repoId: string, preFetchedProfiles?: ConfigProfile[]) => {
@@ -108,7 +119,7 @@ export function useProfileListState(params: {
       commitProfilesSnapshot(repoId, data);
       return data;
     },
-    [commitProfilesSnapshot, loadProfiles]
+    [commitProfilesSnapshot, loadProfiles, selectedRepoIdRef]
   );
 
   useEffect(() => {
@@ -124,7 +135,7 @@ export function useProfileListState(params: {
     setVisibleProfilesSnapshot(cachedSnapshot);
     setIsProfilesRefreshing(Boolean(selectedRepoId));
     onRepositoryScopeChange();
-  }, [onRepositoryScopeChange, selectedRepoId]);
+  }, [onRepositoryScopeChange, profilesCacheRef, selectedRepoId]);
 
   return {
     profiles,
