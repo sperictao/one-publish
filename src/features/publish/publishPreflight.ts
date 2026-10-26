@@ -33,6 +33,7 @@ export interface PublishPreparationOptions {
 
 export interface AbortPublishPreparationOptions extends PublishPreparationOptions {
   runRevision: number;
+  isCurrentPresentationRevision: (runRevision: number) => boolean;
   level: "error" | "warning";
   title: string;
   description: string;
@@ -56,7 +57,6 @@ export interface PublishPreflightDeps {
   ) => Promise<void>;
   restoreMainWindowIfNeeded: (shouldRestore: boolean) => Promise<void>;
   resetLogCapture: () => void;
-  isCurrentPresentationRevision: (runRevision: number) => boolean;
   openEnvironmentDialog: (
     initialCheck?: EnvironmentCheckSnapshot | null,
     providerIds?: string[]
@@ -74,13 +74,13 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
     syncTrayPublishStatus,
     restoreMainWindowIfNeeded,
     resetLogCapture,
-    isCurrentPresentationRevision,
     openEnvironmentDialog,
     setEnvironmentLastCheck,
   } = deps;
 
   async function abortPublishPreparation({
     runRevision,
+    isCurrentPresentationRevision,
     feedbackMode,
     restoreWindowOnFailure,
     trayStatusEffect,
@@ -155,7 +155,10 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
 
   async function runPublishPreflight(
     spec: ProviderPublishSpec,
-    options: PublishPreparationOptions & { runRevision: number }
+    options: PublishPreparationOptions & {
+      runRevision: number;
+      isCurrentPresentationRevision: (runRevision: number) => boolean;
+    }
   ): Promise<boolean> {
     if (options.isCancelled()) {
       return false;

@@ -203,6 +203,7 @@ export interface UsePublishValidateResult {
     spec: ProviderPublishSpec,
     options: {
       runRevision: number;
+      isCurrentPresentationRevision: (runRevision: number) => boolean;
       feedbackMode: "toast" | "system";
       restoreWindowOnFailure: boolean;
       trayStatusEffect: boolean;
@@ -244,7 +245,6 @@ export function usePublishValidate({
     translationsRef.current = translations;
   }, [translations]);
   const getTranslations = useCallback(() => translationsRef.current, []);
-  const presentationRevisionRef = useRef(0);
   const [preparedRuntimeState, setPreparedRuntimeState] = useState<{
     key: string;
     value: PreparedPublishRuntime;
@@ -460,10 +460,6 @@ export function usePublishValidate({
     selectedRepoId,
   ]);
 
-  const isCurrentPresentationRevision = useCallback((runRevision: number) => {
-    return presentationRevisionRef.current === runRevision;
-  }, []);
-
   const { runPublishPreflight, requestRuntimeOutputAccess } = useMemo(
     () =>
       createPublishPreflightPipeline({
@@ -473,7 +469,6 @@ export function usePublishValidate({
         syncTrayPublishStatus,
         restoreMainWindowIfNeeded,
         resetLogCapture,
-        isCurrentPresentationRevision,
         openEnvironmentDialog,
         setEnvironmentLastCheck,
       }),
@@ -484,7 +479,6 @@ export function usePublishValidate({
       syncTrayPublishStatus,
       restoreMainWindowIfNeeded,
       resetLogCapture,
-      isCurrentPresentationRevision,
       openEnvironmentDialog,
       setEnvironmentLastCheck,
     ]
