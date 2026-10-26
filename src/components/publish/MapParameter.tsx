@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useId, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -6,6 +6,9 @@ import { X, Plus } from "lucide-react";
 import { HelpTip } from "@/components/ui/help-tip";
 import { useI18n } from "@/hooks/useI18n";
 import { ParameterDefinition, ParameterValue } from "@/types/parameters";
+
+let nextMapEntryId = 0;
+const nextMapEntryKey = () => `map-entry-${++nextMapEntryId}`;
 
 interface MapParameterProps {
   definition: ParameterDefinition;
@@ -28,19 +31,18 @@ export function MapParameter({
   const { t } = useI18n();
 
   // Stable ids per map slot so key renames do not steal focus.
-  const nextIdRef = useRef(0);
-  const idPoolRef = useRef<string[]>([]);
-  // Eagerly fill the pool before the mapping render so every row has a key.
-  if (entries.length > idPoolRef.current.length) {
-    while (entries.length > idPoolRef.current.length) {
-      idPoolRef.current.push(`map-entry-${++nextIdRef.current}`);
-    }
+  const [idPool, setIdPool] = useState<string[]>(() =>
+    entries.map(nextMapEntryKey)
+  );
+  // Grow/shrink the pool with the entries so every row has a key before render.
+  if (idPool.length < entries.length) {
+    setIdPool((prev) => [
+      ...prev,
+      ...Array.from({ length: entries.length - prev.length }, nextMapEntryKey),
+    ]);
+  } else if (idPool.length > entries.length) {
+    setIdPool((prev) => prev.slice(0, entries.length));
   }
-  useEffect(() => {
-    if (entries.length < idPoolRef.current.length) {
-      idPoolRef.current = idPoolRef.current.slice(0, entries.length);
-    }
-  }, [entries.length]);
 
   const addEntry = () => {
     let i = entries.length;
@@ -60,10 +62,10 @@ export function MapParameter({
   const updateKey = (oldKey: string, newKey: string) => {
     if (newKey === oldKey) return;
 
-    const entry = value[oldKey];
-    const newValue = { ...value };
-    delete newValue[oldKey];
-    newValue[newKey] = entry;
+    // 保序重建：重命名留在原槽位，配合位置 key 不丢焦点。
+    const newValue = Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k === oldKey ? newKey : k, v])
+    );
     onChange(newValue);
   };
 
@@ -87,10 +89,7 @@ export function MapParameter({
       </div>
       <fieldset className="space-y-2" aria-labelledby={fieldLabelId}>
         {entries.map(([key, val], index) => (
-          <div
-            key={idPoolRef.current[index]}
-            className="flex items-center gap-x-2"
-          >
+          <div key={idPool[index]} className="flex items-center gap-x-2">
             <Input
               type="text"
               value={key}

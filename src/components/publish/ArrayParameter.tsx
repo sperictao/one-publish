@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useId, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -6,6 +6,9 @@ import { X, Plus } from "lucide-react";
 import { HelpTip } from "@/components/ui/help-tip";
 import { useI18n } from "@/hooks/useI18n";
 import { ParameterDefinition, ParameterValue } from "@/types/parameters";
+
+let nextArrayItemId = 0;
+const nextArrayItemKey = () => `array-item-${++nextArrayItemId}`;
 
 interface ArrayParameterProps {
   definition: ParameterDefinition;
@@ -27,19 +30,18 @@ export function ArrayParameter({
   const { t } = useI18n();
 
   // Stable ids per array slot so add/remove/rename does not steal focus.
-  const nextIdRef = useRef(0);
-  const idPoolRef = useRef<string[]>([]);
-  // Eagerly fill the pool before the mapping render so every row has a key.
-  if (value.length > idPoolRef.current.length) {
-    while (value.length > idPoolRef.current.length) {
-      idPoolRef.current.push(`array-item-${++nextIdRef.current}`);
-    }
+  const [idPool, setIdPool] = useState<string[]>(() =>
+    value.map(nextArrayItemKey)
+  );
+  // Grow/shrink the pool with the value so every row has a key before render.
+  if (idPool.length < value.length) {
+    setIdPool((prev) => [
+      ...prev,
+      ...Array.from({ length: value.length - prev.length }, nextArrayItemKey),
+    ]);
+  } else if (idPool.length > value.length) {
+    setIdPool((prev) => prev.slice(0, value.length));
   }
-  useEffect(() => {
-    if (value.length < idPoolRef.current.length) {
-      idPoolRef.current = idPoolRef.current.slice(0, value.length);
-    }
-  }, [value.length]);
 
   const addItem = () => {
     onChange([...value, ""]);
@@ -71,10 +73,7 @@ export function ArrayParameter({
       </div>
       <fieldset className="space-y-2" aria-labelledby={fieldLabelId}>
         {value.map((item, index) => (
-          <div
-            key={idPoolRef.current[index]}
-            className="flex items-center gap-x-2"
-          >
+          <div key={idPool[index]} className="flex items-center gap-x-2">
             <Input
               type="text"
               value={String(item)}
