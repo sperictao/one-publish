@@ -555,6 +555,7 @@
     "repositoryAlreadyExistsNamed": "This directory is already the repository \"{{name}}\"",
     "repositoryPathRequired": "Project root path is required",
     "providerDetected": "Provider detected",
+    "alsoDetectedProviders": "also detected {{providers}}",
     "detectProviderFailed": "Failed to detect provider",
     "providerDetectPathNotFound": "Project root path not found",
     "providerDetectPathNotFoundDesc": "Ensure the project root path exists and is accessible.",

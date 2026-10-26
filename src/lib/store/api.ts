@@ -38,6 +38,7 @@ import type {
   Repository as TauriRepository,
   RepositoryBranchConnectivityResult,
   RepositoryBranchScanResult,
+  RepositoryProviderDetection,
   ShortcutHelp,
   TauriReleaseConfig,
   UpdateInfo as TauriUpdateInfo,
@@ -202,8 +203,13 @@ export async function readProjectPublishProfile(
   );
 }
 
-export async function detectRepositoryProvider(path: string): Promise<string> {
-  return await invoke<string>("detect_repository_provider", { path });
+export async function detectRepositoryProvider(
+  path: string
+): Promise<RepositoryProviderDetection> {
+  return await invoke<RepositoryProviderDetection>(
+    "detect_repository_provider",
+    { path }
+  );
 }
 
 export async function scanProjectFiles(path: string): Promise<string[]> {

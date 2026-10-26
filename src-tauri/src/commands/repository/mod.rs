@@ -59,6 +59,25 @@ pub struct ProjectScanCandidates {
     pub recommended_project_file: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RepositoryProviderCandidate {
+    pub provider_id: String,
+    /// 命中的仓库标记（人类可读，如 `*.csproj`、`tauri.conf.json`），按声明顺序保留。
+    pub matched_markers: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RepositoryProviderDetection {
+    /// 默认绑定的 Provider：注册表顺序中的首个命中（与此前的单返回值一致）。
+    pub provider_id: String,
+    /// 全部命中的 Provider 候选（注册表顺序），各带检测依据（ADR-0005）。
+    pub candidates: Vec<RepositoryProviderCandidate>,
+}
+
 #[tauri::command]
 pub async fn scan_project(
     start_path: Option<String>,
@@ -515,32 +534,36 @@ EndProject
         fs::write(temp_dir.path().join("build.gradle.kts"), "plugins {}")
             .expect("write gradle build file");
         assert_eq!(
-            detect_provider_from_path(temp_dir.path()),
-            Some("java".to_string())
+            detect_provider_candidates_from_path(temp_dir.path())
+                .first()
+                .map(|candidate| candidate.provider_id.as_str()),
+            Some("java")
         );
     }
 
     #[test]
-    fn detect_provider_from_path_rejects_maven_only_repository() {
+    fn detect_provider_candidates_rejects_maven_only_repository() {
         let temp_dir = TempDir::new().expect("temp dir");
         fs::write(temp_dir.path().join("pom.xml"), "<project />").expect("write pom");
-        assert_eq!(detect_provider_from_path(temp_dir.path()), None);
+        assert!(detect_provider_candidates_from_path(temp_dir.path()).is_empty());
     }
 
     #[test]
-    fn detect_provider_from_path_uses_dotnet_discovery_metadata() {
+    fn detect_provider_candidates_uses_dotnet_discovery_metadata() {
         let temp_dir = TempDir::new().expect("temp dir");
         let project_dir = temp_dir.path().join("src").join("App");
         fs::create_dir_all(&project_dir).expect("create project dir");
         fs::write(project_dir.join("App.fsproj"), "<Project />").expect("write fsproj");
         assert_eq!(
-            detect_provider_from_path(temp_dir.path()),
-            Some("dotnet".to_string())
+            detect_provider_candidates_from_path(temp_dir.path())
+                .first()
+                .map(|candidate| candidate.provider_id.as_str()),
+            Some("dotnet")
         );
     }
 
     #[test]
-    fn detect_provider_from_path_prefers_tauri_over_cargo() {
+    fn detect_provider_candidates_prefers_tauri_over_cargo() {
         let temp_dir = TempDir::new().expect("temp dir");
         let tauri_dir = temp_dir.path().join("src-tauri");
         fs::create_dir_all(&tauri_dir).expect("create tauri dir");
@@ -551,10 +574,22 @@ EndProject
         )
         .expect("write tauri config");
 
+        let candidates = detect_provider_candidates_from_path(temp_dir.path());
         assert_eq!(
-            detect_provider_from_path(temp_dir.path()),
-            Some("tauri".to_string())
+            candidates
+                .first()
+                .map(|candidate| candidate.provider_id.as_str()),
+            Some("tauri")
         );
+        // 多命中全部保留并各带依据，检测顺序不吞掉 cargo 候选（ADR-0005）。
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|candidate| candidate.provider_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tauri", "cargo"]
+        );
+        assert!(candidates.iter().all(|c| !c.matched_markers.is_empty()));
     }
 
     #[test]
@@ -604,6 +639,38 @@ EndProject
             .contains(&second.to_string_lossy().to_string()));
         assert_eq!(candidates.recommended_project_file, None);
         assert!(candidates.solution_files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn detect_repository_provider_returns_all_matched_candidates_with_markers() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let tauri_dir = temp_dir.path().join("src-tauri");
+        fs::create_dir_all(&tauri_dir).expect("create tauri dir");
+        fs::write(temp_dir.path().join("App.csproj"), "<Project />").expect("write csproj");
+        fs::write(
+            tauri_dir.join("tauri.conf.json"),
+            r#"{"productName":"Demo"}"#,
+        )
+        .expect("write tauri config");
+
+        let detection = detect_repository_provider(temp_dir.path().to_string_lossy().to_string())
+            .await
+            .expect("mixed dotnet+tauri repository should detect");
+
+        // dotnet 居注册表首位仍是默认绑定，但 tauri 候选不再被吞掉（Issue #164）。
+        assert_eq!(detection.provider_id, "dotnet");
+        assert_eq!(
+            detection
+                .candidates
+                .iter()
+                .map(|candidate| candidate.provider_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["dotnet", "tauri"]
+        );
+        assert!(detection
+            .candidates
+            .iter()
+            .all(|c| !c.matched_markers.is_empty()));
     }
 
     #[tokio::test]
