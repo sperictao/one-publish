@@ -134,37 +134,33 @@ export function useRepositoryViewState(params: {
       .map((target) => target.cacheKey)
       .join("\u0001");
   }, [branchConnectivityTargets]);
+  // 连通性结果缓存：repoId → 结果与所属 cacheKey，cacheKey 匹配才可结转。
+  const [connectivityCache, setConnectivityCache] = useState<
+    Record<string, { cacheKey: string; connected: boolean }>
+  >({});
+  // 扫描 effect 只随 cacheKey 触发；内部经 ref 读最新 targets/cache，
+  // 避免外部 rerender 造成重复扫描。
   const branchConnectivityTargetsRef = useRef(branchConnectivityTargets);
+  const connectivityCacheRef = useRef(connectivityCache);
   useEffect(() => {
     branchConnectivityTargetsRef.current = branchConnectivityTargets;
+    connectivityCacheRef.current = connectivityCache;
   });
-  const cachedBranchCacheKeyByRepoIdRef = useRef<Record<string, string>>({});
-  const cachedBranchConnectivityByRepoIdRef = useRef<Record<string, boolean>>(
-    {}
-  );
 
-  const prevBranchConnectivityCacheKeyRef = useRef(branchConnectivityCacheKey);
-  if (
-    prevBranchConnectivityCacheKeyRef.current !== branchConnectivityCacheKey
-  ) {
-    prevBranchConnectivityCacheKeyRef.current = branchConnectivityCacheKey;
+  const [prevBranchConnectivityCacheKey, setPrevBranchConnectivityCacheKey] =
+    useState(branchConnectivityCacheKey);
+  if (prevBranchConnectivityCacheKey !== branchConnectivityCacheKey) {
+    setPrevBranchConnectivityCacheKey(branchConnectivityCacheKey);
 
-    const connectivityTargets = branchConnectivityTargets;
-    const cachedCacheKeys = cachedBranchCacheKeyByRepoIdRef.current;
-    const cachedConnectivity = cachedBranchConnectivityByRepoIdRef.current;
-
-    if (connectivityTargets.length === 0) {
-      cachedBranchCacheKeyByRepoIdRef.current = {};
-      cachedBranchConnectivityByRepoIdRef.current = {};
+    if (branchConnectivityTargets.length === 0) {
+      setConnectivityCache({});
       setBranchConnectivityByRepoId({});
     } else {
       const nextConnectivityByRepoId: Record<string, boolean> = {};
-      for (const target of connectivityTargets) {
-        if (
-          cachedCacheKeys[target.id] === target.cacheKey &&
-          cachedConnectivity[target.id] !== undefined
-        ) {
-          nextConnectivityByRepoId[target.id] = cachedConnectivity[target.id];
+      for (const target of branchConnectivityTargets) {
+        const cached = connectivityCache[target.id];
+        if (cached && cached.cacheKey === target.cacheKey) {
+          nextConnectivityByRepoId[target.id] = cached.connected;
         }
       }
       setBranchConnectivityByRepoId(nextConnectivityByRepoId);
@@ -174,17 +170,14 @@ export function useRepositoryViewState(params: {
   useEffect(() => {
     let cancelled = false;
     const connectivityTargets = branchConnectivityTargetsRef.current;
-    const cachedCacheKeys = cachedBranchCacheKeyByRepoIdRef.current;
-    const cachedConnectivity = cachedBranchConnectivityByRepoIdRef.current;
+    const currentCache = connectivityCacheRef.current;
     const nextConnectivityByRepoId: Record<string, boolean> = {};
     const pendingTargets: BranchConnectivityTarget[] = [];
 
     for (const target of connectivityTargets) {
-      if (
-        cachedCacheKeys[target.id] === target.cacheKey &&
-        cachedConnectivity[target.id] !== undefined
-      ) {
-        nextConnectivityByRepoId[target.id] = cachedConnectivity[target.id];
+      const cached = currentCache[target.id];
+      if (cached && cached.cacheKey === target.cacheKey) {
+        nextConnectivityByRepoId[target.id] = cached.connected;
       } else {
         pendingTargets.push(target);
       }
@@ -214,19 +207,27 @@ export function useRepositoryViewState(params: {
       }
 
       const refreshedConnectivityByRepoId = { ...nextConnectivityByRepoId };
-      const refreshedCacheKeyByRepoId = Object.fromEntries(
-        connectivityTargets.map((target) => [target.id, target.cacheKey])
-      ) as Record<string, string>;
-
-      for (const [repoId, cacheKey, canConnect] of entries) {
+      for (const [repoId, , canConnect] of entries) {
         refreshedConnectivityByRepoId[repoId] = canConnect;
-        refreshedCacheKeyByRepoId[repoId] = cacheKey;
       }
-
-      cachedBranchCacheKeyByRepoIdRef.current = refreshedCacheKeyByRepoId;
-      cachedBranchConnectivityByRepoIdRef.current =
-        refreshedConnectivityByRepoId;
       setBranchConnectivityByRepoId(refreshedConnectivityByRepoId);
+
+      const currentTargetIds = new Set(
+        connectivityTargets.map((target) => target.id)
+      );
+      setConnectivityCache((prev) => {
+        const next: typeof prev = {};
+        // 只保留仍在检查目标内的缓存项，并写入本轮新结果。
+        for (const [repoId, entry] of Object.entries(prev)) {
+          if (currentTargetIds.has(repoId)) {
+            next[repoId] = entry;
+          }
+        }
+        for (const [repoId, cacheKey, canConnect] of entries) {
+          next[repoId] = { cacheKey, connected: canConnect };
+        }
+        return next;
+      });
     };
 
     void checkBranchConnectivity();
