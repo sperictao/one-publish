@@ -462,6 +462,7 @@ export function usePublishValidate({
 
   const { runPublishPreflight, requestRuntimeOutputAccess } = useMemo(
     () =>
+      // eslint-disable-next-line react-hooks/refs -- getTranslations 仅在管线异步调用时读取最新翻译
       createPublishPreflightPipeline({
         appT,
         getTranslations,

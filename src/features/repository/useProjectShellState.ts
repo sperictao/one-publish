@@ -95,6 +95,12 @@ export function useProjectShellState(params: {
   const [isProjectInfoRefreshing, setIsProjectInfoRefreshing] = useState(false);
   const scanRequestIdRef = useRef(0);
   const projectInfoCacheRef = useRef<Record<string, ProjectInfoSnapshot>>({});
+  // Render-facing projection of projectInfoCacheRef; written only in
+  // commitProjectInfoSnapshot so scope-change seeds can read the latest
+  // snapshot without render-time ref reads.
+  const [projectInfoCache, setProjectInfoCache] = useState<
+    Record<string, ProjectInfoSnapshot>
+  >({});
   const currentScopeKey = buildProjectInfoScopeKey({
     selectedRepoId: params.selectedRepoId,
     selectedRepoPath: params.selectedRepoPath,
@@ -137,11 +143,14 @@ export function useProjectShellState(params: {
       );
 
       if (scopeKey) {
+        const nextCache = { ...projectInfoCacheRef.current };
         if (nextProjectInfo) {
-          projectInfoCacheRef.current[scopeKey] = nextSnapshot;
+          nextCache[scopeKey] = nextSnapshot;
         } else {
-          delete projectInfoCacheRef.current[scopeKey];
+          delete nextCache[scopeKey];
         }
+        projectInfoCacheRef.current = nextCache;
+        setProjectInfoCache(nextCache);
       }
 
       if (selectedScopeKeyRef.current === scopeKey) {
@@ -229,42 +238,56 @@ export function useProjectShellState(params: {
     ]
   );
 
-  useLayoutEffect(() => {
-    if (
-      !params.selectedRepoPath ||
-      params.isStateLoading ||
-      !providerUsesProjectFile
-    ) {
-      scanRequestIdRef.current += 1;
+  const projectScanInapplicable =
+    !params.selectedRepoPath ||
+    params.isStateLoading ||
+    !providerUsesProjectFile;
+  const [prevProjectScanScope, setPrevProjectScanScope] = useState({
+    inapplicable: projectScanInapplicable,
+    scopeKey: currentScopeKey,
+  });
+  if (
+    prevProjectScanScope.inapplicable !== projectScanInapplicable ||
+    prevProjectScanScope.scopeKey !== currentScopeKey
+  ) {
+    setPrevProjectScanScope({
+      inapplicable: projectScanInapplicable,
+      scopeKey: currentScopeKey,
+    });
+    if (projectScanInapplicable) {
       setVisibleProjectInfoSnapshot(EMPTY_PROJECT_INFO_SNAPSHOT);
       setIsProjectInfoRefreshing(false);
+    } else {
+      setVisibleProjectInfoSnapshot(
+        currentScopeKey
+          ? (projectInfoCache[currentScopeKey] ?? EMPTY_PROJECT_INFO_SNAPSHOT)
+          : EMPTY_PROJECT_INFO_SNAPSHOT
+      );
+      setIsProjectInfoRefreshing(true);
+    }
+  }
+
+  useLayoutEffect(() => {
+    if (projectScanInapplicable) {
+      scanRequestIdRef.current += 1;
       return;
     }
 
-    const currentScopeKey = buildProjectInfoScopeKey({
-      selectedRepoId: params.selectedRepoId,
-      selectedRepoPath: params.selectedRepoPath,
-      selectedRepoProjectFile: params.selectedRepoProjectFile,
-    });
-    const cachedSnapshot = currentScopeKey
-      ? (projectInfoCacheRef.current[currentScopeKey] ??
-        EMPTY_PROJECT_INFO_SNAPSHOT)
-      : EMPTY_PROJECT_INFO_SNAPSHOT;
-
-    setVisibleProjectInfoSnapshot(cachedSnapshot);
-    setIsProjectInfoRefreshing(true);
-
-    void scanProject(params.selectedRepoPath, {
-      silentSuccess: true,
-      silentFailure: true,
-      projectFile: params.selectedRepoProjectFile,
-    });
+    // scanProject sets isProjectInfoRefreshing synchronously; deferring to a
+    // microtask keeps that update out of the layout-effect window while still
+    // kicking the scan before paint.
+    void Promise.resolve().then(() =>
+      scanProject(params.selectedRepoPath, {
+        silentSuccess: true,
+        silentFailure: true,
+        projectFile: params.selectedRepoProjectFile,
+      })
+    );
   }, [
-    params.selectedRepoId,
+    projectScanInapplicable,
+    currentScopeKey,
     params.selectedRepoPath,
     params.selectedRepoProjectFile,
-    params.isStateLoading,
-    providerUsesProjectFile,
     scanProject,
   ]);
 
