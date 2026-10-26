@@ -9,6 +9,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 import {
   exportDiagnosticsIndexFile,
   exportExecutionHistoryFile,
+  exportFailureGroupBundleFile,
+  exportHandoffBundleFile,
 } from "@/features/history/diagnosticsExportRuntime";
 import type {
   DiagnosticsIndexPayload,
@@ -81,6 +83,43 @@ describe("diagnostics export runtime", () => {
     expect(invokeMock).toHaveBeenCalledWith("export_diagnostics_index", {
       index,
       filePath: "/repo/diagnostics-index.md",
+    });
+  });
+
+  it("exports failure-group bundles through the dedicated command", async () => {
+    const bundle = { groups: [], generatedAt: "2026-06-03T00:00:00Z" };
+    invokeMock.mockResolvedValue("/repo/failures.zip");
+
+    await expect(
+      exportFailureGroupBundleFile({
+        bundle: bundle as never,
+        filePath: "/repo/failures.zip",
+      })
+    ).resolves.toBe("/repo/failures.zip");
+
+    expect(invokeMock).toHaveBeenCalledWith("export_failure_group_bundle", {
+      bundle,
+      filePath: "/repo/failures.zip",
+    });
+  });
+
+  it("exports handoff bundles with record and optional failure bundle", async () => {
+    const record = { id: "rec-1" };
+    const failureBundle = { groups: [] };
+    invokeMock.mockResolvedValue("/repo/handoff.zip");
+
+    await expect(
+      exportHandoffBundleFile({
+        record,
+        failureBundle,
+        filePath: "/repo/handoff.zip",
+      })
+    ).resolves.toBe("/repo/handoff.zip");
+
+    expect(invokeMock).toHaveBeenCalledWith("export_handoff_bundle", {
+      record,
+      failureBundle,
+      filePath: "/repo/handoff.zip",
     });
   });
 });
