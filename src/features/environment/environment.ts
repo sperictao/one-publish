@@ -2,13 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type IssueSeverity = "critical" | "warning" | "info";
 
-export type IssueType =
+type IssueType =
   | "missing_tool"
   | "outdated_version"
   | "missing_dependency"
   | "incompatible_version";
 
-export type FixType = "open_url" | "run_command" | "copy_command" | "manual";
+type FixType = "open_url" | "run_command" | "copy_command" | "manual";
 
 export interface FixAction {
   action_type: FixType;
@@ -36,7 +36,7 @@ export interface EnvironmentIssue {
   fixes: FixAction[];
 }
 
-export interface ProviderStatus {
+interface ProviderStatus {
   provider_id: string;
   installed: boolean;
   version?: string | null;
@@ -76,7 +76,7 @@ export function normalizeEnvironmentProviderIds(providerIds?: string[]) {
     : DEFAULT_ENVIRONMENT_PROVIDER_IDS;
 }
 
-export function filterEnvironmentResultByProviderIds(
+function filterEnvironmentResultByProviderIds(
   result: EnvironmentCheckResult | null | undefined,
   providerIds?: string[]
 ): EnvironmentCheckResult | null {

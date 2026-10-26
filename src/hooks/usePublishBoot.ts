@@ -619,5 +619,3 @@ export function usePublishBoot(params: UsePublishBootParams) {
     QUICK_CREATE_PROFILE_GROUP_DEFAULT,
   };
 }
-
-export type UsePublishBootReturn = ReturnType<typeof usePublishBoot>;

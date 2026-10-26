@@ -148,7 +148,7 @@ export function reorderItemsByDrop<T>(
   return nextItems;
 }
 
-export function normalizeProfileGroupKey(value?: string | null): string {
+function normalizeProfileGroupKey(value?: string | null): string {
   return value?.trim() || "";
 }
 

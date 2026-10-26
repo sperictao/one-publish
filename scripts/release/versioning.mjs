@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export function readText(filePath) {
+function readText(filePath) {
   return fs.readFileSync(filePath, "utf8");
 }
 
@@ -16,7 +16,7 @@ export function updateJsonVersion(filePath, version) {
   writeText(filePath, `${JSON.stringify(data, null, 2)}\n`);
 }
 
-export function replaceOrThrow(content, pattern, replacement, label) {
+function replaceOrThrow(content, pattern, replacement, label) {
   const nextContent = content.replace(pattern, replacement);
 
   if (nextContent === content) {

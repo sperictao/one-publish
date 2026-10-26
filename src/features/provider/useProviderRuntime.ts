@@ -4,7 +4,7 @@ import { getProviderSchema, listProviders } from "@/lib/store/api";
 import { type ProviderManifest } from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 
-export type ResourceStatus = "idle" | "loading" | "ready" | "error";
+type ResourceStatus = "idle" | "loading" | "ready" | "error";
 
 export interface ResourceState<T> {
   status: ResourceStatus;

@@ -52,7 +52,7 @@ export function resolveProviderCommandExample(
   return provider?.commandExample?.trim() || "";
 }
 
-export function resolveProviderProjectPathKind(
+function resolveProviderProjectPathKind(
   provider: ProviderPresentation | null | undefined
 ): ProviderProjectPathKind {
   return provider?.projectPathKind ?? "repository_root";

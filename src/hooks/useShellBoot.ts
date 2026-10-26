@@ -202,5 +202,3 @@ export function useShellBoot(params: UseShellBootParams) {
     shouldLoadAppDialogsHost,
   };
 }
-
-export type UseShellBootReturn = ReturnType<typeof useShellBoot>;

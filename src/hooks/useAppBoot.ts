@@ -1,10 +1,7 @@
 import { useAppState } from "@/hooks/useAppState";
-import { useShellBoot, type UseShellBootReturn } from "@/hooks/useShellBoot";
-import { useRepoBoot, type UseRepoBootReturn } from "@/hooks/useRepoBoot";
-import {
-  usePublishBoot,
-  type UsePublishBootReturn,
-} from "@/hooks/usePublishBoot";
+import { useShellBoot } from "@/hooks/useShellBoot";
+import { useRepoBoot } from "@/hooks/useRepoBoot";
+import { usePublishBoot } from "@/hooks/usePublishBoot";
 import { useProviderRuntime } from "@/features/provider/useProviderRuntime";
 import { useProviderParametersState } from "@/features/provider/useProviderParametersState";
 import { usePublishHistoryState } from "@/features/history/usePublishHistoryState";
@@ -15,10 +12,6 @@ import { extractSpecFromRecord } from "@/features/history/specFromRecord";
 import { usePublishStore } from "@/stores/publishStore";
 import { useAppShortcutsProps } from "@/hooks/useAppShortcutsProps";
 import { useShortcuts } from "@/hooks/useShortcuts";
-
-export type ShellState = UseShellBootReturn;
-export type RepoState = UseRepoBootReturn;
-export type PublishState = UsePublishBootReturn;
 
 export function useAppBoot() {
   // ============================================================

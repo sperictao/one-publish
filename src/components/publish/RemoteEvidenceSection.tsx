@@ -3,7 +3,7 @@ import { Loader2, RefreshCw, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { RemoteAttemptEvidenceView } from "@/lib/automationBindings";
 
-export function remoteStatusLabel(
+function remoteStatusLabel(
   status: string,
   t: Record<string, string | undefined>
 ): string {

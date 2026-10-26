@@ -154,16 +154,7 @@
     "error": "错误: {{error}}",
     "configurationBlocked": "当前发布配置不可执行"
   },
-  "branchPanel": {
-    "expandRepoList": "展开仓库列表",
-    "collapsePanel": "收起面板",
-    "searchWorktree": "搜索 worktree",
-    "selectRepository": "选择一个仓库",
-    "newWorktree": "新建 worktree",
-    "refresh": "刷新",
-    "mainBadge": "MAIN",
-    "currentBranch": "当前分支"
-  },
+
   "repositoryList": {
     "collapsePanel": "收起面板",
     "repositories": "仓库",

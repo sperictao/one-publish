@@ -128,5 +128,3 @@ export function useRepoBoot(params: UseRepoBootParams) {
     extractSpecFromRecord,
   };
 }
-
-export type UseRepoBootReturn = ReturnType<typeof useRepoBoot>;

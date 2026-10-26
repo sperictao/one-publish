@@ -212,10 +212,6 @@ export async function detectRepositoryProvider(
   );
 }
 
-export async function scanProjectFiles(path: string): Promise<string[]> {
-  return await invoke<string[]>("scan_project_files", { path });
-}
-
 export async function scanProject(startPath?: string): Promise<ProjectInfo> {
   return await invoke<ProjectInfo>("scan_project", { startPath });
 }

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { OutputTargetDescriptor } from "@/generated/tauri-contracts";
 
-export type OutputTargetHintKind = "local" | "unc" | "scheme";
+type OutputTargetHintKind = "local" | "unc" | "scheme";
 
 export interface OutputTargetHint {
   kind: OutputTargetHintKind;

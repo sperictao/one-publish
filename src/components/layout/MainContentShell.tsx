@@ -4,7 +4,6 @@ import { FileCog, Folder, History, LayoutDashboard } from "lucide-react";
 import {
   topbarIconButtonClass,
   topbarViewButtonActiveClass,
-  topbarViewButtonClass,
 } from "@/components/layout/topbarButtonStyles";
 
 interface TranslationMap {
@@ -88,7 +87,7 @@ export function MainContentShell({
             <button
               type="button"
               className={cn(
-                topbarViewButtonClass,
+                topbarIconButtonClass,
                 rightPanelView === "home" ? topbarViewButtonActiveClass : null
               )}
               onClick={(e) => {
@@ -105,7 +104,7 @@ export function MainContentShell({
             <button
               type="button"
               className={cn(
-                topbarViewButtonClass,
+                topbarIconButtonClass,
                 rightPanelView === "history"
                   ? topbarViewButtonActiveClass
                   : null

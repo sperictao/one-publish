@@ -34,7 +34,7 @@ interface RefreshOptions {
 
 const UPDATER_DOWNLOAD_PROGRESS_EVENT = "updater-download-progress";
 
-export interface UpdateDownloadProgress {
+interface UpdateDownloadProgress {
   stage: "idle" | "downloading" | "retrying" | "installing";
   version: string | null;
   downloadedBytes: number;

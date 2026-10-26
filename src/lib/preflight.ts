@@ -4,7 +4,7 @@ import type { PackageResult, SignResult } from "@/lib/artifact";
 import type { EnvironmentCheckResult } from "@/features/environment/environment";
 import type { UpdaterConfigHealth } from "@/lib/store/types";
 
-export type PreflightStepStatus = "pass" | "warning" | "fail" | "pending";
+type PreflightStepStatus = "pass" | "warning" | "fail" | "pending";
 
 export interface PreflightChecklistItem {
   id: string;

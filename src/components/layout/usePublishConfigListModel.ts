@@ -17,7 +17,7 @@ import {
 import type { ConfigProfile } from "@/lib/store/types";
 
 export const ALL_GROUP_FILTER = "__all__";
-export const PROJECT_GROUP_FILTER = "__project_profiles__";
+const PROJECT_GROUP_FILTER = "__project_profiles__";
 
 export type GroupFilterValue =
   | typeof ALL_GROUP_FILTER
@@ -43,9 +43,7 @@ export interface PublishConfigRecentItem {
   profile?: ConfigProfile;
 }
 
-export function createProfileGroupFilterValue(
-  groupName: string
-): GroupFilterValue {
+function createProfileGroupFilterValue(groupName: string): GroupFilterValue {
   return `profile-group:${groupName}`;
 }
 

@@ -6,12 +6,6 @@
 
 import type { ExecutionRecord } from "@/lib/store/types";
 
-/** 发布已提交，即将开始执行。 */
-export interface PublishStartedEvent {
-  repoId: string | null;
-  providerId: string;
-}
-
 /** 发布成功完成。 */
 export interface PublishCompletedEvent {
   repoId: string | null;
@@ -47,17 +41,3 @@ export interface PublishCancelledEvent {
   restoreWindowOnFailure: boolean;
   record: ExecutionRecord;
 }
-
-/** 所有发布事件的联合类型。 */
-export type PublishEvent =
-  | { type: "publish:started"; payload: PublishStartedEvent }
-  | { type: "publish:completed"; payload: PublishCompletedEvent }
-  | { type: "publish:failed"; payload: PublishFailedEvent }
-  | { type: "publish:cancelled"; payload: PublishCancelledEvent };
-
-export const PublishEventType = {
-  STARTED: "publish:started",
-  COMPLETED: "publish:completed",
-  FAILED: "publish:failed",
-  CANCELLED: "publish:cancelled",
-} as const;
