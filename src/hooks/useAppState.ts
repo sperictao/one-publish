@@ -7,20 +7,20 @@ import { defaultRepoPublishConfig } from "@/lib/store/types";
 
 export function useAppState() {
   const store = useAppStore();
+  const { repositories, selectedRepoId, isLoading, loadState } = store;
   const currentPublishConfig = useMemo(() => {
     const repo =
-      store.repositories.find((item) => item.id === store.selectedRepoId) ??
-      null;
+      repositories.find((item) => item.id === selectedRepoId) ?? null;
 
     return repo?.publishConfig ?? { ...defaultRepoPublishConfig };
-  }, [store.repositories, store.selectedRepoId]);
+  }, [repositories, selectedRepoId]);
 
   // 初始化加载（仅一次，store 内部保证幂等）
   useEffect(() => {
-    if (store.isLoading) {
-      void store.loadState();
+    if (isLoading) {
+      void loadState();
     }
-  }, [store.isLoading, store.loadState]);
+  }, [isLoading, loadState]);
 
   return {
     // 状态

@@ -110,10 +110,14 @@ export function useProjectShellState(params: {
   );
   const projectInfo = visibleProjectInfoSnapshot.projectInfo;
   const projectProfilesRevision = visibleProjectInfoSnapshot.revision;
-  selectedScopeKeyRef.current = currentScopeKey;
-  canExposeProjectInfoRef.current = Boolean(
-    params.selectedRepoPath && !params.isStateLoading && providerUsesProjectFile
-  );
+  useEffect(() => {
+    selectedScopeKeyRef.current = currentScopeKey;
+    canExposeProjectInfoRef.current = Boolean(
+      params.selectedRepoPath &&
+      !params.isStateLoading &&
+      providerUsesProjectFile
+    );
+  });
   const {
     scanProject: scanProjectRequest,
     resolveProjectInfo: resolveProjectInfoRequest,

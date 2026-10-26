@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 
 import { useI18n } from "@/hooks/useI18n";
 import { useLazyRef } from "@/hooks/useLazyRef";
@@ -39,7 +39,9 @@ export function useProfileOrdering({
     Promise.resolve()
   );
   const selectedRepoIdRef = useLazyRef<string | null>(() => selectedRepoId);
-  selectedRepoIdRef.current = selectedRepoId;
+  useEffect(() => {
+    selectedRepoIdRef.current = selectedRepoId;
+  });
 
   const reorderVisibleProfiles = useCallback(
     (nextProfiles: ConfigProfile[]) => {
@@ -84,7 +86,9 @@ export function useProfileOrdering({
       onReorderFailed,
       profileT.quickEditFailed,
       reorderProfilesFn,
+      reorderProfilesQueueRef,
       selectedRepoId,
+      selectedRepoIdRef,
       translations,
     ]
   );

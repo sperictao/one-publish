@@ -105,6 +105,8 @@ export function usePublishConfigPanelProps(
       params.onExpandRepo,
       params.onCopyProjectProfileToCustom,
       params.onToggleFavoriteConfig,
+      params.onSaveProfileComposition,
+      params.onRebindProfileProject,
     ]
   );
 }

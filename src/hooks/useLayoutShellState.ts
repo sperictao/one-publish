@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 const MIN_PANEL_WIDTH = 150;
 const MAX_PANEL_WIDTH = 400;
@@ -37,13 +43,16 @@ export function useLayoutShellState(params: {
 
   // 拖拽实时宽度：ResizeHandle 的 document 级 mousemove 监听在整个拖拽序列中
   // 持有同一个回调闭包，且 setState 为异步批处理——若以渲染期快照为基准累加，
-  // 增量会互相覆盖。ref 在回调内同步自增，使累加与渲染时序解耦。
+  // 增量会互相覆盖。ref 在回调内同步自增，使累加与渲染时序解耦；同步放在
+  // useLayoutEffect 中（绘制前完成，早于任何 mousemove 回调），避免渲染期写 ref。
   const widthRef = useRef({
     left: effectiveLeftPanelWidth,
     middle: effectiveMiddlePanelWidth,
   });
-  widthRef.current.left = effectiveLeftPanelWidth;
-  widthRef.current.middle = effectiveMiddlePanelWidth;
+  useLayoutEffect(() => {
+    widthRef.current.left = effectiveLeftPanelWidth;
+    widthRef.current.middle = effectiveMiddlePanelWidth;
+  });
 
   const { setLeftPanelWidth, setMiddlePanelWidth } = params;
 

@@ -60,8 +60,13 @@ export function useListReorderMotion(params: {
 
   useLayoutEffect(() => {
     const nextRects: Record<string, DOMRect> = {};
+    // 从 dep 跟踪的签名派生迭代列表：orderedIds 参数本身每次渲染都可能是新数组，
+    // 签名在内容不变时保持稳定；二者语义等价（join 是确定性编码）。
+    const effectOrderedIds = orderedIdsSignature
+      ? orderedIdsSignature.split("|")
+      : [];
 
-    for (const itemId of orderedIds) {
+    for (const itemId of effectOrderedIds) {
       const node = itemRefs.current[itemId];
       if (!node) {
         continue;

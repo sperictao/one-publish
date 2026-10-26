@@ -21,31 +21,35 @@ interface AppShortcutCallbacks {
 export function useAppShortcutsProps(
   params: UseAppShortcutsPropsParams
 ): AppShortcutCallbacks {
+  const {
+    selectedRepo,
+    isStateLoading,
+    activeProviderUsesProjectFile,
+    isPublishing,
+    scanProject,
+    startPublish,
+  } = params;
   const onRefreshShortcut = useCallback(() => {
-    if (
-      params.selectedRepo &&
-      !params.isStateLoading &&
-      params.activeProviderUsesProjectFile
-    ) {
-      params.scanProject(params.selectedRepo.path, {
-        projectFile: params.selectedRepo.projectFile ?? undefined,
+    if (selectedRepo && !isStateLoading && activeProviderUsesProjectFile) {
+      scanProject(selectedRepo.path, {
+        projectFile: selectedRepo.projectFile ?? undefined,
       });
     }
   }, [
-    params.selectedRepo,
-    params.isStateLoading,
-    params.activeProviderUsesProjectFile,
-    params.scanProject,
+    selectedRepo,
+    isStateLoading,
+    activeProviderUsesProjectFile,
+    scanProject,
   ]);
 
   const onPublishShortcut = useCallback(() => {
-    if (params.isPublishing) {
+    if (isPublishing) {
       return;
     }
-    if (params.selectedRepo) {
-      params.startPublish();
+    if (selectedRepo) {
+      startPublish();
     }
-  }, [params.isPublishing, params.selectedRepo, params.startPublish]);
+  }, [isPublishing, selectedRepo, startPublish]);
 
   return { onRefreshShortcut, onPublishShortcut };
 }

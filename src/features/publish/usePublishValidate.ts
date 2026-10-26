@@ -321,12 +321,7 @@ export function usePublishValidate({
     }
 
     return null;
-  }, [
-    deferRuntimePreparationOnStartup,
-    preparedRuntime,
-    projectInfo,
-    selectedRepo,
-  ]);
+  }, [deferRuntimePreparationOnStartup, preparedRuntime, selectedRepo]);
 
   const resolvePublishRequest = useCallback(async () => {
     if (!selectedRepo || !currentPublishSource) {

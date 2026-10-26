@@ -217,10 +217,10 @@ export function useDiagnosticsExports({
     }
   }, [
     failureGroupCount,
+    filteredExecutionHistory,
     historyT,
-    filteredExecutionHistory.length,
     recentHistoryExports,
-    scopedExecutionHistory.length,
+    scopedExecutionHistory,
     selectedRepoPath,
     snapshotPaths,
     translations,
