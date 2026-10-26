@@ -46,7 +46,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
-import type { Language } from "@/hooks/useI18n";
+import type { Language, TranslationTree } from "@/hooks/useI18n";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -178,7 +178,7 @@ function SettingsSwitchRow({
 }
 
 export interface GeneralSettingsSectionProps {
-  translations: any;
+  translations: TranslationTree;
   language: Language;
   onLanguageChange: (nextLanguage: string) => void;
   executionHistoryLimit: number;
@@ -349,7 +349,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
 });
 
 export interface AppearanceSettingsSectionProps {
-  translations: any;
+  translations: TranslationTree;
   theme: "light" | "dark" | "auto";
   onThemeChange: (theme: "light" | "dark" | "auto") => void;
 }
@@ -488,7 +488,7 @@ export const AppearanceSettingsSection = memo(
 );
 
 export interface ShortcutsSettingsSectionProps {
-  translations: any;
+  translations: TranslationTree;
   shortcutsItems: Array<{ key: string; description: string }>;
   onOpenShortcuts?: () => void;
 }
@@ -535,7 +535,7 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
 });
 
 export interface UpdaterProgressBarProps {
-  translations: any;
+  translations: TranslationTree;
   downloadProgress: {
     stage: string;
     attempt?: number;
