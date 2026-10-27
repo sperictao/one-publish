@@ -16,6 +16,9 @@ on:
       - "src/features/repository/**"
       - "src/components/layout/RepositoryList.tsx"
 
+permissions:
+  contents: read
+
 jobs:
   capture:
     runs-on: ubuntu-latest
