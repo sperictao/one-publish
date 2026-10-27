@@ -1913,3 +1913,65 @@ fn staged_files_recheck_their_declared_digests_before_upload() {
         .expect_err("digest drift must fail before upload");
     assert!(matches!(error, PublishError::ArtifactDigestMismatch { .. }));
 }
+
+#[test]
+fn the_fake_server_enforces_filesystem_invariants() {
+    use publish_adapters::{SftpEndpoint, SftpTransport, SftpTransportFailure};
+
+    let server = FakeSftpServer::new();
+    let key = CredentialValue::new(KEY_VALUE);
+    let endpoint = SftpEndpoint {
+        host: "files.example.com".to_string(),
+        port: 2022,
+        username: "deploy".to_string(),
+    };
+
+    // 缺失路径读取与写入缺失父目录都以 Protocol 拒绝。
+    assert!(matches!(
+        server.read(&key, &endpoint, "/srv/missing"),
+        Err(SftpTransportFailure::Protocol { .. })
+    ));
+    assert!(matches!(
+        server.write(&key, &endpoint, "/nowhere/file", b"bytes", 0o644),
+        Err(SftpTransportFailure::Protocol { .. })
+    ));
+
+    // rename 不得覆盖既有目标；源缺失同样显式失败。
+    server
+        .create_directories(&key, &endpoint, "/srv/releases")
+        .expect("directories");
+    server.seed_file("/srv/releases/existing", b"old");
+    server.seed_file("/srv/releases/source", b"payload");
+    assert!(matches!(
+        server.rename(
+            &key,
+            &endpoint,
+            "/srv/releases/source",
+            "/srv/releases/existing"
+        ),
+        Err(SftpTransportFailure::Protocol { .. })
+    ));
+    assert!(matches!(
+        server.rename(&key, &endpoint, "/srv/releases/ghost", "/srv/releases/dest"),
+        Err(SftpTransportFailure::Protocol { .. })
+    ));
+
+    // rename 成功时搬运字节与权限位。
+    server
+        .write(&key, &endpoint, "/srv/releases/source2", b"payload", 0o755)
+        .expect("seed with mode");
+    server
+        .rename(
+            &key,
+            &endpoint,
+            "/srv/releases/source2",
+            "/srv/releases/final",
+        )
+        .expect("rename");
+    assert_eq!(
+        server.file("/srv/releases/final").as_deref(),
+        Some(b"payload".as_ref())
+    );
+    assert_eq!(server.mode("/srv/releases/final"), Some(0o755));
+    assert!(server.file("/srv/releases/source2").is_none());
+}

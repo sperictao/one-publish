@@ -1846,3 +1846,53 @@ fn observation_fails_closed_when_a_receipt_exhausts_its_revision_range() {
         .expect_err("revision overflow cannot mint a receipt");
     assert!(error.to_string().contains("exhausted its revision range"));
 }
+
+#[test]
+fn published_releases_must_match_the_sealed_asset_set() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage");
+
+    // 我方 Published release 缺资产 → release_asset_missing。
+    fixture.api.seed_release(seeded_release(
+        7,
+        "v1.2.3",
+        format!("notes\n\n{}", marker(&manifest)),
+        false,
+        vec![],
+    ));
+    let error = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect_err("a published release missing assets conflicts");
+    assert_eq!(classified_code(&error), "release_asset_missing");
+
+    // 同名资产摘要漂移 → release_asset_digest_conflict。
+    let fixture = Fixture::new();
+    fixture.api.seed_release(seeded_release(
+        7,
+        "v1.2.3",
+        format!("notes\n\n{}", marker(&manifest)),
+        false,
+        vec![
+            RemoteGitHubAsset {
+                id: 71,
+                name: "Demo.dmg".to_string(),
+                digest: "0".repeat(64),
+                size: 1,
+            },
+            RemoteGitHubAsset {
+                id: 72,
+                name: "Demo.app.tar.gz".to_string(),
+                digest: sha256_hex(b"tar-bytes"),
+                size: 9,
+            },
+        ],
+    ));
+    let error = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect_err("published assets with foreign digests conflict");
+    assert_eq!(classified_code(&error), "release_asset_digest_conflict");
+}
