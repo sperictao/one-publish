@@ -78,7 +78,6 @@ vi.mock("@/features/publish/usePublishRunner", () => ({
     return {
       outputLog: "",
       getOutputLogSnapshot: () => "",
-      isResolvingSelectedProjectProfile: false,
       publishPreviewCommand: null,
       preparedRuntime: null,
       runtimePreparationError: null,

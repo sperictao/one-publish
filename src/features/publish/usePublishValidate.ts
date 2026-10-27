@@ -213,7 +213,6 @@ export interface UsePublishValidateResult {
   publishPreviewCommand: string;
   preparedRuntime: PreparedPublishRuntime | null;
   runtimePreparationError: string | null;
-  isResolvingSelectedProjectProfile: boolean;
   publishPresentationScopeKey: string;
 }
 
@@ -493,7 +492,6 @@ export function usePublishValidate({
     publishPreviewCommand,
     preparedRuntime,
     runtimePreparationError,
-    isResolvingSelectedProjectProfile: false,
     publishPresentationScopeKey,
   };
 }

@@ -320,7 +320,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
   const {
     outputLog,
     getOutputLogSnapshot,
-    isResolvingSelectedProjectProfile,
     publishPreviewCommand,
     preparedRuntime,
     runtimePreparationError,
@@ -376,7 +375,7 @@ export function usePublishBoot(params: UsePublishBootParams) {
   const isPublishRunCardRefreshing =
     Boolean(params.selectedRepo) &&
     activeProviderUsesProjectFile &&
-    (params.isProjectInfoRefreshing || isResolvingSelectedProjectProfile);
+    params.isProjectInfoRefreshing;
 
   const { publishResult, setArtifactActionState } = params;
   const handleArtifactStateChange = useCallback(
@@ -590,7 +589,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
 
     // Publish runner
     outputLog,
-    isResolvingSelectedProjectProfile,
     publishPreviewCommand,
     preparedRuntime,
     activeRuntime,

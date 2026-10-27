@@ -119,8 +119,6 @@ export function usePublishRunner({
   return {
     outputLog,
     getOutputLogSnapshot,
-    isResolvingSelectedProjectProfile:
-      validate.isResolvingSelectedProjectProfile,
     publishPreviewCommand: validate.publishPreviewCommand,
     preparedRuntime: validate.preparedRuntime,
     runtimePreparationError: validate.runtimePreparationError,
