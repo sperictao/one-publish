@@ -480,7 +480,7 @@ fn recover_delivery_envelopes_enforces_sealed_route_and_manifest_binding() {
         1,
         "stage-route-a",
         "plan_node_completed",
-        json!([DeliveryEnvelope::new("route-a", &"f".repeat(64))]),
+        json!([DeliveryEnvelope::new("route-a", "f".repeat(64))]),
     );
     assert!(
         recover_delivery_envelopes(&[wrong_manifest], &plan, MANIFEST_DIGEST)
