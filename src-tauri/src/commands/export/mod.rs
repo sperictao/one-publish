@@ -1093,4 +1093,295 @@ mod tests {
         assert_eq!(error.message, "路径不是文件夹");
         assert_eq!(error.details.as_deref(), Some(file.as_str()));
     }
+
+    /// 让写入落在一个被普通文件占据的“目录”里，open_private_file 必然 ENOTDIR。
+    fn path_blocked_by_file(temp: &tempfile::TempDir) -> String {
+        let blocker = temp.path().join("blocker");
+        std::fs::write(&blocker, "not a directory").expect("occupy path");
+        blocker.join("export.json").to_string_lossy().to_string()
+    }
+
+    #[tokio::test]
+    async fn export_preflight_report_validates_and_writes_per_extension() {
+        let temp = tempfile::tempdir().expect("temp dir");
+
+        let error = export_preflight_report(json!("not an object"), String::new())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("preflight_report_payload_invalid")
+        );
+
+        let report = json!({
+            "generatedAt": "2026-02-07T10:00:00Z",
+            "token": "super-secret-token",
+            "checklist": [{ "title": "Environment", "status": "pass" }]
+        });
+
+        let json_path = temp.path().join("report.json");
+        let json_path = json_path.to_string_lossy().to_string();
+        assert_eq!(
+            export_preflight_report(report.clone(), json_path.clone())
+                .await
+                .expect("json export"),
+            json_path
+        );
+        let written = std::fs::read_to_string(&json_path).expect("read json");
+        assert!(written.contains("\"status\": \"pass\""));
+        assert!(
+            !written.contains("super-secret-token"),
+            "脱敏必须在导出前生效"
+        );
+
+        let md_path = temp.path().join("report.markdown");
+        let md_path = md_path.to_string_lossy().to_string();
+        export_preflight_report(report, md_path.clone())
+            .await
+            .expect("markdown export");
+        let markdown = std::fs::read_to_string(&md_path).expect("read md");
+        assert!(markdown.contains("# Preflight Report"));
+
+        let error = export_preflight_report(json!({}), path_blocked_by_file(&temp))
+            .await
+            .unwrap_err();
+        assert_eq!(error.code.as_deref(), Some("preflight_report_write_failed"));
+        assert!(error.details.as_deref().is_some_and(|d| !d.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn export_failure_group_bundle_validates_and_writes_per_extension() {
+        let temp = tempfile::tempdir().expect("temp dir");
+
+        let error = export_failure_group_bundle(json!([1, 2]), String::new())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("failure_group_bundle_payload_invalid")
+        );
+
+        let bundle = json!({
+            "generatedAt": "2026-02-08T10:00:00Z",
+            "signature": "sdk missing",
+            "frequency": 2
+        });
+
+        let json_path = temp
+            .path()
+            .join("bundle.json")
+            .to_string_lossy()
+            .to_string();
+        export_failure_group_bundle(bundle.clone(), json_path.clone())
+            .await
+            .expect("json export");
+        assert!(std::fs::read_to_string(&json_path)
+            .expect("read json")
+            .contains("sdk missing"));
+
+        let md_path = temp.path().join("bundle.md").to_string_lossy().to_string();
+        export_failure_group_bundle(bundle, md_path.clone())
+            .await
+            .expect("markdown export");
+        assert!(std::fs::read_to_string(&md_path)
+            .expect("read md")
+            .contains("# Failure Group Diagnostics Bundle"));
+
+        let error = export_failure_group_bundle(json!({}), path_blocked_by_file(&temp))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("failure_group_bundle_write_failed")
+        );
+    }
+
+    #[tokio::test]
+    async fn export_execution_history_writes_csv_or_json_and_masks_each_item() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let history = vec![
+            json!({
+                "id": "rec-1",
+                "providerId": "dotnet",
+                "finishedAt": "2026-02-08T10:00:00Z",
+                "success": false,
+                "cancelled": false,
+                "password": "hunter2",
+                "error": "SDK not found"
+            }),
+            json!({
+                "id": "rec-2",
+                "providerId": "go",
+                "finishedAt": "2026-02-08T11:00:00Z",
+                "success": true,
+                "cancelled": false
+            }),
+        ];
+
+        let csv_path = temp
+            .path()
+            .join("history.csv")
+            .to_string_lossy()
+            .to_string();
+        export_execution_history(history.clone(), csv_path.clone())
+            .await
+            .expect("csv export");
+        let csv = std::fs::read_to_string(&csv_path).expect("read csv");
+        assert!(csv.contains("id,providerId,status,finishedAt"));
+        assert!(csv.contains("rec-1,dotnet,failed"));
+        assert!(!csv.contains("hunter2"), "每条记录必须逐项脱敏");
+
+        let json_path = temp
+            .path()
+            .join("history.json")
+            .to_string_lossy()
+            .to_string();
+        export_execution_history(history, json_path.clone())
+            .await
+            .expect("json export");
+        let json = std::fs::read_to_string(&json_path).expect("read json");
+        assert!(json.contains("rec-2"));
+        assert!(!json.contains("hunter2"));
+
+        let error = export_execution_history(Vec::new(), path_blocked_by_file(&temp))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("execution_history_write_failed")
+        );
+    }
+
+    #[tokio::test]
+    async fn export_diagnostics_index_validates_and_dispatches_three_formats() {
+        let temp = tempfile::tempdir().expect("temp dir");
+
+        let error = export_diagnostics_index(json!(null), String::new())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("diagnostics_index_payload_invalid")
+        );
+
+        let index = json!({
+            "generatedAt": "2026-02-08T12:00:00Z",
+            "summary": { "historyCount": 1, "failureGroupCount": 0 },
+            "links": { "snapshots": ["/tmp/a.md"], "bundles": [], "historyExports": [] }
+        });
+
+        let md_path = temp.path().join("index.md").to_string_lossy().to_string();
+        export_diagnostics_index(index.clone(), md_path.clone())
+            .await
+            .expect("md export");
+        assert!(std::fs::read_to_string(&md_path)
+            .expect("read md")
+            .contains("# Diagnostics Index"));
+
+        let html_path = temp.path().join("index.html").to_string_lossy().to_string();
+        export_diagnostics_index(index.clone(), html_path.clone())
+            .await
+            .expect("html export");
+        assert!(std::fs::read_to_string(&html_path)
+            .expect("read html")
+            .contains("<h1>Diagnostics Index</h1>"));
+
+        let json_path = temp.path().join("index.json").to_string_lossy().to_string();
+        export_diagnostics_index(index, json_path.clone())
+            .await
+            .expect("json export");
+        assert!(std::fs::read_to_string(&json_path)
+            .expect("read json")
+            .contains("historyCount"));
+
+        let error = export_diagnostics_index(json!({}), path_blocked_by_file(&temp))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("diagnostics_index_write_failed")
+        );
+    }
+
+    #[tokio::test]
+    async fn export_handoff_bundle_validates_payloads_and_reports_write_failures() {
+        let temp = tempfile::tempdir().expect("temp dir");
+
+        let error = export_handoff_bundle(json!("x"), None, String::new())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("handoff_record_payload_invalid")
+        );
+
+        let record = json!({
+            "provider_id": "dotnet",
+            "success": true,
+            "snapshot_path": null,
+            "output_dir": null
+        });
+        let error = export_handoff_bundle(record.clone(), Some(json!([1])), String::new())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("handoff_failure_bundle_payload_invalid")
+        );
+
+        let error = export_handoff_bundle(record, None, path_blocked_by_file(&temp))
+            .await
+            .unwrap_err();
+        assert_eq!(error.code.as_deref(), Some("handoff_bundle_write_failed"));
+    }
+
+    #[test]
+    fn write_execution_snapshot_rejects_non_object_payloads() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let error = write_execution_snapshot(temp.path(), "/tmp/out", json!("oops")).unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("execution_snapshot_payload_invalid")
+        );
+    }
+
+    #[tokio::test]
+    async fn export_execution_snapshot_round_trips_through_the_home_bucket() {
+        // 命令封装走真实 home 目录；用唯一 output_dir 让 bucket 可定位、可清理。
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let output_dir = format!("/tmp/one-publish-export-test-{unique}");
+
+        let path = export_execution_snapshot(snapshot_payload(), output_dir.clone())
+            .await
+            .expect("export snapshot");
+        let path = PathBuf::from(path);
+        assert!(path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(publish_adapters::is_one_publish_owned_file));
+
+        let root = execution_snapshot_root().expect("snapshot root");
+        assert!(path.starts_with(&root));
+        // 清理：只移除该 output_dir 对应的 bucket，不动真实快照。
+        let bucket = execution_snapshot_bucket(&root, &output_dir).expect("bucket");
+        std::fs::remove_dir_all(&bucket).expect("cleanup bucket");
+    }
+
+    #[tokio::test]
+    async fn open_execution_snapshot_fails_before_open_when_unresolvable() {
+        let error = open_execution_snapshot(None, None).await.unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("snapshot_and_output_dir_missing")
+        );
+    }
+
+    #[tokio::test]
+    async fn open_directory_rejects_blank_paths() {
+        let error = open_directory("   ".to_string()).await.unwrap_err();
+        assert_eq!(error.code.as_deref(), Some("directory_path_empty"));
+    }
 }
