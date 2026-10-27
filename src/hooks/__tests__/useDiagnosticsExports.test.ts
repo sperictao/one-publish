@@ -236,6 +236,123 @@ describe("useDiagnosticsExports", () => {
     );
   });
 
+  it("refuses to export execution history when the record set is empty", async () => {
+    const { result } = renderDiagnosticsExports({
+      filteredExecutionHistory: [],
+    });
+
+    await act(async () => {
+      await result.current.exportExecutionHistory({ records: [] });
+    });
+
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(mocks.exportExecutionHistoryFile).not.toHaveBeenCalled();
+    expect(mocks.toast.error).toHaveBeenCalledWith("当前没有可导出的执行历史");
+  });
+
+  it("forwards caller options for records, title and success message", async () => {
+    const custom = createExecutionRecord({ id: "record-custom" });
+    mocks.save.mockResolvedValue("/repo/custom.json");
+    mocks.exportExecutionHistoryFile.mockResolvedValue("/repo/custom.json");
+    const { result } = renderDiagnosticsExports({
+      filteredExecutionHistory: [createExecutionRecord({ id: "record-1" })],
+    });
+
+    await act(async () => {
+      await result.current.exportExecutionHistory({
+        records: [custom],
+        format: "json",
+        title: "自定义导出",
+        successMessage: "导出好了",
+      });
+    });
+
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "自定义导出" })
+    );
+    expect(mocks.exportExecutionHistoryFile).toHaveBeenCalledWith({
+      history: [expect.objectContaining({ id: "record-custom" })],
+      filePath: "/repo/custom.json",
+    });
+    expect(mocks.toast.success).toHaveBeenCalledWith("导出好了", {
+      description: "/repo/custom.json",
+    });
+  });
+
+  it.each([
+    {
+      name: "failure group bundle",
+      run: (exports: DiagnosticsExports) => exports.exportFailureGroupBundle(),
+      runtime: mocks.exportFailureGroupBundleFile,
+    },
+    {
+      name: "execution history",
+      run: (exports: DiagnosticsExports) => exports.exportExecutionHistory(),
+      runtime: mocks.exportExecutionHistoryFile,
+    },
+    {
+      name: "diagnostics index",
+      run: (exports: DiagnosticsExports) => exports.exportDiagnosticsIndex(),
+      runtime: mocks.exportDiagnosticsIndexFile,
+    },
+  ])(
+    "does nothing when the $name save dialog is dismissed",
+    async ({ run, runtime }) => {
+      mocks.save.mockResolvedValue(null);
+      const { result } = renderDiagnosticsExports();
+
+      await act(async () => {
+        await run(result.current);
+      });
+
+      expect(runtime).not.toHaveBeenCalled();
+      expect(mocks.toast.success).not.toHaveBeenCalled();
+      expect(mocks.toast.error).not.toHaveBeenCalled();
+    }
+  );
+
+  it("refuses the diagnostics index when there are no links to index", async () => {
+    const { result } = renderDiagnosticsExports({
+      snapshotPaths: [],
+      recentHistoryExports: [],
+    });
+
+    await act(async () => {
+      await result.current.exportDiagnosticsIndex();
+    });
+
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(mocks.exportDiagnosticsIndexFile).not.toHaveBeenCalled();
+    expect(mocks.toast.error).toHaveBeenCalledWith("暂无可索引的诊断导出记录", {
+      description: "请先导出历史或执行快照",
+    });
+  });
+
+  it("falls back to builtin labels when historyT lacks index keys", async () => {
+    mocks.save.mockResolvedValue("/repo/index.md");
+    mocks.exportDiagnosticsIndexFile.mockResolvedValue("/repo/index.md");
+    const { result } = renderHook(() =>
+      useDiagnosticsExports({
+        historyT: {},
+        snapshotPaths: ["/repo/snapshot.md"],
+        recentHistoryExports: [],
+        scopedExecutionHistory: [createExecutionRecord()],
+        filteredExecutionHistory: [createExecutionRecord()],
+        failureGroupCount: 0,
+        selectedRepoPath: "/repo",
+        trackHistoryExport: vi.fn(),
+      })
+    );
+
+    await act(async () => {
+      await result.current.exportDiagnosticsIndex();
+    });
+
+    expect(mocks.toast.success).toHaveBeenCalledWith("诊断索引已导出", {
+      description: "/repo/index.md",
+    });
+  });
+
   it("refuses to export the failure group bundle when there are no failures", async () => {
     // failureGroupCount 由父级分组结果传入；为 0 时不应触发保存对话框。
     const { result } = renderHook(() =>
