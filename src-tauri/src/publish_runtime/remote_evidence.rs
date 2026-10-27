@@ -1424,4 +1424,81 @@ mod tests {
         let segments = expected_segments(&binding).expect("segments");
         assert!(segments.contains(&AGGREGATE_SEGMENT.to_string()));
     }
+
+    #[test]
+    fn archived_status_maps_every_attempt_status() {
+        assert_eq!(
+            RemoteArchivedStatus::from(PublishAttemptStatus::Running),
+            RemoteArchivedStatus::Running
+        );
+        assert_eq!(
+            RemoteArchivedStatus::from(PublishAttemptStatus::Published),
+            RemoteArchivedStatus::Published
+        );
+        assert_eq!(
+            RemoteArchivedStatus::from(PublishAttemptStatus::PartialDelivery),
+            RemoteArchivedStatus::PartialDelivery
+        );
+        assert_eq!(
+            RemoteArchivedStatus::from(PublishAttemptStatus::Failed),
+            RemoteArchivedStatus::Failed
+        );
+        assert_eq!(
+            RemoteArchivedStatus::from(PublishAttemptStatus::Cancelled),
+            RemoteArchivedStatus::Cancelled
+        );
+    }
+
+    #[test]
+    fn verify_artifact_digest_fails_closed_on_missing_or_foreign_digest() {
+        let bytes = b"payload";
+        let artifact = |digest: Option<String>| RemoteArtifact {
+            id: 1,
+            name: "evidence.zip".to_string(),
+            expired: false,
+            digest,
+        };
+
+        let error = verify_artifact_digest(&artifact(None), bytes)
+            .expect_err("missing digest is unverifiable");
+        assert_eq!(error.code.as_deref(), Some("remote_evidence_sync_failed"));
+        assert!(error
+            .details
+            .as_deref()
+            .unwrap_or_default()
+            .contains("缺少 sha256 digest"));
+
+        let error = verify_artifact_digest(&artifact(Some("md5:abc".to_string())), bytes)
+            .expect_err("non-sha256 digest is unverifiable");
+        assert!(error
+            .details
+            .as_deref()
+            .unwrap_or_default()
+            .contains("缺少 sha256 digest"));
+
+        verify_artifact_digest(
+            &artifact(Some(format!("sha256:{}", sha256_hex(bytes)))),
+            bytes,
+        )
+        .expect("matching sha256 digest verifies");
+    }
+
+    #[test]
+    fn unzip_single_json_rejects_bad_zips_and_zips_without_json() {
+        unzip_single_json(b"not a zip").expect_err("garbage bytes must fail");
+
+        let zip = zip_bytes("evidence.txt", b"text payload");
+        let error = unzip_single_json(&zip).expect_err("zip without .json payload must fail");
+        assert!(error
+            .details
+            .as_deref()
+            .unwrap_or_default()
+            .contains("不包含 JSON 证据负载"));
+
+        let zip = zip_bytes("segment.json", b"{\"events\":[]}");
+        assert_eq!(
+            unzip_single_json(&zip).expect("json payload"),
+            b"{\"events\":[]}"
+        );
+    }
 }
