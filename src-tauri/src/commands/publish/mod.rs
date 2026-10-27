@@ -33,8 +33,8 @@ use self::session::{clear_running_execution, force_clear_running_execution, rese
 
 /// 遗留 Provider 发布规格的执行入口：只由发布运行时的执行端口调用，
 /// 取消信号来自该次 Attempt（ADR-0041）。
-pub(crate) async fn execute_provider_publish(
-    app: AppHandle,
+pub(crate) async fn execute_provider_publish<R: tauri::Runtime>(
+    app: AppHandle<R>,
     spec: PublishSpec,
     cancellation: &CancellationSignal,
 ) -> Result<PublishResult, crate::errors::AppError> {

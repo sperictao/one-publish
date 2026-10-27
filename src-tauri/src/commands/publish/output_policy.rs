@@ -29,6 +29,14 @@ impl PublishOutputPolicy {
     pub(crate) fn cleanup(&self) -> &PublishOutputCleanupDecision {
         &self.cleanup
     }
+
+    #[cfg(test)]
+    pub(crate) fn for_test(output_dir: String, cleanup: PublishOutputCleanupDecision) -> Self {
+        Self {
+            output_dir,
+            cleanup,
+        }
+    }
 }
 
 pub(crate) fn resolve_publish_output_policy(

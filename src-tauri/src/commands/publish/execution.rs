@@ -117,7 +117,9 @@ fn clean_output_directory(output_dir: &str) -> Result<(), crate::errors::AppErro
     Ok(())
 }
 
-fn apply_cleanup_policy(policy: &PublishOutputPolicy) -> Result<(), crate::errors::AppError> {
+pub(super) fn apply_cleanup_policy(
+    policy: &PublishOutputPolicy,
+) -> Result<(), crate::errors::AppError> {
     match policy.cleanup() {
         PublishOutputCleanupDecision::NotRequested => Ok(()),
         PublishOutputCleanupDecision::SkippedMissingOutput { output_dir } => {
@@ -135,8 +137,8 @@ fn apply_cleanup_policy(policy: &PublishOutputPolicy) -> Result<(), crate::error
     }
 }
 
-pub(crate) async fn execute_publish_spec(
-    app: &AppHandle,
+pub(crate) async fn execute_publish_spec<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     spec: PublishSpec,
     cancellation: &CancellationSignal,
 ) -> Result<PublishResult, crate::errors::AppError> {
@@ -148,8 +150,8 @@ pub(crate) async fn execute_publish_spec(
 }
 
 /// 执行密封计划节点的构建命令：不经过 spec 渲染管道，命令即计划节点的唯一事实来源。
-pub(crate) async fn execute_sealed_build(
-    app: &AppHandle,
+pub(crate) async fn execute_sealed_build<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     request: &SealedBuildCommand,
     cancellation: &CancellationSignal,
 ) -> Result<PublishResult, crate::errors::AppError> {
@@ -201,8 +203,8 @@ async fn cancellation_requested(cancellation: &CancellationSignal) {
     }
 }
 
-async fn run_publish_process(
-    app: &AppHandle,
+async fn run_publish_process<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     provider_id: &str,
     prepared: PreparedPublishCommand,
     output_dir: &str,

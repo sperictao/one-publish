@@ -597,3 +597,221 @@ async fn assert_process_gone(pid: u32) {
     }
     panic!("process {pid} survived build cancellation");
 }
+
+// ---- execute_sealed_build：mock_app 端到端（Issue #223 策略 B） ----
+
+#[cfg(unix)]
+fn sealed_request(dir: &std::path::Path, script: &str) -> SealedBuildCommand {
+    SealedBuildCommand {
+        provider_id: "test-provider".to_string(),
+        program: "sh".to_string(),
+        args: vec!["-c".to_string(), script.to_string()],
+        working_directory: dir.to_path_buf(),
+        output_directory: dir.join("out"),
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sealed_build_success_collects_log_and_counts_output_files() {
+    let _guard = execution_test_lock().lock().await;
+    let temp = tempfile::tempdir().expect("temp dir");
+    let app = tauri::test::mock_app();
+    let request = sealed_request(
+        temp.path(),
+        "echo hello-build && mkdir -p out && touch out/app.txt",
+    );
+
+    let result =
+        super::execution::execute_sealed_build(&app.handle(), &request, &CancellationSignal::new())
+            .await
+            .expect("sealed build");
+
+    assert!(result.success, "result: {:?}", result.error);
+    assert!(!result.cancelled);
+    assert!(result.error.is_none());
+    assert_eq!(result.file_count, 1);
+    assert!(result.output_log.contains("hello-build"));
+    // 命令回显走前端 emit 而非 output_log；密封命令原样保留在结果里
+    // （program 经 PATH 解析为绝对路径）。
+    assert!(result.command.display_command.contains(" -c "));
+    assert_eq!(result.output_dir, temp.path().join("out").to_string_lossy());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sealed_build_nonzero_exit_reports_failure_with_log() {
+    let _guard = execution_test_lock().lock().await;
+    let temp = tempfile::tempdir().expect("temp dir");
+    let app = tauri::test::mock_app();
+    let request = sealed_request(temp.path(), "echo oops >&2; exit 3");
+
+    let result =
+        super::execution::execute_sealed_build(&app.handle(), &request, &CancellationSignal::new())
+            .await
+            .expect("sealed build");
+
+    assert!(!result.success);
+    assert!(!result.cancelled);
+    assert!(result
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("退出代码")));
+    assert_eq!(result.file_count, 0);
+    assert!(result.output_log.contains("[stderr] oops"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sealed_build_missing_program_maps_to_tool_missing() {
+    let _guard = execution_test_lock().lock().await;
+    let temp = tempfile::tempdir().expect("temp dir");
+    let app = tauri::test::mock_app();
+    let request = SealedBuildCommand {
+        provider_id: "test-provider".to_string(),
+        program: "/nonexistent/bin/definitely-missing-tool".to_string(),
+        args: Vec::new(),
+        working_directory: temp.path().to_path_buf(),
+        output_directory: temp.path().join("out"),
+    };
+
+    let error =
+        super::execution::execute_sealed_build(&app.handle(), &request, &CancellationSignal::new())
+            .await
+            .expect_err("missing program must fail");
+
+    assert_eq!(error.code.as_deref(), Some("tool_missing"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sealed_build_pre_cancelled_skips_spawn_and_marks_cancelled() {
+    let _guard = execution_test_lock().lock().await;
+    let temp = tempfile::tempdir().expect("temp dir");
+    let app = tauri::test::mock_app();
+    let request = sealed_request(temp.path(), "sleep 30");
+
+    let cancellation = CancellationSignal::new();
+    cancellation.request();
+    let result = super::execution::execute_sealed_build(&app.handle(), &request, &cancellation)
+        .await
+        .expect("cancelled build still returns a result");
+
+    assert!(!result.success);
+    assert!(result.cancelled);
+    assert!(result.error.is_some());
+    assert_eq!(result.file_count, 0);
+}
+
+/// 运行中取消：sleep 构建被取消后结果标记 cancelled、日志带 [cancelled] 行，
+/// 且运行槽位在执行返回后释放（下一场构建可立即注册）。
+#[cfg(unix)]
+#[tokio::test]
+async fn sealed_build_mid_run_cancellation_marks_result_and_releases_slot() {
+    let _guard = execution_test_lock().lock().await;
+    let temp = tempfile::tempdir().expect("temp dir");
+    let app = tauri::test::mock_app();
+    let request = sealed_request(temp.path(), "sleep 30");
+
+    let cancellation = CancellationSignal::new();
+    let cancel = cancellation.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        cancel.request();
+    });
+
+    let result = tokio::time::timeout(
+        Duration::from_secs(15),
+        super::execution::execute_sealed_build(&app.handle(), &request, &cancellation),
+    )
+    .await
+    .expect("cancelled build must finish within 15 s")
+    .expect("sealed build");
+
+    assert!(result.cancelled);
+    assert!(!result.success);
+    assert!(result.output_log.contains("[cancelled]"));
+
+    // 运行槽位已释放：直接注册新执行应成功。
+    let permit = super::session::reserve_execution("after-cancel".to_string())
+        .await
+        .expect("execution slot released");
+    clear_running_execution(&permit.session_id).await;
+}
+
+#[tokio::test]
+async fn provider_publish_rejects_missing_project_path_before_execution() {
+    let _guard = execution_test_lock().lock().await;
+    let temp = tempfile::tempdir().expect("temp dir");
+    let app = tauri::test::mock_app();
+    let spec = base_java_spec(
+        temp.path()
+            .join("missing-project")
+            .to_string_lossy()
+            .as_ref(),
+    );
+
+    let error = execute_provider_publish(app.handle().clone(), spec, &CancellationSignal::new())
+        .await
+        .expect_err("missing project path");
+
+    assert_eq!(error.code.as_deref(), Some("project_path_not_found"));
+}
+
+// ---- apply_cleanup_policy：清理决策执行 ----
+
+#[test]
+fn cleanup_policy_not_requested_and_missing_output_are_noops() {
+    use super::output_policy::{PublishOutputCleanupDecision, PublishOutputPolicy};
+
+    for decision in [
+        PublishOutputCleanupDecision::NotRequested,
+        PublishOutputCleanupDecision::SkippedMissingOutput {
+            output_dir: "/definitely/missing/dir".to_string(),
+        },
+    ] {
+        let policy = PublishOutputPolicy::for_test(String::new(), decision);
+        super::execution::apply_cleanup_policy(&policy).expect("no-op cleanup");
+    }
+}
+
+#[test]
+fn cleanup_policy_clean_empties_the_output_directory() {
+    use super::output_policy::{PublishOutputCleanupDecision, PublishOutputPolicy};
+    let temp = tempfile::tempdir().expect("temp dir");
+    let output = temp.path().join("out");
+    std::fs::create_dir_all(output.join("nested")).expect("create output");
+    std::fs::write(output.join("nested").join("old.txt"), "stale").expect("write stale");
+
+    let policy = PublishOutputPolicy::for_test(
+        output.to_string_lossy().to_string(),
+        PublishOutputCleanupDecision::Clean {
+            output_dir: output.to_string_lossy().to_string(),
+        },
+    );
+    super::execution::apply_cleanup_policy(&policy).expect("clean");
+
+    assert!(output.is_dir());
+    assert_eq!(
+        super::output::count_output_files(&output.to_string_lossy()),
+        0
+    );
+}
+
+#[test]
+fn cleanup_policy_clean_surfaces_remove_failures() {
+    use super::output_policy::{PublishOutputCleanupDecision, PublishOutputPolicy};
+    let temp = tempfile::tempdir().expect("temp dir");
+    // remove_dir_all 目标不是目录 → 清理错误而不是 panic。
+    let file = temp.path().join("out-file");
+    std::fs::write(&file, "not a dir").expect("write file");
+
+    let policy = PublishOutputPolicy::for_test(
+        file.to_string_lossy().to_string(),
+        PublishOutputCleanupDecision::Clean {
+            output_dir: file.to_string_lossy().to_string(),
+        },
+    );
+    let error = super::execution::apply_cleanup_policy(&policy).expect_err("clean must fail");
+    assert!(error.code.is_some());
+}
