@@ -859,3 +859,50 @@ fn destination_dispatch_enforces_kind_and_registration() {
         }
     ));
 }
+
+#[test]
+fn fake_remote_backend_implements_the_shared_runner_contract() {
+    use publish_adapters::{FakeRemoteBackend, StaticCredentialSource, FAKE_REMOTE_BACKEND_ID};
+
+    let backend = FakeRemoteBackend::new(Arc::new(StaticCredentialSource::new().with_secret(
+        "vault://token",
+        publish_domain::CredentialKind::Token,
+        "secret-value",
+    )));
+    assert_eq!(backend.descriptor().identity().id, FAKE_REMOTE_BACKEND_ID);
+    assert_eq!(backend.default_settings(), AdapterSettings::new(1));
+    assert!(backend
+        .plan_fragment(&fixture_snapshot(), &AdapterSettings::new(1))
+        .expect("the fake backend contributes no plan nodes")
+        .is_empty());
+
+    // Credential 委托给注入的来源：命中与未命中都保持分类语义。
+    let resolved = backend
+        .resolve_credential("vault://token")
+        .expect("seeded credential resolves");
+    assert_eq!(resolved.kind, publish_domain::CredentialKind::Token);
+    assert!(matches!(
+        backend
+            .resolve_credential("vault://missing")
+            .expect_err("missing credentials stay classified"),
+        CredentialResolveFailure::Missing
+    ));
+
+    // execute_plan 按序委托给共享执行器。
+    let plan = publish_domain::PublishPlan {
+        version: publish_domain::PUBLISH_PLAN_VERSION,
+        snapshot_digest: "snapshot".to_string(),
+        adapters: vec![],
+        execution_backend: backend.descriptor().identity(),
+        routes: vec![],
+        nodes: vec![node_with_adapter(AdapterIdentity::new(
+            AdapterKind::DeliveryDestination,
+            "dest",
+            1,
+        ))],
+        digest: "plan".to_string(),
+    };
+    let mut executor = NoopExecutor;
+    AdapterContract::execute_plan(&backend, &plan, &mut executor)
+        .expect("the fake backend interprets plans through the shared executor");
+}

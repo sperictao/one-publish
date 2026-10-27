@@ -190,3 +190,20 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
         },
     }
 }
+
+#[test]
+fn fake_backend_rejects_duplicate_binding_ids_and_defaults_like_new() {
+    let backend = FakeAutomationBackend::default();
+    assert_eq!(
+        backend.descriptor().identity(),
+        FakeAutomationBackend::new().descriptor().identity()
+    );
+
+    let error = backend
+        .render_automation_bundle(&[
+            binding_projection("binding-stable", "revision-1"),
+            binding_projection("binding-stable", "revision-2"),
+        ])
+        .expect_err("duplicate binding ids cannot project twice");
+    assert!(error.to_string().contains("projected more than once"));
+}
