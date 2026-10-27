@@ -249,6 +249,45 @@ mod tests {
         assert_unsafe_brew_formula_argument("brew install --cask firefox");
     }
 
+    #[test]
+    fn fix_command_parsing_rejects_empty_and_blank_commands() {
+        for command in ["", "   ", "\t "] {
+            let err = validate_and_parse_fix_command(command).expect_err("empty must fail");
+            assert_eq!(err.code.as_deref(), Some("empty_fix_command"));
+        }
+    }
+
+    #[test]
+    fn fix_command_parsing_rejects_quoted_commands() {
+        for command in ["brew install 'rustup'", "brew install \"rustup\""] {
+            let err = validate_and_parse_fix_command(command).expect_err("quoting must fail");
+            assert_eq!(err.code.as_deref(), Some("quoted_fix_command"));
+        }
+    }
+
+    #[test]
+    fn fix_command_parsing_rejects_sudo_prefix() {
+        let err =
+            validate_and_parse_fix_command("sudo brew install rustup").expect_err("sudo must fail");
+        assert_eq!(err.code.as_deref(), Some("sudo_fix_command"));
+    }
+
+    #[test]
+    fn fix_command_parsing_scopes_winget_and_rustup_subcommands() {
+        let err = validate_and_parse_fix_command("winget remove rustup")
+            .expect_err("winget remove must fail");
+        assert_eq!(err.code.as_deref(), Some("unsupported_winget_fix_command"));
+
+        let err = validate_and_parse_fix_command("rustup install stable")
+            .expect_err("rustup install must fail");
+        assert_eq!(err.code.as_deref(), Some("unsupported_rustup_fix_command"));
+
+        let (program, args) =
+            validate_and_parse_fix_command("rustup update").expect("rustup update is allowed");
+        assert_eq!(program, "rustup");
+        assert_eq!(args, vec!["update".to_string()]);
+    }
+
     fn action(action_type: FixType) -> FixAction {
         FixAction {
             action_type,

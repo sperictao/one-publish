@@ -530,4 +530,103 @@ mod tests {
             Some("tauri_release_settings_invalid")
         );
     }
+
+    /// linux-only 基准通过全部校验；逐项变异以触达各个拒绝分支。
+    fn linux_only_config() -> TauriReleaseConfig {
+        TauriReleaseConfig {
+            enabled_targets: vec![TauriDesktopTarget::LinuxX64],
+            ..TauriReleaseConfig::default()
+        }
+    }
+
+    fn expect_code(config: TauriReleaseConfig, code: &str) {
+        let error = validate_release_config(&config).expect_err("validation must fail");
+        assert_eq!(error.code.as_deref(), Some(code), "{error:?}");
+    }
+
+    #[test]
+    fn release_config_rejects_early_shape_violations() {
+        expect_code(
+            TauriReleaseConfig {
+                managed_workflow_version: MANAGED_WORKFLOW_VERSION + 1,
+                ..linux_only_config()
+            },
+            "tauri_release_workflow_version_unsupported",
+        );
+        expect_code(
+            TauriReleaseConfig {
+                enabled_targets: Vec::new(),
+                ..linux_only_config()
+            },
+            "tauri_release_targets_empty",
+        );
+        expect_code(
+            TauriReleaseConfig {
+                release_asset_patterns: Vec::new(),
+                ..linux_only_config()
+            },
+            "tauri_release_assets_empty",
+        );
+        for pattern in ["", "../evil.tgz", "dir\\evil.tgz", "${{ matrix.x }}"] {
+            expect_code(
+                TauriReleaseConfig {
+                    release_asset_patterns: vec![pattern.to_string()],
+                    ..linux_only_config()
+                },
+                "tauri_release_asset_pattern_invalid",
+            );
+        }
+        expect_code(
+            TauriReleaseConfig {
+                tag_prefix: "v 1".to_string(),
+                ..linux_only_config()
+            },
+            "tauri_release_tag_prefix_invalid",
+        );
+    }
+
+    #[test]
+    fn release_config_enforces_https_updater_endpoint_and_clean_fields() {
+        let updater = |endpoint: &str, public_key: &str| TauriUpdaterSettings {
+            enabled: true,
+            endpoint: Some(endpoint.to_string()),
+            public_key: Some(public_key.to_string()),
+            private_key_secret_name: Some("TAURI_PRIVATE_KEY".to_string()),
+        };
+
+        for (endpoint, public_key) in [
+            ("http://insecure.example", "key"),
+            ("https://ok.example/bad path", "key"),
+            ("https://ok.example/${{ x }}", "key"),
+            ("https://ok.example", "${{ secret }}"),
+        ] {
+            expect_code(
+                TauriReleaseConfig {
+                    updater: updater(endpoint, public_key),
+                    ..linux_only_config()
+                },
+                "tauri_release_updater_invalid",
+            );
+        }
+
+        validate_release_config(&TauriReleaseConfig {
+            updater: updater("https://updates.example/{{{{UPDATE_TARGET}}}}", "key"),
+            ..linux_only_config()
+        })
+        .expect("a clean https endpoint validates");
+    }
+
+    #[test]
+    fn release_config_rejects_blank_gate_programs() {
+        expect_code(
+            TauriReleaseConfig {
+                release_gates: vec![ReleaseGate {
+                    program: "   ".to_string(),
+                    args: Vec::new(),
+                }],
+                ..linux_only_config()
+            },
+            "tauri_release_gate_invalid",
+        );
+    }
 }
