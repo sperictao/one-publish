@@ -2892,3 +2892,133 @@ fn persistence_failures_on_started_events_propagate() {
         "unexpected error: {error}"
     );
 }
+
+// ─── 产物库封存归属：manifest 必须绑定本快照 ───
+
+struct TamperingStore {
+    inner: TemporaryArtifactStore,
+}
+
+impl TamperingStore {
+    fn new(dir: &std::path::Path) -> Self {
+        Self {
+            inner: TemporaryArtifactStore::new(dir),
+        }
+    }
+}
+
+impl AdapterContract for TamperingStore {
+    fn descriptor(&self) -> &AdapterDescriptor {
+        self.inner.descriptor()
+    }
+
+    fn default_settings(&self) -> AdapterSettings {
+        self.inner.default_settings()
+    }
+
+    fn plan_fragment(
+        &self,
+        snapshot: &PlanningInputSnapshot,
+        settings: &AdapterSettings,
+    ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
+        self.inner.plan_fragment(snapshot, settings)
+    }
+
+    fn execute_node(
+        &self,
+        node: &PlanNode,
+        context: &AdapterExecutionContext<'_>,
+    ) -> Result<AdapterExecutionOutput, PublishError> {
+        let mut output = self.inner.execute_node(node, context)?;
+        if let Some(manifest) = output.manifest.as_mut() {
+            // 以另一份快照摘要重封 manifest：摘要保持自洽但归属漂移。
+            manifest.planning_snapshot_digest = "foreign-snapshot".to_string();
+            manifest.digest = manifest.recomputed_digest()?;
+        }
+        Ok(output)
+    }
+}
+
+impl publish_adapters::ArtifactStore for TamperingStore {
+    fn acquire_artifact_set_lease(
+        &self,
+        settings: &AdapterSettings,
+        attempt_id: &str,
+        manifest_digest: &str,
+        valid_until: &str,
+    ) -> Result<(), PublishError> {
+        self.inner
+            .acquire_artifact_set_lease(settings, attempt_id, manifest_digest, valid_until)
+    }
+
+    fn release_artifact_set_lease(
+        &self,
+        settings: &AdapterSettings,
+        attempt_id: &str,
+    ) -> Result<(), PublishError> {
+        self.inner.release_artifact_set_lease(settings, attempt_id)
+    }
+
+    fn enforce_retention(
+        &self,
+        settings: &AdapterSettings,
+        now: &str,
+    ) -> Result<publish_adapters::RetentionSweepReport, PublishError> {
+        self.inner.enforce_retention(settings, now)
+    }
+}
+
+#[test]
+fn merge_rejects_a_manifest_bound_to_a_foreign_planning_snapshot() {
+    // 产物库交出的 manifest 必须绑定本计划的快照：归属漂移的合法封存
+    // 仍在准入边界被拒绝（manifest 身份 = 产物 + 快照来源）。
+    let mut fixture = fixture();
+    fixture.snapshot.adapters.delivery_routes = vec![DeliveryRoute {
+        binding: AdapterBinding::new(
+            "scripted",
+            AdapterIdentity::new(AdapterKind::DeliveryDestination, ScriptedDestination::ID, 1),
+            AdapterSettings::new(1)
+                .with_value("mode", Value::String("ok".to_string()))
+                .with_value("directory", Value::String("/tmp/scripted-x".to_string())),
+        ),
+        required: true,
+    }];
+    let conformance = AdapterConformanceFixture::new(fixture.snapshot.clone());
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_project_provider(Arc::new(EdgeProvider::new()), &conformance)
+        .expect("register provider");
+    registry
+        .register_artifact_processor(Arc::new(EdgeProcessor::new()), &conformance)
+        .expect("register processor");
+    registry
+        .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &conformance)
+        .expect("register backend");
+    registry
+        .register_artifact_store(
+            Arc::new(TamperingStore::new(fixture._store_dir.path())),
+            &conformance,
+        )
+        .expect("register tampering store");
+    registry
+        .register_delivery_destination(Arc::new(ScriptedDestination::new()), &conformance)
+        .expect("register scripted destination");
+    fixture.runtime = Arc::new(PublishRuntime::new(registry));
+    let prepared = fixture
+        .runtime
+        .prepare_attempt(&fixture.snapshot)
+        .expect("prepare attempt");
+
+    let message = match fixture.runtime.start_attempt(
+        &prepared,
+        start_request("attempt-foreign-manifest", &fixture.snapshot.source),
+        &AttemptExecutionContext::at(0),
+    ) {
+        Ok(view) => view.error.unwrap_or_default(),
+        Err(error) => error.to_string(),
+    };
+    assert!(
+        message.contains("belongs to planning snapshot foreign-snapshot"),
+        "unexpected error: {message}"
+    );
+}
