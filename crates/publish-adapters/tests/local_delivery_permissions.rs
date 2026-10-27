@@ -342,7 +342,9 @@ fn assert_runs(executable: &Path, expected_stdout: &[u8]) {
                 assert_eq!(run.stdout, expected_stdout);
                 return;
             }
-            Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+            // ErrorKind::ExecutableFileBusy is 1.83+; the workspace MSRV is
+            // 1.77 so match the raw errno instead (file is unix-gated).
+            Err(error) if error.raw_os_error() == Some(libc::ETXTBSY) => {
                 last_error = Some(error);
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
