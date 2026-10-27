@@ -697,4 +697,99 @@ mod tests {
 
         assert_eq!(resolved, executable);
     }
+
+    #[test]
+    fn test_has_explicit_path_distinguishes_bare_commands() {
+        assert!(has_explicit_path("/usr/bin/tool"));
+        assert!(has_explicit_path("./tool"));
+        assert!(has_explicit_path("bin/tool"));
+        assert!(!has_explicit_path("tool"));
+    }
+
+    #[test]
+    fn test_dedupe_paths_preserves_first_occurrence_order() {
+        let paths = vec![
+            PathBuf::from("/a"),
+            PathBuf::from("/b"),
+            PathBuf::from("/a"),
+            PathBuf::from("/c"),
+            PathBuf::from("/b"),
+        ];
+        assert_eq!(
+            dedupe_paths(paths),
+            vec![
+                PathBuf::from("/a"),
+                PathBuf::from("/b"),
+                PathBuf::from("/c")
+            ]
+        );
+    }
+
+    #[test]
+    fn test_env_command_candidate_joins_or_reuses_path() {
+        // 唯一变量名避免并行测试间 env 竞争。
+        let var = "ONE_PUBLISH_TEST_CMD_HOME";
+        let home = PathBuf::from("/opt/test-tools");
+        std::env::set_var(var, &home);
+
+        // 目录形态：拼接可执行文件名。
+        assert_eq!(
+            env_command_candidate(var, "tool"),
+            Some(home.join(executable_name("tool")))
+        );
+        // 值本身即指向可执行文件：原样返回。
+        std::env::set_var(var, home.join(executable_name("tool")));
+        assert_eq!(
+            env_command_candidate(var, "tool"),
+            Some(home.join(executable_name("tool")))
+        );
+
+        std::env::remove_var(var);
+        assert_eq!(env_command_candidate(var, "tool"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_fallback_candidates_cover_known_and_unknown_commands() {
+        for command in ["dotnet", "cargo", "go", "java", "brew", "rustup"] {
+            assert!(
+                !fallback_command_candidates(command).is_empty(),
+                "{command} must have fallback candidates"
+            );
+        }
+        assert!(fallback_command_candidates("totally-unknown-tool").is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_command_via_login_shell_rejects_unsafe_names() {
+        assert!(resolve_command_via_login_shell("tool; rm -rf /").is_none());
+        assert!(resolve_command_via_login_shell("$(whoami)").is_none());
+        assert!(resolve_command_via_login_shell("tool name").is_none());
+        assert!(resolve_command_via_login_shell("a/b").is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_command_via_login_shell_resolves_sh() {
+        // 登录 shell 兜底路径：`command -v sh` 必解析。
+        let resolved = resolve_command_via_login_shell("sh").expect("sh resolves");
+        assert!(resolved.0.is_file());
+        assert!(!resolved.1.is_empty());
+    }
+
+    #[test]
+    fn test_resolve_command_path_rejects_empty_and_missing_explicit() {
+        assert!(resolve_command_path("   ").is_none());
+        assert!(resolve_command_path("/definitely/missing/tool-xyz").is_none());
+    }
+
+    #[test]
+    fn test_command_path_and_command_exists_for_sh() {
+        if cfg!(unix) {
+            assert!(command_path("sh").is_some());
+            assert!(command_exists("sh"));
+        }
+        assert!(!command_exists("definitely-missing-tool-xyz-12345"));
+    }
 }
