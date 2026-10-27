@@ -3680,4 +3680,195 @@ mod tests {
             Some("automation_binding_not_found")
         );
     }
+
+    #[test]
+    fn pending_commit_validation_enforces_expected_files_and_unknown_boundaries() {
+        let (_temp, work) = fixture_repository();
+        let (config, profile_id) = fixture_tauri_config("Stable");
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let outcome = preview_change(&work, &config, &install, NOW).expect("preview install");
+        assert!(!outcome.expected.files.is_empty());
+        let changed: Vec<&str> = outcome.expected.files.keys().map(String::as_str).collect();
+
+        // 投影提交与固定 Bundle 完全一致 → 验证通过。
+        for (path, file) in &outcome.expected.files {
+            let absolute = work.join(path);
+            std::fs::create_dir_all(absolute.parent().expect("bundle parent"))
+                .expect("create bundle directory");
+            std::fs::write(&absolute, &file.content).expect("write bundle file");
+        }
+        commit_all(&work, "pending projection");
+        super::validate_pending_projection_commit(&work, "main", &config, &outcome, &changed)
+            .expect("identical pending commit validates");
+
+        // 篡改任一期望文件内容 → 拒绝重试。
+        let first = outcome
+            .expected
+            .files
+            .keys()
+            .next()
+            .expect("first bundle path")
+            .clone();
+        std::fs::write(work.join(&first), "tampered content\n").expect("tamper bundle file");
+        run_git(&work, &["add", "--", &first]);
+        run_git(&work, &["commit", "--quiet", "-m", "tamper"]);
+        let error =
+            super::validate_pending_projection_commit(&work, "main", &config, &outcome, &changed)
+                .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("automation_pending_commit_unverified")
+        );
+        assert!(error.message.contains("不一致"), "{:?}", error.message);
+
+        // 提交触碰 Bundle 之外的路径 → 拒绝重试。
+        std::fs::write(work.join("unrelated.txt"), "extra\n").expect("write extra file");
+        run_git(&work, &["add", "--", "unrelated.txt"]);
+        run_git(&work, &["commit", "--quiet", "-m", "add unrelated"]);
+        let error = super::validate_pending_projection_commit(
+            &work,
+            "main",
+            &config,
+            &outcome,
+            &["unrelated.txt"],
+        )
+        .unwrap_err();
+        assert!(error.message.contains("Bundle 之外"), "{:?}", error.message);
+    }
+
+    #[test]
+    fn pending_commit_validation_checks_owned_resource_removal() {
+        let (_temp, work) = fixture_repository();
+        let owned = ".github/workflows/legacy-owned.yml";
+        let owned_path = work.join(owned);
+        std::fs::create_dir_all(owned_path.parent().expect("workflow parent"))
+            .expect("create workflow dir");
+        std::fs::write(&owned_path, "on: [push]\nsteps:\n  - run: echo legacy\n")
+            .expect("seed owned workflow");
+        commit_all(&work, "seed owned workflow");
+        run_git(&work, &["push", "--quiet", "origin", "main"]);
+
+        let (mut config, profile_id) = fixture_tauri_config("Stable");
+        config.applied_bundles = vec![crate::store::AppliedProjectionBundle {
+            backend_id: GITHUB_ACTIONS_BACKEND_ID.to_string(),
+            digest: "d".repeat(64),
+            files: vec![owned.to_string()],
+            applied_at: NOW.to_string(),
+        }];
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let outcome = preview_change(&work, &config, &install, NOW).expect("preview install");
+
+        // HEAD 中仍保留已声明删除的自有资源 → 拒绝。
+        let error =
+            super::validate_pending_projection_commit(&work, "main", &config, &outcome, &[owned])
+                .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("automation_pending_commit_unverified")
+        );
+        assert!(error.message.contains("所有权移除"), "{:?}", error.message);
+
+        // HEAD 移除 + origin/main 仍持有 → 合法的所有权迁移。
+        std::fs::remove_file(&owned_path).expect("remove owned workflow");
+        run_git(&work, &["add", "--", owned]);
+        run_git(&work, &["commit", "--quiet", "-m", "remove owned workflow"]);
+        super::validate_pending_projection_commit(&work, "main", &config, &outcome, &[owned])
+            .expect("owned removal validated when remote still holds the file");
+
+        // origin/main 也不持有 → 删除语义不成立，拒绝。
+        run_git(&work, &["push", "--quiet", "origin", "main"]);
+        let error =
+            super::validate_pending_projection_commit(&work, "main", &config, &outcome, &[owned])
+                .unwrap_err();
+        assert!(error.message.contains("所有权移除"), "{:?}", error.message);
+    }
+
+    #[test]
+    fn pending_commit_validation_checks_confirmed_workflow_takeover() {
+        let (_temp, work) = fixture_repository();
+        let conflict = ".github/workflows/legacy-release.yml";
+        let conflict_path = work.join(conflict);
+        std::fs::create_dir_all(conflict_path.parent().expect("workflow parent"))
+            .expect("create workflow dir");
+        // 与绑定 tag 前缀重叠且产出 release 的存量 workflow —— 接管语义成立。
+        std::fs::write(
+            &conflict_path,
+            "on:\n  push:\n    tags: ['v*']\nsteps:\n  - run: gh release create\n",
+        )
+        .expect("seed conflicting workflow");
+        commit_all(&work, "seed conflict");
+        run_git(&work, &["push", "--quiet", "origin", "main"]);
+
+        let (config, profile_id) = fixture_tauri_config("Stable");
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let outcome = preview_change(&work, &config, &install, NOW).expect("preview install");
+        let AutomationChangeRequest::Install {
+            confirmed_conflict_paths,
+            ..
+        } = &outcome.normalized_change
+        else {
+            panic!("expected install request");
+        };
+        assert!(confirmed_conflict_paths.contains(&conflict.to_string()));
+
+        // HEAD 仍持有已确认的冲突 workflow → 删除语义未兑现，拒绝。
+        let error = super::validate_pending_projection_commit(
+            &work,
+            "main",
+            &config,
+            &outcome,
+            &[conflict],
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("automation_pending_commit_unverified")
+        );
+        assert!(
+            error.message.contains("未经语义确认"),
+            "{:?}",
+            error.message
+        );
+
+        // 删除已确认冲突 + 期望 Bundle 文件 → 合法接管。
+        std::fs::remove_file(&conflict_path).expect("remove conflicting workflow");
+        for (path, file) in &outcome.expected.files {
+            let absolute = work.join(path);
+            std::fs::create_dir_all(absolute.parent().expect("bundle parent"))
+                .expect("create bundle directory");
+            std::fs::write(&absolute, &file.content).expect("write bundle file");
+        }
+        commit_all(&work, "pending takeover projection");
+        let mut changed: Vec<&str> = outcome.expected.files.keys().map(String::as_str).collect();
+        changed.push(conflict);
+        super::validate_pending_projection_commit(&work, "main", &config, &outcome, &changed)
+            .expect("confirmed takeover removal validates");
+
+        // 经确认的非 workflow 路径不受接管语义保护——客户端不可借
+        // confirmed_conflict_paths 夹带任意删除。
+        let mut forged = outcome.normalized_change.clone();
+        let AutomationChangeRequest::Install {
+            confirmed_conflict_paths,
+            ..
+        } = &mut forged
+        else {
+            panic!("expected install request");
+        };
+        *confirmed_conflict_paths = vec!["scripts/deploy.sh".to_string()];
+        let forged =
+            preview_change(&work, &config, &forged, NOW).expect("forge non-workflow confirmation");
+        let error = super::validate_pending_projection_commit(
+            &work,
+            "main",
+            &config,
+            &forged,
+            &["scripts/deploy.sh"],
+        )
+        .unwrap_err();
+        assert!(
+            error.message.contains("未经语义确认"),
+            "{:?}",
+            error.message
+        );
+    }
 }

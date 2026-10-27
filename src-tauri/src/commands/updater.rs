@@ -681,11 +681,13 @@ pub fn get_shortcuts_help() -> Vec<crate::shortcuts::ShortcutHelp> {
 #[cfg(test)]
 mod tests {
     use super::{
-        download_failure_to_app_error, download_with_retry, extract_http_status_code,
-        is_retryable_download_error, is_retryable_status_code, map_updater_error,
-        normalize_expected_version, refresh_after_failure_with_fetch, resolve_update_with_fetch,
-        update_metadata_changed, updater_error_summary, DownloadFailure, PendingUpdateState,
-        UpdateMetadata, UPDATE_DOWNLOAD_MAX_ATTEMPTS,
+        build_progress_payload, calculate_progress_percent, download_failure_to_app_error,
+        download_with_retry, emit_update_download_progress, extract_http_status_code,
+        get_pending_update, is_retryable_download_error, is_retryable_status_code,
+        map_updater_error, normalize_expected_version, refresh_after_failure_with_fetch,
+        resolve_update_with_fetch, retry_delay, set_pending_update, update_metadata_changed,
+        updater_error_summary, DownloadFailure, PendingUpdateState, UpdateMetadata,
+        UPDATE_DOWNLOAD_MAX_ATTEMPTS,
     };
     use crate::errors::{AppError, ErrorKind};
     use std::sync::{Arc, Mutex};
@@ -1139,5 +1141,67 @@ mod tests {
 
         assert_eq!(err.kind, ErrorKind::Updater);
         assert!(err.code.is_some());
+    }
+
+    #[test]
+    fn progress_percent_handles_missing_zero_and_overflow_totals() {
+        assert_eq!(calculate_progress_percent(10, None), None);
+        assert_eq!(calculate_progress_percent(10, Some(0)), None);
+        assert_eq!(calculate_progress_percent(5, Some(10)), Some(50.0));
+        // 已下载量超过服务端声明总量时钳制在 100%。
+        assert_eq!(calculate_progress_percent(20, Some(10)), Some(100.0));
+    }
+
+    #[test]
+    fn progress_payload_carries_stage_and_clamped_percent() {
+        let payload = build_progress_payload(
+            "downloading",
+            "1.2.3",
+            50,
+            Some(100),
+            2,
+            Some("hint".to_string()),
+        );
+        assert_eq!(payload.stage, "downloading");
+        assert_eq!(payload.version, "1.2.3");
+        assert_eq!(payload.downloaded_bytes, 50);
+        assert_eq!(payload.total_bytes, Some(100));
+        assert_eq!(payload.percent, Some(50.0));
+        assert_eq!(payload.attempt, 2);
+        assert_eq!(payload.max_attempts, UPDATE_DOWNLOAD_MAX_ATTEMPTS);
+        assert_eq!(payload.message.as_deref(), Some("hint"));
+    }
+
+    #[test]
+    fn retry_delay_uses_backoff_table() {
+        assert_eq!(retry_delay(1), Duration::from_secs(1));
+        assert_eq!(retry_delay(2), Duration::from_secs(2));
+        assert_eq!(retry_delay(3), Duration::from_secs(4));
+        assert_eq!(retry_delay(10), Duration::from_secs(4));
+    }
+
+    #[test]
+    fn emit_progress_on_mock_app_is_infallible() {
+        let app = updater_test_app();
+        emit_update_download_progress(
+            &app.handle(),
+            build_progress_payload("retrying", "1.0.0", 0, None, 1, None),
+        );
+    }
+
+    #[test]
+    fn help_paths_command_returns_resolved_files() {
+        let paths = super::get_updater_help_paths().expect("help paths resolve");
+        assert!(std::path::Path::new(&paths.docs_path).is_file());
+        assert!(std::path::Path::new(&paths.template_path).is_file());
+    }
+
+    #[test]
+    fn pending_update_accessors_round_trip_none_and_version_mismatch() {
+        let state = PendingUpdateState::default();
+        assert!(get_pending_update(&state, None).is_none());
+        assert!(get_pending_update(&state, Some("1.0.0")).is_none());
+        set_pending_update(&state, None);
+        assert!(get_pending_update(&state, None).is_none());
     }
 }
