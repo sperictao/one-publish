@@ -9,8 +9,9 @@ use super::runtime::{
 };
 use super::types::{
     normalize_environment_provider_ids, normalize_execution_history_limit, trim_execution_history,
-    AppState, ConfigProfile, ExecutionRecord, PublishComposition, PublishSelectionRef, Repository,
-    ScopedPublishDraft, CURRENT_SETTINGS_VERSION, PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+    AppState, ConfigProfile, ExecutionRecord, PublishComposition, PublishConfigurationRevision,
+    PublishSelectionRef, Repository, ScopedPublishDraft, CURRENT_SETTINGS_VERSION,
+    PUBLISH_CONFIGURATION_CONTRACT_VERSION,
 };
 use crate::errors::AppError;
 use crate::publish_runtime::PublishBaseRevisionRef;
@@ -90,6 +91,151 @@ fn ensure_exact_order_match(
     Ok(())
 }
 
+/// 新增仓库前的判重：路径经同一归一化规则比较，命中即拒绝（repository_exists）。
+fn ensure_repository_path_absent(
+    repositories: &[Repository],
+    candidate_path: &str,
+) -> Result<(), AppError> {
+    let normalized_path = normalize_repository_path(candidate_path);
+    if repositories
+        .iter()
+        .any(|repository| normalize_repository_path(&repository.path) == normalized_path)
+    {
+        return Err(AppError::validation_with_code(
+            "仓库已存在",
+            "repository_exists",
+        ));
+    }
+    Ok(())
+}
+
+/// 删除仓库并维护选中引用：被删的是当前选中项时回退到剩余列表首位。
+fn remove_repository_by_id(
+    repositories: &mut Vec<Repository>,
+    selected_repo_id: &mut Option<String>,
+    repo_id: &str,
+) {
+    repositories.retain(|repository| repository.id != repo_id);
+
+    if selected_repo_id.as_deref() == Some(repo_id) {
+        *selected_repo_id = repositories.first().map(|repository| repository.id.clone());
+    }
+}
+
+/// 应用已校验的顺序：只按 id 重新排列，缺项由前置校验拦截，此处防御性丢弃。
+fn apply_repository_order(
+    repositories: Vec<Repository>,
+    ordered_ids: Vec<String>,
+) -> Vec<Repository> {
+    let mut repository_map = repositories
+        .into_iter()
+        .map(|repository| (repository.id.clone(), repository))
+        .collect::<BTreeMap<_, _>>();
+
+    ordered_ids
+        .into_iter()
+        .filter_map(|repo_id| repository_map.remove(&repo_id))
+        .collect()
+}
+
+fn apply_panel_width_update(
+    state: &mut AppState,
+    left_panel_width: Option<i32>,
+    middle_panel_width: Option<i32>,
+) {
+    if let Some(width) = left_panel_width {
+        state.left_panel_width = width;
+        state.panel_widths_customized = true;
+    }
+    if let Some(width) = middle_panel_width {
+        state.middle_panel_width = width;
+        state.panel_widths_customized = true;
+    }
+}
+
+/// 偏好补丁：None 字段保持原值；返回是否修改了语言（决定是否刷新托盘）。
+#[derive(Debug, Default)]
+struct PreferenceUpdate {
+    language: Option<String>,
+    minimize_to_tray_on_close: Option<bool>,
+    default_output_dir: Option<String>,
+    theme: Option<String>,
+    execution_history_limit: Option<usize>,
+    environment_provider_ids: Option<Vec<String>>,
+}
+
+fn apply_preference_update(state: &mut AppState, update: PreferenceUpdate) -> bool {
+    let language_changed = update.language.is_some();
+
+    if let Some(lang) = update.language {
+        state.language = lang;
+    }
+    if let Some(minimize) = update.minimize_to_tray_on_close {
+        state.minimize_to_tray_on_close = minimize;
+    }
+    if let Some(output_dir) = update.default_output_dir {
+        state.default_output_dir = output_dir;
+    }
+    if let Some(theme) = update.theme {
+        state.theme = theme;
+    }
+    if let Some(limit) = update.execution_history_limit {
+        state.execution_history_limit = normalize_execution_history_limit(limit);
+        trim_execution_history(&mut state.execution_history, state.execution_history_limit);
+    }
+    if let Some(provider_ids) = update.environment_provider_ids {
+        state.environment_provider_ids = normalize_environment_provider_ids(provider_ids);
+    }
+
+    language_changed
+}
+
+/// 发布设置表单的初值决策（ADR-0060）：修订已有可读设置时原样返回；否则按
+/// 项目绑定（存量修订退回仓库当前候选）探测建议值，不写入修订。
+fn resolve_release_settings_draft(
+    repo: &Repository,
+    revision: &PublishConfigurationRevision,
+) -> crate::tauri_release::ReleaseSettingsDraft {
+    if let Ok(Some(settings)) =
+        crate::tauri_release::release_settings_from_parameters(&revision.parameters)
+    {
+        return crate::tauri_release::ReleaseSettingsDraft {
+            settings,
+            stored: true,
+        };
+    }
+    let project_binding = revision
+        .project_binding
+        .clone()
+        .or_else(|| repository_project_binding(repo, publish_adapters::TAURI_PROVIDER_ID));
+    let config_path = project_binding.as_deref().and_then(|binding| {
+        crate::publish_runtime::project_binding_selector(
+            publish_adapters::TAURI_PROVIDER_ID,
+            binding,
+        )
+    });
+    crate::tauri_release::ReleaseSettingsDraft {
+        settings: crate::tauri_release::suggested_release_settings(
+            std::path::Path::new(&repo.path),
+            config_path,
+        ),
+        stored: false,
+    }
+}
+
+/// 为执行记录写入快照路径；记录不存在时返回 false（由调用方转成校验错误）。
+fn set_record_snapshot_path(
+    records: &mut [ExecutionRecord],
+    record_id: &str,
+    snapshot_path: String,
+) -> bool {
+    let Some(record) = records.iter_mut().find(|record| record.id == record_id) else {
+        return false;
+    };
+    record.snapshot_path = Some(snapshot_path);
+    true
+}
+
 #[tauri::command]
 pub async fn get_app_state() -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::get_app_state");
@@ -106,18 +252,7 @@ pub async fn get_repository(repo_id: String) -> Result<Repository, AppError> {
 pub async fn add_repository(app: tauri::AppHandle, repo: Repository) -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::add_repository");
     let mut state = get_state();
-    let normalized_path = normalize_repository_path(&repo.path);
-
-    if state
-        .repositories
-        .iter()
-        .any(|repository| normalize_repository_path(&repository.path) == normalized_path)
-    {
-        return Err(AppError::validation_with_code(
-            "仓库已存在",
-            "repository_exists",
-        ));
-    }
+    ensure_repository_path_absent(&state.repositories, &repo.path)?;
 
     state.repositories.push(repo.clone());
     state.selected_repo_id = Some(repo.id);
@@ -133,17 +268,11 @@ pub async fn remove_repository(
     let _timer =
         crate::commands::middleware::CommandTimer::new("store::commands::remove_repository");
     let mut state = get_state();
-
-    state
-        .repositories
-        .retain(|repository| repository.id != repo_id);
-
-    if state.selected_repo_id.as_ref() == Some(&repo_id) {
-        state.selected_repo_id = state
-            .repositories
-            .first()
-            .map(|repository| repository.id.clone());
-    }
+    remove_repository_by_id(
+        &mut state.repositories,
+        &mut state.selected_repo_id,
+        &repo_id,
+    );
 
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
@@ -193,16 +322,7 @@ pub async fn reorder_repositories(
         return Ok(get_bootstrap_state());
     }
 
-    let mut repository_map = state
-        .repositories
-        .into_iter()
-        .map(|repository| (repository.id.clone(), repository))
-        .collect::<BTreeMap<_, _>>();
-
-    state.repositories = requested_ids
-        .into_iter()
-        .filter_map(|repo_id| repository_map.remove(&repo_id))
-        .collect();
+    state.repositories = apply_repository_order(state.repositories, requested_ids);
 
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
@@ -217,15 +337,7 @@ pub async fn update_ui_state(
 ) -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::update_ui_state");
     let mut state = get_state();
-
-    if let Some(width) = left_panel_width {
-        state.left_panel_width = width;
-        state.panel_widths_customized = true;
-    }
-    if let Some(width) = middle_panel_width {
-        state.middle_panel_width = width;
-        state.panel_widths_customized = true;
-    }
+    apply_panel_width_update(&mut state, left_panel_width, middle_panel_width);
     apply_selected_repo_id_update(
         &mut state,
         selected_repo_id,
@@ -249,27 +361,17 @@ pub async fn update_preferences(
     let _timer =
         crate::commands::middleware::CommandTimer::new("store::commands::update_preferences");
     let mut state = get_state();
-    let language_changed = language.is_some();
-
-    if let Some(lang) = language {
-        state.language = lang;
-    }
-    if let Some(minimize) = minimize_to_tray_on_close {
-        state.minimize_to_tray_on_close = minimize;
-    }
-    if let Some(output_dir) = default_output_dir {
-        state.default_output_dir = output_dir;
-    }
-    if let Some(theme) = theme {
-        state.theme = theme;
-    }
-    if let Some(limit) = execution_history_limit {
-        state.execution_history_limit = normalize_execution_history_limit(limit);
-        trim_execution_history(&mut state.execution_history, state.execution_history_limit);
-    }
-    if let Some(provider_ids) = environment_provider_ids {
-        state.environment_provider_ids = normalize_environment_provider_ids(provider_ids);
-    }
+    let language_changed = apply_preference_update(
+        &mut state,
+        PreferenceUpdate {
+            language,
+            minimize_to_tray_on_close,
+            default_output_dir,
+            theme,
+            execution_history_limit,
+            environment_provider_ids,
+        },
+    );
 
     update_state(state)?;
 
@@ -559,31 +661,7 @@ pub async fn load_release_settings_draft(
     let state = get_state();
     let repo = find_repository(&state.repositories, &repo_id)?;
     let revision = repo.publish_config.release_settings_revision(&profile_id)?;
-    if let Ok(Some(settings)) =
-        crate::tauri_release::release_settings_from_parameters(&revision.parameters)
-    {
-        return Ok(crate::tauri_release::ReleaseSettingsDraft {
-            settings,
-            stored: true,
-        });
-    }
-    let project_binding = revision
-        .project_binding
-        .clone()
-        .or_else(|| repository_project_binding(repo, publish_adapters::TAURI_PROVIDER_ID));
-    let config_path = project_binding.as_deref().and_then(|binding| {
-        crate::publish_runtime::project_binding_selector(
-            publish_adapters::TAURI_PROVIDER_ID,
-            binding,
-        )
-    });
-    Ok(crate::tauri_release::ReleaseSettingsDraft {
-        settings: crate::tauri_release::suggested_release_settings(
-            std::path::Path::new(&repo.path),
-            config_path,
-        ),
-        stored: false,
-    })
+    Ok(resolve_release_settings_draft(repo, revision))
 }
 
 /// 发布设置表单的保存命令（ADR-0060）：校验通过才产生新修订。
@@ -876,17 +954,7 @@ pub async fn set_execution_record_snapshot(
         "store::commands::set_execution_record_snapshot",
     );
     let mut state = get_state();
-    let mut found = false;
-
-    for record in &mut state.execution_history {
-        if record.id == record_id {
-            record.snapshot_path = Some(snapshot_path.clone());
-            found = true;
-            break;
-        }
-    }
-
-    if !found {
+    if !set_record_snapshot_path(&mut state.execution_history, &record_id, snapshot_path) {
         return Err(
             AppError::validation_with_code("未找到执行记录", "execution_record_not_found")
                 .with_details(record_id),
@@ -1206,5 +1274,553 @@ mod tests {
         repo.provider_id = None;
         ensure_selection_matches_repository_provider(&repo, &select(&go_profile_id))
             .expect("repositories without a declared provider stay unrestricted");
+    }
+
+    fn test_repository(id: &str, path: &str) -> Repository {
+        Repository {
+            id: id.to_string(),
+            name: format!("Repo {id}"),
+            path: path.to_string(),
+            project_file: None,
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: true,
+            provider_id: None,
+            publish_config: RepoPublishConfig::default(),
+        }
+    }
+
+    #[test]
+    fn normalize_repository_path_matches_frontend_comparison_rules() {
+        use super::normalize_repository_path;
+
+        // POSIX 路径大小写敏感，仅修剪空白与尾部分隔符
+        assert_eq!(normalize_repository_path(" /Repo/App/ "), "/Repo/App");
+        assert_eq!(normalize_repository_path("/repo\\"), "/repo");
+        // 根路径去尾后会变空，保留原文
+        assert_eq!(normalize_repository_path("/"), "/");
+        // Windows 风格路径忽略大小写：盘符 / 反斜杠 / UNC 任一命中
+        assert_eq!(
+            normalize_repository_path("C:\\Repo\\App\\"),
+            "c:\\repo\\app"
+        );
+        assert_eq!(normalize_repository_path("d:/Repo"), "d:/repo");
+        assert_eq!(
+            normalize_repository_path("\\\\NAS\\share\\"),
+            "\\\\nas\\share"
+        );
+    }
+
+    #[test]
+    fn normalize_ordered_ids_trims_dedupes_and_preserves_first_seen_order() {
+        use super::normalize_ordered_ids;
+
+        let ids = vec![
+            "  b ".to_string(),
+            "a".to_string(),
+            String::new(),
+            "   ".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "a ".to_string(),
+        ];
+        assert_eq!(normalize_ordered_ids(ids), vec!["b", "a", "c"]);
+        assert!(normalize_ordered_ids(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn ensure_exact_order_match_requires_same_membership() {
+        use super::ensure_exact_order_match;
+
+        let current = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        // 同集不同序是合法的
+        let reordered = vec!["c".to_string(), "a".to_string(), "b".to_string()];
+        ensure_exact_order_match(&current, &reordered, "test_order_mismatch")
+            .expect("same membership in any order");
+
+        let missing = vec!["a".to_string(), "b".to_string()];
+        let error = ensure_exact_order_match(&current, &missing, "test_order_mismatch")
+            .expect_err("shorter list must be rejected");
+        assert_eq!(error.code.as_deref(), Some("test_order_mismatch"));
+
+        let alien = vec!["a".to_string(), "b".to_string(), "z".to_string()];
+        let error = ensure_exact_order_match(&current, &alien, "test_order_mismatch")
+            .expect_err("unknown member must be rejected");
+        assert_eq!(error.code.as_deref(), Some("test_order_mismatch"));
+    }
+
+    #[test]
+    fn ensure_repository_path_absent_rejects_normalized_duplicates() {
+        use super::ensure_repository_path_absent;
+
+        let repositories = vec![
+            test_repository("r1", "/Repo/App"),
+            test_repository("r2", "D:\\Tools\\Builder"),
+        ];
+
+        ensure_repository_path_absent(&repositories, "/Repo/App/")
+            .expect_err("trailing-slash duplicate must be rejected");
+        ensure_repository_path_absent(&repositories, "d:\\tools\\builder")
+            .expect_err("windows-case duplicate must be rejected");
+        ensure_repository_path_absent(&repositories, "/repo/app")
+            .expect("POSIX paths compare case-sensitively");
+        ensure_repository_path_absent(&repositories, "/other").expect("distinct paths pass");
+    }
+
+    #[test]
+    fn remove_repository_by_id_repairs_selected_fallback() {
+        use super::remove_repository_by_id;
+
+        let mut repositories = vec![
+            test_repository("r1", "/one"),
+            test_repository("r2", "/two"),
+            test_repository("r3", "/three"),
+        ];
+
+        // 删除非选中项：选择保持不变
+        let mut selected = Some("r1".to_string());
+        remove_repository_by_id(&mut repositories, &mut selected, "r3");
+        assert_eq!(repositories.len(), 2);
+        assert_eq!(selected.as_deref(), Some("r1"));
+
+        // 删除选中项：回退到剩余列表首位
+        remove_repository_by_id(&mut repositories, &mut selected, "r1");
+        assert_eq!(repositories.len(), 1);
+        assert_eq!(selected.as_deref(), Some("r2"));
+
+        // 删空后选择置空
+        remove_repository_by_id(&mut repositories, &mut selected, "r2");
+        assert!(repositories.is_empty());
+        assert_eq!(selected, None);
+    }
+
+    #[test]
+    fn apply_repository_order_reorders_by_id() {
+        use super::apply_repository_order;
+
+        let repositories = vec![
+            test_repository("r1", "/one"),
+            test_repository("r2", "/two"),
+            test_repository("r3", "/three"),
+        ];
+        let ordered = apply_repository_order(
+            repositories,
+            vec!["r3".to_string(), "r1".to_string(), "r2".to_string()],
+        );
+        let ids = ordered
+            .iter()
+            .map(|repository| repository.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["r3", "r1", "r2"]);
+    }
+
+    #[test]
+    fn apply_panel_width_update_marks_customization_only_on_real_change() {
+        use super::{apply_panel_width_update, AppState};
+
+        let mut state = AppState::default();
+        let original_left = state.left_panel_width;
+        let original_middle = state.middle_panel_width;
+
+        apply_panel_width_update(&mut state, None, None);
+        assert_eq!(state.left_panel_width, original_left);
+        assert!(!state.panel_widths_customized);
+
+        apply_panel_width_update(&mut state, Some(320), None);
+        assert_eq!(state.left_panel_width, 320);
+        assert_eq!(state.middle_panel_width, original_middle);
+        assert!(state.panel_widths_customized);
+    }
+
+    #[test]
+    fn apply_preference_update_applies_patch_and_reports_language_change() {
+        use super::{apply_preference_update, AppState, PreferenceUpdate};
+
+        let mut state = AppState::default();
+
+        // 无语言字段 → 不刷新托盘；其余字段原样
+        let language_changed = apply_preference_update(
+            &mut state,
+            PreferenceUpdate {
+                minimize_to_tray_on_close: Some(true),
+                theme: Some("dark".to_string()),
+                ..PreferenceUpdate::default()
+            },
+        );
+        assert!(!language_changed);
+        assert!(state.minimize_to_tray_on_close);
+        assert_eq!(state.theme, "dark");
+
+        // 有语言字段 → 报告刷新
+        let language_changed = apply_preference_update(
+            &mut state,
+            PreferenceUpdate {
+                language: Some("en-US".to_string()),
+                ..PreferenceUpdate::default()
+            },
+        );
+        assert!(language_changed);
+        assert_eq!(state.language, "en-US");
+    }
+
+    #[test]
+    fn apply_preference_update_clamps_history_limit_and_trims() {
+        use super::{apply_preference_update, AppState, PreferenceUpdate};
+
+        let mut state = AppState::default();
+        state.execution_history = (0..10)
+            .map(|index| ExecutionRecord {
+                id: format!("rec-{index}"),
+                ..test_record()
+            })
+            .collect();
+
+        apply_preference_update(
+            &mut state,
+            PreferenceUpdate {
+                execution_history_limit: Some(0),
+                ..PreferenceUpdate::default()
+            },
+        );
+        assert_eq!(
+            state.execution_history_limit,
+            crate::store::types::MIN_EXECUTION_HISTORY_LIMIT
+        );
+        assert_eq!(
+            state.execution_history.len(),
+            crate::store::types::MIN_EXECUTION_HISTORY_LIMIT
+        );
+
+        apply_preference_update(
+            &mut state,
+            PreferenceUpdate {
+                execution_history_limit: Some(9999),
+                ..PreferenceUpdate::default()
+            },
+        );
+        assert_eq!(
+            state.execution_history_limit,
+            crate::store::types::MAX_EXECUTION_HISTORY_LIMIT
+        );
+    }
+
+    #[test]
+    fn apply_preference_update_normalizes_environment_provider_ids() {
+        use super::{apply_preference_update, AppState, PreferenceUpdate};
+
+        let mut state = AppState::default();
+        apply_preference_update(
+            &mut state,
+            PreferenceUpdate {
+                environment_provider_ids: Some(vec![
+                    " tauri ".to_string(),
+                    "dotnet".to_string(),
+                    "tauri".to_string(),
+                    " ".to_string(),
+                ]),
+                ..PreferenceUpdate::default()
+            },
+        );
+        assert_eq!(
+            state.environment_provider_ids,
+            vec!["dotnet".to_string(), "tauri".to_string()]
+        );
+
+        // 空列表回退到注册表默认集，而不是保存空偏好
+        apply_preference_update(
+            &mut state,
+            PreferenceUpdate {
+                environment_provider_ids: Some(Vec::new()),
+                ..PreferenceUpdate::default()
+            },
+        );
+        assert!(!state.environment_provider_ids.is_empty());
+    }
+
+    #[test]
+    fn set_record_snapshot_path_updates_matching_record() {
+        use super::set_record_snapshot_path;
+
+        let mut records = vec![test_record(), {
+            let mut second = test_record();
+            second.id = "rec-2".to_string();
+            second
+        }];
+
+        assert!(set_record_snapshot_path(
+            &mut records,
+            "rec-2",
+            "/snapshots/r2.json".to_string()
+        ));
+        assert_eq!(
+            records[1].snapshot_path.as_deref(),
+            Some("/snapshots/r2.json")
+        );
+        assert!(records[0].snapshot_path.is_none());
+
+        assert!(!set_record_snapshot_path(
+            &mut records,
+            "missing",
+            "/snapshots/none.json".to_string()
+        ));
+    }
+
+    #[test]
+    fn redact_sensitive_spec_values_scrubs_nested_secrets_only() {
+        use super::redact_sensitive_spec_values;
+        use serde_json::json;
+
+        let mut value = json!({
+            "token": "abc123",
+            "outputDir": "/repo/out",
+            "nested": { "password": "hunter2", "retries": 3 },
+            "list": [{ "clientSecret": "s" }, "plain", 42]
+        });
+        redact_sensitive_spec_values(&mut value);
+
+        assert_eq!(value["token"], json!(crate::security::REDACTED_VALUE));
+        assert_eq!(
+            value["nested"]["password"],
+            json!(crate::security::REDACTED_VALUE)
+        );
+        assert_eq!(
+            value["list"][0]["clientSecret"],
+            json!(crate::security::REDACTED_VALUE)
+        );
+        // 路径与自由文本原样保留（重跑依赖原值）
+        assert_eq!(value["outputDir"], json!("/repo/out"));
+        assert_eq!(value["nested"]["retries"], json!(3));
+        assert_eq!(value["list"][1], json!("plain"));
+
+        // 非对象值不处理
+        let mut scalar = json!("token");
+        redact_sensitive_spec_values(&mut scalar);
+        assert_eq!(scalar, json!("token"));
+    }
+
+    #[test]
+    fn upsert_edit_draft_creates_scoped_draft_with_registry_version() {
+        use super::upsert_edit_draft;
+
+        let mut repo = test_repository("r1", "/repo");
+        let binding = upsert_edit_draft(
+            &mut repo,
+            "tauri",
+            Some("tauri:src-tauri/tauri.conf.json".to_string()),
+            json!({ "enabledTargets": ["dmg"] }),
+            None,
+        )
+        .expect("create draft");
+
+        assert_eq!(binding.as_deref(), Some("tauri:src-tauri/tauri.conf.json"));
+        assert_eq!(repo.publish_config.drafts.len(), 1);
+        let draft = &repo.publish_config.drafts[0];
+        assert_eq!(draft.provider_id, "tauri");
+        assert_eq!(draft.content.provider_version, "1");
+        assert_eq!(
+            draft.content.parameters,
+            json!({ "enabledTargets": ["dmg"] })
+        );
+        assert_eq!(
+            draft.content.contract_version,
+            super::PUBLISH_CONFIGURATION_CONTRACT_VERSION
+        );
+    }
+
+    #[test]
+    fn upsert_edit_draft_replaces_same_scope_and_keeps_other_scopes() {
+        use super::upsert_edit_draft;
+
+        let mut repo = test_repository("r1", "/repo");
+        upsert_edit_draft(&mut repo, "dotnet", None, json!({ "a": 1 }), None)
+            .expect("create first draft");
+        upsert_edit_draft(
+            &mut repo,
+            "dotnet",
+            Some("dotnet:App.csproj".to_string()),
+            json!({ "a": 2 }),
+            None,
+        )
+        .expect("create second scope");
+        assert_eq!(repo.publish_config.drafts.len(), 2);
+
+        // 同作用域覆盖：参数更新、数量不变
+        upsert_edit_draft(&mut repo, "dotnet", None, json!({ "a": 3 }), None)
+            .expect("replace first scope");
+        assert_eq!(repo.publish_config.drafts.len(), 2);
+        let first = repo
+            .publish_config
+            .drafts
+            .iter()
+            .find(|draft| draft.project_binding.is_none())
+            .expect("first scope still exists");
+        assert_eq!(first.content.parameters, json!({ "a": 3 }));
+    }
+
+    #[test]
+    fn upsert_edit_draft_seeds_from_base_revision_and_rejects_stale_base() {
+        use super::upsert_edit_draft;
+        use crate::publish_runtime::PublishBaseRevisionRef;
+
+        let mut repo = test_repository("r1", "/repo");
+        repo.provider_id = Some("dotnet".to_string());
+        let profile = repo
+            .publish_config
+            .create_profile(
+                "Release".to_string(),
+                "dotnet".to_string(),
+                json!({ "configuration": "Release" }),
+                None,
+                Some("dotnet:App.csproj".to_string()),
+                "2026-10-08T10:00:00Z".to_string(),
+            )
+            .expect("create profile")
+            .clone();
+        let revision = profile.current_revision().expect("revision").clone();
+
+        let base = PublishBaseRevisionRef {
+            configuration_id: profile.id.clone(),
+            revision_id: revision.id.clone(),
+        };
+        upsert_edit_draft(
+            &mut repo,
+            "dotnet",
+            None,
+            json!({ "x": 1 }),
+            Some(base.clone()),
+        )
+        .expect("seed from base revision");
+
+        let draft = &repo.publish_config.drafts[0];
+        assert_eq!(draft.base_revision, Some(base.clone()));
+        assert_eq!(draft.content.provider_id, "dotnet");
+        assert_eq!(
+            draft.content.project_binding.as_deref(),
+            Some("dotnet:App.csproj")
+        );
+
+        // 基准已漂移（修订不再是当前 / 配置不存在）→ publish_source_draft_conflict
+        let stale = PublishBaseRevisionRef {
+            configuration_id: "ghost".to_string(),
+            revision_id: "rev-x".to_string(),
+        };
+        let error = upsert_edit_draft(&mut repo, "dotnet", None, json!({}), Some(stale))
+            .expect_err("stale base must be rejected");
+        assert_eq!(error.code.as_deref(), Some("publish_source_draft_conflict"));
+
+        // 基准 Provider 与提交 Provider 不一致同样拒绝
+        let mismatched = PublishBaseRevisionRef {
+            configuration_id: profile.id,
+            revision_id: revision.id,
+        };
+        let error = upsert_edit_draft(&mut repo, "cargo", None, json!({}), Some(mismatched))
+            .expect_err("provider-mismatched base must be rejected");
+        assert_eq!(error.code.as_deref(), Some("publish_source_draft_conflict"));
+    }
+
+    #[test]
+    fn repository_project_binding_resolves_only_declared_candidates() {
+        use super::repository_project_binding;
+
+        // 未注册 Provider → None
+        let repo = test_repository("r1", "/definitely-not-existing-repo-path");
+        assert_eq!(repository_project_binding(&repo, "bogus-provider"), None);
+
+        // ProjectFile 型 Provider 无 project_file → None（决议 #78 宽限）
+        let repo = test_repository("r1", "/definitely-not-existing-repo-path");
+        assert_eq!(repository_project_binding(&repo, "tauri"), None);
+
+        // project_file 与 Provider 发现规则不匹配 → None
+        let mut repo = test_repository("r1", "/definitely-not-existing-repo-path");
+        repo.project_file = Some("src-tauri/app.csproj".to_string());
+        assert_eq!(repository_project_binding(&repo, "tauri"), None);
+
+        // 匹配的 project_file + 存在的仓库路径 → 固化身份
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let mut repo = test_repository("r1", tempdir.path().to_str().expect("utf8 path"));
+        repo.project_file = Some("src-tauri/tauri.conf.json".to_string());
+        assert_eq!(
+            repository_project_binding(&repo, "tauri").as_deref(),
+            Some("tauri:src-tauri/tauri.conf.json")
+        );
+
+        // 仓库路径不可解析 → 宽限 None（prepare 阶段再阻断）
+        let mut repo = test_repository("r1", "/definitely-not-existing-repo-path");
+        repo.project_file = Some("src-tauri/tauri.conf.json".to_string());
+        assert_eq!(repository_project_binding(&repo, "tauri"), None);
+    }
+
+    #[test]
+    fn resolve_release_settings_draft_prefers_stored_then_suggests() {
+        use super::resolve_release_settings_draft;
+
+        let mut repo = test_repository("r1", "/repo");
+        repo.provider_id = Some("tauri".to_string());
+
+        // 修订已存可读设置 → 原样返回并标记 stored
+        let stored_settings = crate::tauri_release::TauriReleaseConfig {
+            app_name: "My App".to_string(),
+            ..crate::tauri_release::TauriReleaseConfig::default()
+        };
+        let profile = repo
+            .publish_config
+            .create_profile(
+                "Desktop".to_string(),
+                "tauri".to_string(),
+                json!({ "releaseSettings": serde_json::to_value(&stored_settings).unwrap() }),
+                None,
+                None,
+                "2026-10-08T10:00:00Z".to_string(),
+            )
+            .expect("create tauri profile")
+            .clone();
+        let revision = profile.current_revision().expect("revision");
+        let draft = resolve_release_settings_draft(&repo, revision);
+        assert!(draft.stored);
+        assert_eq!(draft.settings.app_name, "My App");
+
+        // 修订无设置但有绑定 → 建议值携带绑定的配置路径，不标记 stored
+        let mut repo = test_repository("r1", "/repo");
+        let profile = repo
+            .publish_config
+            .create_profile(
+                "Fresh".to_string(),
+                "tauri".to_string(),
+                json!({}),
+                None,
+                Some("tauri:apps/desktop/tauri.conf.json".to_string()),
+                "2026-10-08T11:00:00Z".to_string(),
+            )
+            .expect("create unbound-settings profile")
+            .clone();
+        let revision = profile.current_revision().expect("revision");
+        let draft = resolve_release_settings_draft(&repo, revision);
+        assert!(!draft.stored);
+        assert_eq!(
+            draft.settings.app_config_path,
+            "apps/desktop/tauri.conf.json"
+        );
+
+        // 修订无设置亦无绑定且仓库无候选 → 纯默认建议
+        let mut repo = test_repository("r1", "/repo");
+        let profile = repo
+            .publish_config
+            .create_profile(
+                "Plain".to_string(),
+                "tauri".to_string(),
+                json!({}),
+                None,
+                None,
+                "2026-10-08T12:00:00Z".to_string(),
+            )
+            .expect("create plain profile")
+            .clone();
+        let revision = profile.current_revision().expect("revision");
+        let draft = resolve_release_settings_draft(&repo, revision);
+        assert!(!draft.stored);
+        assert_eq!(
+            draft.settings,
+            crate::tauri_release::TauriReleaseConfig::default()
+        );
     }
 }
