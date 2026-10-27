@@ -122,4 +122,120 @@ describe("usePublishLogStream", () => {
     // 两个监听器（session-started + log）都会注册，dispose 至少被调用一次
     expect(dispose).toHaveBeenCalled();
   });
+
+  it("超过可见上限时裁剪到尾部并对齐换行", () => {
+    const { result } = renderHook(() => usePublishLogStream());
+
+    act(() => {
+      emitSessionStarted("s-1");
+    });
+    const oversized = "x".repeat(210_000) + "\ntail-line\n";
+    act(() => {
+      emitLogChunk("s-1", oversized);
+    });
+
+    expect(result.current.outputLog.length).toBeLessThan(oversized.length);
+    expect(result.current.outputLog.startsWith("tail-line")).toBe(true);
+  });
+
+  it("裁剪块内无换行时保留原始尾部", () => {
+    const { result } = renderHook(() => usePublishLogStream());
+
+    act(() => {
+      emitSessionStarted("s-1");
+    });
+    const oversized = "y".repeat(210_000);
+    act(() => {
+      emitLogChunk("s-1", oversized);
+    });
+
+    expect(result.current.outputLog.length).toBe(200_000);
+    expect(result.current.outputLog.endsWith("y")).toBe(true);
+  });
+
+  it("空 chunk 与空 sessionId 分别被忽略", () => {
+    const { result } = renderHook(() => usePublishLogStream());
+
+    act(() => {
+      emitSessionStarted("   ");
+    });
+    act(() => {
+      emitLogChunk("", "no-session\n");
+    });
+    expect(result.current.outputLog).toBe("");
+
+    act(() => {
+      emitSessionStarted("s-1");
+    });
+    act(() => {
+      emitLogChunk("s-1", "");
+    });
+    expect(result.current.outputLog).toBe("");
+  });
+
+  it("session-started 监听注册失败时静默降级", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let callCount = 0;
+    mocks.listen.mockImplementation(async (eventName: string) => {
+      callCount += 1;
+      if (eventName === "provider-publish-session-started") {
+        throw new Error("listen down");
+      }
+      listeners[eventName] = () => undefined;
+      return () => undefined;
+    });
+
+    const { unmount } = renderHook(() => usePublishLogStream());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(errorSpy).toHaveBeenCalled();
+    expect(callCount).toBeGreaterThan(0);
+    unmount();
+  });
+
+  it("卸载早于 session-started 监听解析时释放监听器", async () => {
+    const unlisten = vi.fn();
+    let resolveListen: ((fn: () => void) => void) | null = null;
+    mocks.listen.mockImplementation(async (eventName: string) => {
+      if (eventName === "provider-publish-session-started") {
+        return await new Promise<() => void>((resolve) => {
+          resolveListen = resolve;
+        });
+      }
+      return unlisten;
+    });
+
+    const { unmount } = renderHook(() => usePublishLogStream());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    unmount();
+
+    await act(async () => {
+      resolveListen?.(unlisten);
+      await Promise.resolve();
+    });
+    expect(unlisten).toHaveBeenCalled();
+  });
+
+  it("chunk 监听注册失败时静默降级", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.listen.mockImplementation(async (eventName: string) => {
+      if (eventName === "provider-publish-log") {
+        throw new Error("chunk listen down");
+      }
+      return () => undefined;
+    });
+
+    const { unmount } = renderHook(() => usePublishLogStream());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(errorSpy).toHaveBeenCalled();
+    unmount();
+  });
 });
