@@ -422,6 +422,78 @@ describe("useProjectShellState", () => {
     });
   });
 
+  it("provider 不使用项目文件时立即清空并返回 null", async () => {
+    const { result } = renderHook(() =>
+      useProjectShellState({
+        appT: {},
+        isStateLoading: false,
+        selectedRepoId: "repo-a",
+        selectedRepoPath: "/repo-a",
+        activeProviderId: "cargo",
+        activeProviderUsesProjectFile: false,
+      })
+    );
+
+    await act(async () => {
+      const data = await result.current.scanProject("/repo-a");
+      expect(data).toBeNull();
+    });
+
+    expect(result.current.projectInfo).toBeNull();
+    expect(result.current.isProjectInfoRefreshing).toBe(false);
+    expect(mocks.resolveProjectInfo).not.toHaveBeenCalled();
+    expect(mocks.scanProject).not.toHaveBeenCalled();
+  });
+
+  it("拖拽区 mousedown 驱动窗口拖动与双击最大化", () => {
+    mocks.isTauri.mockReturnValue(true);
+    const startDragging = vi.fn().mockResolvedValue(undefined);
+    const toggleMaximize = vi.fn().mockResolvedValue(undefined);
+    mocks.getCurrentWindow.mockReturnValue({ startDragging, toggleMaximize });
+
+    const dragRegion = document.createElement("div");
+    dragRegion.setAttribute("data-tauri-drag-region", "");
+    const noDrag = document.createElement("button");
+    noDrag.setAttribute("data-tauri-no-drag", "");
+    dragRegion.appendChild(noDrag);
+    document.body.appendChild(dragRegion);
+
+    const { unmount } = renderHook(() =>
+      useProjectShellState({
+        appT: {},
+        isStateLoading: false,
+        selectedRepoId: "repo-a",
+        selectedRepoPath: "/repo-a",
+        activeProviderId: "dotnet",
+      })
+    );
+
+    const single = new MouseEvent("mousedown", {
+      bubbles: true,
+      buttons: 1,
+      detail: 1,
+    });
+    const preventSpy = vi.spyOn(single, "preventDefault");
+    dragRegion.dispatchEvent(single);
+    expect(preventSpy).toHaveBeenCalled();
+    expect(startDragging).toHaveBeenCalledTimes(1);
+
+    dragRegion.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, buttons: 1, detail: 2 })
+    );
+    expect(toggleMaximize).toHaveBeenCalledTimes(1);
+    expect(startDragging).toHaveBeenCalledTimes(1);
+
+    noDrag.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, buttons: 1, detail: 1 })
+    );
+    expect(startDragging).toHaveBeenCalledTimes(1);
+    expect(toggleMaximize).toHaveBeenCalledTimes(1);
+
+    document.body.removeChild(dragRegion);
+    unmount();
+  });
+
   it("绑定项目解析失败时保留失败状态，不改选其他项目", async () => {
     mocks.resolveProjectInfo.mockResolvedValue(null);
     mocks.scanProject.mockResolvedValue(createProjectInfo("/repo-fallback"));
