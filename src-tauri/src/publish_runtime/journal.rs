@@ -1307,4 +1307,334 @@ mod tests {
             .expect("no missing")
             .is_empty());
     }
+
+    mod lease_lifecycle {
+        use super::super::{
+            AttemptJournalHeader, AttemptJournalRepository, JOURNAL_SCHEMA_VERSION,
+        };
+        use publish_domain::{
+            AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
+            PlanningInputSnapshot, PublishError, PublishPlan, PublishResource, PublishResourceKind,
+            PublishResourceLease, ReleaseAttempt, ReleaseIdentity, SourceSnapshot,
+            PLANNING_INPUT_SNAPSHOT_VERSION, PUBLISH_PLAN_VERSION, PUBLISH_RESOURCE_LEASE_VERSION,
+            RELEASE_ATTEMPT_VERSION,
+        };
+        use publish_runner_core::PreparedPublishPlan;
+        use std::collections::{BTreeMap, BTreeSet};
+
+        fn source_snapshot() -> SourceSnapshot {
+            SourceSnapshot {
+                revision: "0123456789abcdef".to_string(),
+                workspace_digest: None,
+                dirty: false,
+                captured_at: "2026-10-27T10:00:00Z".to_string(),
+                reproducible: true,
+            }
+        }
+
+        fn minimal_binding(slot: &str, kind: AdapterKind) -> AdapterBinding {
+            AdapterBinding::new(
+                slot,
+                AdapterIdentity::new(kind, "fixture-adapter", 1),
+                AdapterSettings::new(1),
+            )
+        }
+
+        fn fixture_lease(attempt_id: &str, lease_id: &str, expires: u64) -> PublishResourceLease {
+            PublishResourceLease {
+                version: PUBLISH_RESOURCE_LEASE_VERSION,
+                lease_id: lease_id.to_string(),
+                owner_attempt_id: attempt_id.to_string(),
+                resources: BTreeSet::from([PublishResource::new(
+                    PublishResourceKind::RepositoryWrite,
+                    "/workspace/repository",
+                )]),
+                acquired_at_seconds: 10,
+                expires_at_seconds: expires,
+                renewals: Vec::new(),
+            }
+        }
+
+        fn fixture_header(attempt_id: &str, lease: PublishResourceLease) -> AttemptJournalHeader {
+            let backend = AdapterIdentity::new(AdapterKind::ExecutionBackend, "local-execution", 1);
+            let prepared = PreparedPublishPlan {
+                snapshot: PlanningInputSnapshot {
+                    version: PLANNING_INPUT_SNAPSHOT_VERSION,
+                    configuration_revision: "config-1".to_string(),
+                    runtime_revision: "runner-1".to_string(),
+                    release_input: BTreeMap::new(),
+                    source: source_snapshot(),
+                    external_preconditions: BTreeMap::new(),
+                    promoted_manifest_digest: None,
+                    adapters: AdapterSelection {
+                        project_provider: minimal_binding("project", AdapterKind::ProjectProvider),
+                        artifact_processors: vec![minimal_binding(
+                            "processor",
+                            AdapterKind::ArtifactProcessor,
+                        )],
+                        execution_backend: minimal_binding(
+                            "backend",
+                            AdapterKind::ExecutionBackend,
+                        ),
+                        artifact_store: minimal_binding("store", AdapterKind::ArtifactStore),
+                        delivery_routes: Vec::new(),
+                    },
+                },
+                plan: PublishPlan {
+                    version: PUBLISH_PLAN_VERSION,
+                    snapshot_digest: "snapshot-1".to_string(),
+                    adapters: Vec::new(),
+                    execution_backend: backend.clone(),
+                    routes: Vec::new(),
+                    nodes: Vec::new(),
+                    digest: "plan-1".to_string(),
+                },
+            };
+            AttemptJournalHeader {
+                schema_version: JOURNAL_SCHEMA_VERSION,
+                repository_path: "/workspace/repository".to_string(),
+                created_at_unix_nanos: 42,
+                prepared,
+                attempt: ReleaseAttempt {
+                    version: RELEASE_ATTEMPT_VERSION,
+                    attempt_id: attempt_id.to_string(),
+                    configuration_revision: "config-1".to_string(),
+                    planning_snapshot_digest: "snapshot-1".to_string(),
+                    plan_version: PUBLISH_PLAN_VERSION,
+                    plan_digest: "plan-1".to_string(),
+                    release_identity: ReleaseIdentity::new(
+                        "fixture:app",
+                        source_snapshot(),
+                        "1.0.0",
+                        "stable",
+                        None,
+                    ),
+                    execution_backend: backend,
+                    runtime_revision: "runner-1".to_string(),
+                    backend_run_id: "run-1".to_string(),
+                    manifest_digest: None,
+                },
+                lease,
+            }
+        }
+
+        fn seeded_repository(
+            attempt_id: &str,
+            lease: PublishResourceLease,
+        ) -> (tempfile::TempDir, AttemptJournalRepository) {
+            let journal = tempfile::tempdir().expect("create attempt journal root");
+            let repository = AttemptJournalRepository::new(journal.path().to_path_buf());
+            repository
+                .write_header(&fixture_header(attempt_id, lease))
+                .expect("seed attempt journal header");
+            (journal, repository)
+        }
+
+        #[test]
+        fn active_lease_returns_the_seeded_lease_until_it_expires() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            let active = repository
+                .active_lease("attempt-1", 20)
+                .expect("read active lease")
+                .expect("seeded lease is active");
+            assert_eq!(active.lease_id, "lease-1");
+            // 到期时刻本身即失效。
+            assert!(repository
+                .active_lease("attempt-1", 100)
+                .expect("read expired lease")
+                .is_none());
+        }
+
+        #[test]
+        fn update_lease_rejects_a_lease_owned_by_another_attempt() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            let error = repository
+                .update_lease("attempt-1", &fixture_lease("attempt-2", "lease-2", 200), 20)
+                .expect_err("foreign owner must be rejected");
+            let PublishError::Execution(message) = error else {
+                panic!("expected execution error, got {error:?}")
+            };
+            assert!(message.contains("cannot persist lease for attempt-2"));
+        }
+
+        #[test]
+        fn update_lease_rejects_changes_to_the_leased_resource_scope() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+            let mut drifted = fixture_lease("attempt-1", "lease-2", 200);
+            drifted.resources = BTreeSet::from([PublishResource::new(
+                PublishResourceKind::ReleaseNamespace,
+                "other-namespace",
+            )]);
+
+            let error = repository
+                .update_lease("attempt-1", &drifted, 20)
+                .expect_err("resource drift must be rejected");
+            let PublishError::Execution(message) = error else {
+                panic!("expected execution error, got {error:?}")
+            };
+            assert!(message.contains("cannot change its leased resources"));
+        }
+
+        #[test]
+        fn update_lease_rejects_a_second_active_lease_identity() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            let error = repository
+                .update_lease("attempt-1", &fixture_lease("attempt-1", "lease-2", 50), 20)
+                .expect_err("a second unexpired lease must be rejected");
+            let PublishError::Execution(message) = error else {
+                panic!("expected execution error, got {error:?}")
+            };
+            assert!(message.contains("already holds another active lease"));
+        }
+
+        #[test]
+        fn update_lease_takes_over_once_the_previous_lease_expired() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            repository
+                .update_lease(
+                    "attempt-1",
+                    &fixture_lease("attempt-1", "lease-2", 200),
+                    120,
+                )
+                .expect("expired predecessor is released for the takeover");
+
+            let active = repository
+                .active_lease("attempt-1", 150)
+                .expect("read active lease")
+                .expect("successor lease is active");
+            assert_eq!(active.lease_id, "lease-2");
+            assert_eq!(active.expires_at_seconds, 200);
+        }
+
+        #[test]
+        fn update_lease_extends_the_same_lease_without_a_release() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            repository
+                .update_lease("attempt-1", &fixture_lease("attempt-1", "lease-1", 200), 50)
+                .expect("growing renewal is accepted");
+
+            let active = repository
+                .active_lease("attempt-1", 150)
+                .expect("read active lease")
+                .expect("extended lease stays active");
+            assert_eq!(active.expires_at_seconds, 200);
+        }
+
+        #[test]
+        fn update_lease_noops_when_the_existing_expiry_covers_the_renewal() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            repository
+                .update_lease("attempt-1", &fixture_lease("attempt-1", "lease-1", 80), 20)
+                .expect("shorter expiry is a no-op, not an error");
+
+            let active = repository
+                .active_lease("attempt-1", 50)
+                .expect("read active lease")
+                .expect("untouched lease stays active");
+            assert_eq!(active.expires_at_seconds, 100);
+        }
+
+        #[test]
+        fn release_lease_drops_the_seeded_lease_then_reports_inactivity() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            assert!(repository
+                .release_lease("attempt-1", "lease-1", 30)
+                .expect("release the seeded lease"));
+            assert!(repository
+                .active_lease("attempt-1", 40)
+                .expect("read released lease")
+                .is_none());
+            assert!(!repository
+                .release_lease("attempt-1", "lease-1", 45)
+                .expect("releasing an inactive lease is an inert no-op"));
+        }
+
+        #[test]
+        fn release_lease_rejects_a_lease_id_that_is_not_active() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            let error = repository
+                .release_lease("attempt-1", "lease-9", 20)
+                .expect_err("releasing a foreign lease id must be rejected");
+            let PublishError::Execution(message) = error else {
+                panic!("expected execution error, got {error:?}")
+            };
+            assert!(message.contains("cannot release inactive lease lease-9"));
+        }
+
+        #[test]
+        fn attempt_scope_returns_repository_and_revision_from_the_header() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            assert_eq!(
+                repository
+                    .attempt_scope("attempt-1")
+                    .expect("read attempt scope"),
+                ("/workspace/repository".to_string(), "config-1".to_string())
+            );
+        }
+
+        #[test]
+        fn find_latest_attempt_matches_repository_and_revision() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            assert_eq!(
+                repository
+                    .find_latest_attempt("/workspace/repository", "config-1")
+                    .expect("scan journals")
+                    .as_deref(),
+                Some("attempt-1")
+            );
+            assert!(repository
+                .find_latest_attempt("/workspace/repository", "config-2")
+                .expect("scan mismatched revision")
+                .is_none());
+            assert!(repository
+                .find_latest_attempt("/workspace/other", "config-1")
+                .expect("scan mismatched repository")
+                .is_none());
+        }
+
+        #[test]
+        fn find_latest_attempt_skips_malformed_and_foreign_headers() {
+            let (journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+            let malformed_dir = journal.path().join("malformed-journal");
+            std::fs::create_dir_all(&malformed_dir).expect("create malformed journal dir");
+            std::fs::write(malformed_dir.join("attempt.json"), b"not-json")
+                .expect("write malformed header");
+            let mut foreign =
+                fixture_header("attempt-2", fixture_lease("attempt-2", "lease-2", 100));
+            foreign.repository_path = "/workspace/foreign".to_string();
+            repository
+                .write_header(&foreign)
+                .expect("seed foreign repository journal");
+
+            assert_eq!(
+                repository
+                    .find_latest_attempt("/workspace/repository", "config-1")
+                    .expect("malformed and foreign headers are ignored")
+                    .as_deref(),
+                Some("attempt-1")
+            );
+        }
+    }
 }
