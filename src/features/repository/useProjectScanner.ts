@@ -9,8 +9,10 @@ import {
   scanProjectCandidates as scanProjectCandidatesRequest,
 } from "@/lib/store/api";
 import type { ProjectInfo, ProjectScanCandidates } from "@/lib/store/types";
-
-const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
+import {
+  analyzeProjectScanFailure,
+  localizeInvokeError,
+} from "@/lib/tauri/invokeErrors";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -32,8 +34,6 @@ export function useProjectScanner(params: { appT: TranslationMap }) {
         return;
       }
 
-      const { analyzeProjectScanFailure, localizeInvokeError } =
-        await loadInvokeErrors();
       const failureReason = analyzeProjectScanFailure(err);
 
       if (failureReason === "path_not_found") {

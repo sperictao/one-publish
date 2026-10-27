@@ -6,8 +6,7 @@ import { toast } from "sonner";
 
 import type { ConfigProfile, ProfileOrderEntry } from "@/lib/store/types";
 import type { TranslationMap } from "./types";
-
-const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 
 export interface UseProfileOrderingParams {
   selectedRepoId: string | null;
@@ -74,7 +73,6 @@ export function useProfileOrdering({
               await onReorderFailed();
             }
 
-            const { localizeInvokeError } = await loadInvokeErrors();
             toast.error(profileT.quickEditFailed || "更新配置文件失败", {
               description: localizeInvokeError(err, translations),
             });

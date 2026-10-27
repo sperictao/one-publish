@@ -37,7 +37,14 @@ import {
   type PublishFailedEvent,
 } from "@/features/publish/publishEvents";
 
-const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
+import {
+  analyzePublishExecutionFailure,
+  extractInvokeErrorCode,
+  extractInvokeErrorDetails,
+  extractInvokeErrorMessage,
+  localizeInvokeError,
+} from "@/lib/tauri/invokeErrors";
+
 const loadPublishFailureFeedback = () =>
   import("@/features/publish/usePublishFailureFeedback");
 const loadCancelPublishFeedback = () =>
@@ -232,8 +239,6 @@ export function usePublishExecute({
         setIsPublishing(false);
       })
       .catch(async (error) => {
-        const { extractInvokeErrorCode, localizeInvokeError } =
-          await loadInvokeErrors();
         if (
           !disposed &&
           extractInvokeErrorCode(error) !== "publish_runtime_attempt_not_found"
@@ -477,19 +482,8 @@ export function usePublishExecute({
           });
         }
       } catch (err) {
-        const [
-          {
-            analyzePublishExecutionFailure,
-            extractInvokeErrorCode,
-            extractInvokeErrorDetails,
-            extractInvokeErrorMessage,
-            localizeInvokeError,
-          },
-          { getPublishFailureFeedback },
-        ] = await Promise.all([
-          loadInvokeErrors(),
-          loadPublishFailureFeedback(),
-        ]);
+        const { getPublishFailureFeedback } =
+          await loadPublishFailureFeedback();
         // 不确定 Attempt 的恢复同步：用 prepared 携带的修订身份（含草稿场景下
         // 后端物化的隐藏草稿修订）。
         if (
@@ -648,7 +642,6 @@ export function usePublishExecute({
         activeRunRef.current = null;
       }
     } catch (error) {
-      const { localizeInvokeError } = await loadInvokeErrors();
       toast.error(appT.publishRuntimeRecoveryFailed || "继续发布失败", {
         description: localizeInvokeError(error, translationsRef.current),
       });
@@ -777,10 +770,7 @@ export function usePublishExecute({
         toast.message(appT.noRunningPublishTask || "当前没有运行中的发布任务");
       }
     } catch (err) {
-      const [
-        { extractInvokeErrorCode, localizeInvokeError },
-        { getCancelPublishFeedback },
-      ] = await Promise.all([loadInvokeErrors(), loadCancelPublishFeedback()]);
+      const { getCancelPublishFeedback } = await loadCancelPublishFeedback();
       const errorCode = extractInvokeErrorCode(err);
       const feedback = getCancelPublishFeedback(
         appT,
