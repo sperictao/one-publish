@@ -402,4 +402,165 @@ mod tests {
             original
         );
     }
+
+    #[test]
+    fn temp_and_backup_paths_stay_next_to_the_config_file() {
+        let path = Path::new("/config-dir").join("config.json");
+
+        let temp = build_temp_config_path(&path);
+        assert_eq!(temp.parent(), Some(Path::new("/config-dir")));
+        let temp_name = temp.file_name().and_then(|n| n.to_str()).expect("name");
+        assert!(temp_name.starts_with("config.json.tmp."));
+        // pid + timestamp 后缀保证并发写不互踩
+        assert!(temp_name.contains(&std::process::id().to_string()));
+
+        let backup = build_corrupt_backup_path(&path);
+        assert_eq!(backup.parent(), Some(Path::new("/config-dir")));
+        let backup_name = backup.file_name().and_then(|n| n.to_str()).expect("name");
+        assert!(backup_name.starts_with("config.corrupt."));
+        assert!(backup_name.ends_with(".json"));
+    }
+
+    #[test]
+    fn future_schema_version_only_flags_newer_versions() {
+        let current = u64::from(CURRENT_STORE_SCHEMA_VERSION);
+        assert_eq!(
+            future_schema_version(&serde_json::json!({"schemaVersion": current + 1})),
+            Some(current + 1)
+        );
+        assert_eq!(
+            future_schema_version(&serde_json::json!({"schemaVersion": current})),
+            None
+        );
+        assert_eq!(
+            future_schema_version(&serde_json::json!({"schemaVersion": "9"})),
+            None
+        );
+        assert_eq!(future_schema_version(&serde_json::json!({})), None);
+        assert_eq!(future_schema_version(&serde_json::Value::Null), None);
+    }
+
+    #[test]
+    fn backup_corrupt_file_moves_aside_the_broken_config() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = temp.path().join("config.json");
+
+        assert_eq!(backup_corrupt_file(&path), None);
+
+        fs::write(&path, "{not json").expect("write corrupt");
+        let backup = backup_corrupt_file(&path).expect("backup created");
+
+        assert!(!path.exists(), "original must move aside");
+        assert_eq!(
+            fs::read_to_string(&backup).expect("read backup"),
+            "{not json"
+        );
+        let name = backup.file_name().and_then(|n| n.to_str()).expect("name");
+        assert!(name.starts_with("config.corrupt."));
+    }
+
+    #[test]
+    fn ensure_writable_store_schema_ignores_unrelated_files() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = temp.path().join("config.json");
+
+        // 不存在 → 放行（新装）
+        ensure_writable_store_schema(&path).expect("missing file is writable");
+        // 非 JSON → 放行（损坏文件由 load 侧隔离备份）
+        fs::write(&path, "garbage").expect("write garbage");
+        ensure_writable_store_schema(&path).expect("unparseable stays writable");
+        // 当前 schema → 放行
+        fs::write(
+            &path,
+            format!(r#"{{"schemaVersion":{}}}"#, CURRENT_STORE_SCHEMA_VERSION),
+        )
+        .expect("write current schema");
+        ensure_writable_store_schema(&path).expect("current schema is writable");
+    }
+
+    #[test]
+    fn load_from_path_recovers_corrupt_file_with_backup_notice() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = temp.path().join("config.json");
+        fs::write(&path, "{broken json").expect("write corrupt");
+
+        let state = load_from_path(&path);
+
+        // 默认态 + 启动提示指明备份位置
+        assert!(state.repositories.is_empty());
+        let notice = state.startup_notice.as_deref().expect("startup notice");
+        assert!(notice.contains("损坏配置"));
+        assert!(notice.contains("config.corrupt."));
+        // 原文件已移出原位，下次启动不再重复踩雷
+        assert!(!path.exists());
+        let backups: Vec<_> = fs::read_dir(temp.path())
+            .expect("read dir")
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .filter(|name| name.starts_with("config.corrupt."))
+            .collect();
+        assert_eq!(backups.len(), 1);
+    }
+
+    #[test]
+    fn load_from_path_defaults_when_file_is_missing() {
+        let temp = TempDir::new().expect("temp dir");
+        let state = load_from_path(&temp.path().join("config.json"));
+        assert!(state.startup_notice.is_none());
+        assert!(state.repositories.is_empty());
+    }
+
+    #[test]
+    fn write_json_atomically_leaves_no_temp_files() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = temp.path().join("nested").join("config.json");
+
+        write_json_atomically(&path, br#"{"ok":true}"#).expect("atomic write");
+
+        assert_eq!(fs::read_to_string(&path).expect("read"), r#"{"ok":true}"#);
+        // 临时文件已被 rename 走，目录里只剩目标文件
+        let leftovers: Vec<_> = fs::read_dir(path.parent().expect("parent"))
+            .expect("read dir")
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .filter(|name| name != "config.json")
+            .collect();
+        assert!(leftovers.is_empty(), "leftover temp files: {leftovers:?}");
+    }
+
+    #[test]
+    fn save_and_load_roundtrip_preserves_state() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = temp.path().join("config.json");
+
+        let mut state = AppState::default();
+        state.language = "zh-CN".to_string();
+        state.theme = "dark".to_string();
+        state.repositories.push(super::super::types::Repository {
+            id: "r1".to_string(),
+            name: "Repo".to_string(),
+            path: "/repo".to_string(),
+            project_file: None,
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: true,
+            provider_id: Some("dotnet".to_string()),
+            publish_config: Default::default(),
+        });
+
+        save_to_path(&state, &path).expect("save");
+        let loaded = load_from_path(&path);
+
+        assert_eq!(loaded.language, "zh-CN");
+        assert_eq!(loaded.theme, "dark");
+        assert_eq!(loaded.repositories.len(), 1);
+        assert_eq!(loaded.repositories[0].id, "r1");
+    }
+
+    #[test]
+    fn store_source_error_keeps_code_static_and_cause_in_details() {
+        let error = store_source_error("写入失败", "disk full", "store_write_failed");
+        assert_eq!(error.code.as_deref(), Some("store_write_failed"));
+        assert_eq!(error.details.as_deref(), Some("disk full"));
+    }
 }

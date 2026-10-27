@@ -183,7 +183,7 @@ fn validate_and_parse_fix_command(
 
 #[cfg(test)]
 mod tests {
-    use super::validate_and_parse_fix_command;
+    use super::{apply_fix, validate_and_parse_fix_command, FixAction, FixResult, FixType};
 
     #[test]
     fn fix_command_parsing_allows_brew_install() {
@@ -247,5 +247,66 @@ mod tests {
     fn fix_command_parsing_rejects_brew_install_options() {
         // Intentional tightening: --cask/--formula style options are not in the allowlist.
         assert_unsafe_brew_formula_argument("brew install --cask firefox");
+    }
+
+    fn action(action_type: FixType) -> FixAction {
+        FixAction {
+            action_type,
+            label: "fix".to_string(),
+            command: None,
+            url: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn apply_fix_requires_url_for_open_url() {
+        let error = apply_fix(action(FixType::OpenUrl))
+            .await
+            .expect_err("missing url must fail");
+        assert_eq!(error.code.as_deref(), Some("missing_fix_url"));
+    }
+
+    #[tokio::test]
+    async fn apply_fix_requires_command_for_run_and_copy() {
+        for fix_type in [FixType::RunCommand, FixType::CopyCommand] {
+            let error = apply_fix(action(fix_type))
+                .await
+                .expect_err("missing command must fail");
+            assert_eq!(error.code.as_deref(), Some("missing_fix_command"));
+        }
+    }
+
+    #[tokio::test]
+    async fn apply_fix_rejects_disallowed_commands_before_spawning() {
+        let mut fix = action(FixType::RunCommand);
+        fix.command = Some("rm -rf /".to_string());
+        let error = apply_fix(fix)
+            .await
+            .expect_err("disallowed program must fail");
+        assert_eq!(error.code.as_deref(), Some("unsupported_fix_command"));
+    }
+
+    #[tokio::test]
+    async fn apply_fix_copy_command_returns_the_payload() {
+        let mut fix = action(FixType::CopyCommand);
+        fix.command = Some("brew install rustup".to_string());
+        let result = apply_fix(fix).await.expect("copy succeeds");
+        match result {
+            FixResult::CopiedToClipboard(command) => {
+                assert_eq!(command, "brew install rustup")
+            }
+            other => panic!("expected CopiedToClipboard, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn apply_fix_manual_returns_the_label() {
+        let mut fix = action(FixType::Manual);
+        fix.label = "安装 Xcode".to_string();
+        let result = apply_fix(fix).await.expect("manual succeeds");
+        match result {
+            FixResult::Manual(label) => assert_eq!(label, "安装 Xcode"),
+            other => panic!("expected Manual, got {other:?}"),
+        }
     }
 }

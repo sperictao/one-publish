@@ -80,4 +80,47 @@ mod tests {
         assert_eq!(java.environment_description, "gradle / java runtime");
         assert!(!java.requires_project_binding);
     }
+
+    #[tokio::test]
+    async fn get_provider_schema_resolves_registered_providers() {
+        use super::get_provider_schema;
+
+        let schema = get_provider_schema("dotnet".to_string())
+            .await
+            .expect("dotnet schema");
+        assert!(!schema.parameters.is_empty());
+
+        let error = get_provider_schema("ghost-provider".to_string())
+            .await
+            .expect_err("unknown provider must fail");
+        assert_eq!(error.code.as_deref(), Some("unsupported_provider"));
+    }
+
+    #[tokio::test]
+    async fn import_from_command_parses_registered_provider_commands() {
+        use super::import_from_command;
+
+        let error = import_from_command(
+            "anything".to_string(),
+            "ghost-provider".to_string(),
+            "/repo".to_string(),
+        )
+        .await
+        .expect_err("unknown provider must fail");
+        assert_eq!(error.code.as_deref(), Some("unsupported_provider"));
+
+        let result = import_from_command(
+            "dotnet publish -c Release -o out".to_string(),
+            "dotnet".to_string(),
+            "/repo".to_string(),
+        )
+        .await
+        .expect("dotnet command parses");
+        // schema 键被解析为草稿参数（不构造执行 spec）
+        let configuration = result
+            .parameters
+            .get("configuration")
+            .and_then(|value| value.as_str());
+        assert_eq!(configuration, Some("Release"));
+    }
 }

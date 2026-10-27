@@ -1250,6 +1250,78 @@ fn apply_selected_repo_id_update_supports_clearing_selection() {
     assert_eq!(state.selected_repo_id, Some("repo-2".to_string()));
 }
 
+#[test]
+fn append_execution_history_prepends_and_trims_per_scope() {
+    use super::runtime::append_execution_history;
+    use super::types::MIN_EXECUTION_HISTORY_LIMIT;
+
+    let record = |id: &str, repo_id: Option<&str>| ExecutionRecord {
+        id: id.to_string(),
+        repo_id: repo_id.map(str::to_string),
+        configuration_id: None,
+        configuration_revision_id: None,
+        provider_id: "dotnet".to_string(),
+        project_path: "/repo/App.csproj".to_string(),
+        started_at: "2026-10-27T10:00:00Z".to_string(),
+        finished_at: "2026-10-27T10:01:00Z".to_string(),
+        success: true,
+        cancelled: false,
+        output_dir: None,
+        error: None,
+        command_line: None,
+        snapshot_path: None,
+        failure_signature: None,
+        output_excerpt: None,
+        spec: None,
+        attempt_id: None,
+        recovery_snapshot: None,
+        file_count: 0,
+        warnings: None,
+        manifest_digest: None,
+    };
+
+    // 新记录插到最前（历史按时间倒序消费）
+    let mut history = vec![record("old", Some("repo-1"))];
+    append_execution_history(&mut history, record("new", Some("repo-1")), 20);
+    assert_eq!(history[0].id, "new");
+    assert_eq!(history[1].id, "old");
+
+    // 达到上限时按仓库作用域各自裁剪，互不影响
+    let mut history = Vec::new();
+    for index in 0..MIN_EXECUTION_HISTORY_LIMIT {
+        append_execution_history(
+            &mut history,
+            record(&format!("r1-{index}"), Some("repo-1")),
+            MIN_EXECUTION_HISTORY_LIMIT,
+        );
+        append_execution_history(
+            &mut history,
+            record(&format!("r2-{index}"), Some("repo-2")),
+            MIN_EXECUTION_HISTORY_LIMIT,
+        );
+    }
+    let repo1_count = history
+        .iter()
+        .filter(|record| record.repo_id.as_deref() == Some("repo-1"))
+        .count();
+    let repo2_count = history
+        .iter()
+        .filter(|record| record.repo_id.as_deref() == Some("repo-2"))
+        .count();
+    assert_eq!(repo1_count, MIN_EXECUTION_HISTORY_LIMIT);
+    assert_eq!(repo2_count, MIN_EXECUTION_HISTORY_LIMIT);
+
+    // 无 repo_id 的旧记录按 __legacy__ 桶独立计数
+    append_execution_history(&mut history, record("legacy-0", None), 5);
+    assert_eq!(
+        history
+            .iter()
+            .filter(|record| record.repo_id.is_none())
+            .count(),
+        1
+    );
+}
+
 fn stored_state_with_repositories(repositories: serde_json::Value) -> serde_json::Value {
     serde_json::json!({
         "schemaVersion": 3,

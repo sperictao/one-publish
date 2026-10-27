@@ -888,4 +888,71 @@ mod tests {
             "嵌套对象转换后形状应一致"
         );
     }
+
+    #[tokio::test]
+    async fn import_config_maps_read_parse_and_validation_failures() {
+        let temp = tempfile::tempdir().expect("tempdir");
+
+        let error = import_config(temp.path().join("ghost.json").to_string_lossy().to_string())
+            .await
+            .expect_err("missing file must fail");
+        assert_eq!(error.code.as_deref(), Some("import_config_read_failed"));
+
+        let path = temp.path().join("broken.json");
+        std::fs::write(&path, "{ not json").expect("write garbage");
+        let error = import_config(path.to_string_lossy().to_string())
+            .await
+            .expect_err("unparseable must fail");
+        assert_eq!(error.code.as_deref(), Some("import_config_parse_failed"));
+
+        // 高于支持版本 → 校验拒绝而非导入
+        let path = temp.path().join("future.json");
+        std::fs::write(
+            &path,
+            serde_json::json!({
+                "version": crate::config_export::CONFIG_VERSION + 1,
+                "exported_at": "2026-10-27T00:00:00Z",
+                "profiles": []
+            })
+            .to_string(),
+        )
+        .expect("write future version");
+        let error = import_config(path.to_string_lossy().to_string())
+            .await
+            .expect_err("unsupported version must fail");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("import_config_validation_failed")
+        );
+    }
+
+    #[tokio::test]
+    async fn import_config_returns_valid_export() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("config.json");
+        std::fs::write(
+            &path,
+            serde_json::json!({
+                "version": crate::config_export::CONFIG_VERSION,
+                "exported_at": "2026-10-27T00:00:00Z",
+                "profiles": []
+            })
+            .to_string(),
+        )
+        .expect("write config");
+
+        let config = import_config(path.to_string_lossy().to_string())
+            .await
+            .expect("valid export imports");
+        assert_eq!(config.version, crate::config_export::CONFIG_VERSION);
+        assert!(config.profiles.is_empty());
+    }
+
+    #[tokio::test]
+    async fn export_config_reports_unknown_repository() {
+        let error = export_config("ghost-repo-id".to_string(), "/tmp/export.json".to_string())
+            .await
+            .expect_err("unknown repo must fail");
+        assert_eq!(error.code.as_deref(), Some("config_repo_not_found"));
+    }
 }
