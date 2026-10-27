@@ -118,7 +118,6 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            commands::scan_project_files,
             commands::scan_project,
             commands::scan_project_candidates,
             commands::resolve_project_info,

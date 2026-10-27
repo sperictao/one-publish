@@ -49,12 +49,12 @@ pub(crate) use publish::{execute_provider_publish, execute_sealed_build, SealedB
 pub(crate) use repository::{
     __cmd__check_repository_branch_connectivity, __cmd__detect_repository_provider,
     __cmd__read_project_publish_profile, __cmd__resolve_project_info, __cmd__scan_project,
-    __cmd__scan_project_candidates, __cmd__scan_project_files, __cmd__scan_repository_branches,
+    __cmd__scan_project_candidates, __cmd__scan_repository_branches,
 };
 pub use repository::{
     check_repository_branch_connectivity, detect_repository_provider, read_project_publish_profile,
-    resolve_project_info, scan_project, scan_project_candidates, scan_project_files,
-    scan_repository_branches, ProjectInfo, ProjectPublishProfileFile, ProjectScanCandidates,
+    resolve_project_info, scan_project, scan_project_candidates, scan_repository_branches,
+    ProjectInfo, ProjectPublishProfileFile, ProjectScanCandidates,
     RepositoryBranchConnectivityResult, RepositoryBranchScanResult, RepositoryProviderCandidate,
     RepositoryProviderDetection,
 };

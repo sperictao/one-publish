@@ -63,8 +63,5 @@ export function usePresetText(configT: TranslationMap) {
     [presetTextMap]
   );
 
-  return {
-    presetTextMap,
-    getPresetText,
-  };
+  return { getPresetText };
 }

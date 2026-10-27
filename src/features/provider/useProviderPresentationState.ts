@@ -179,7 +179,6 @@ export function useProviderPresentationState(params: {
 
   return {
     availableProviders,
-    resolvedActiveProvider,
     activeProviderLabel,
     activeProviderUsesProjectFile,
     activeProviderRequiresProjectBinding,
