@@ -55,7 +55,6 @@ const validate = {
   publishPreviewCommand: "",
   preparedRuntime: null,
   runtimePreparationError: null,
-  isResolvingSelectedProjectProfile: false,
   publishPresentationScopeKey: "scope",
 } as unknown as UsePublishValidateResult;
 
