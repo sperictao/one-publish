@@ -1658,6 +1658,7 @@ fn executor_rejects_nodes_the_backend_forged_or_replayed() {
 struct RecordingLeasePort {
     maintained: std::sync::Mutex<Vec<String>>,
     fail_at: Option<usize>,
+    uncertain_at: Option<usize>,
 }
 
 impl publish_runner_core::AttemptLeaseMaintenancePort for RecordingLeasePort {
@@ -1669,6 +1670,11 @@ impl publish_runner_core::AttemptLeaseMaintenancePort for RecordingLeasePort {
                 "simulated lease maintenance outage".to_string(),
             ));
         }
+        if self.uncertain_at == Some(calls.len()) {
+            return Err(PublishError::AttemptStateUncertain {
+                reason: "simulated uncertain lease state".to_string(),
+            });
+        }
         Ok(())
     }
 }
@@ -1679,6 +1685,7 @@ fn lease_maintenance_runs_alongside_execution_and_failures_are_uncertain() {
     let port = Arc::new(RecordingLeasePort {
         maintained: std::sync::Mutex::new(Vec::new()),
         fail_at: None,
+        uncertain_at: None,
     });
     let (fixture, prepared) = scripted_fixture(&[("scripted", "ok", true)]);
     let context = AttemptExecutionContext::at(0).with_lease_maintenance(port.clone());
@@ -1700,6 +1707,7 @@ fn lease_maintenance_runs_alongside_execution_and_failures_are_uncertain() {
     let port = Arc::new(RecordingLeasePort {
         maintained: std::sync::Mutex::new(Vec::new()),
         fail_at: Some(1),
+        uncertain_at: None,
     });
     let (fixture, prepared) = scripted_fixture(&[("scripted", "ok", true)]);
     let context = AttemptExecutionContext::at(0).with_lease_maintenance(port);
@@ -2197,6 +2205,7 @@ fn resume_retries_pending_routes_under_cancellation_and_propagates_uncertain_fai
     let port = Arc::new(RecordingLeasePort {
         maintained: Mutex::new(Vec::new()),
         fail_at: Some(1),
+        uncertain_at: None,
     });
     let error = fixture
         .runtime
@@ -2554,6 +2563,332 @@ fn resume_revalidates_staged_envelopes_against_sealed_settings() {
         error
             .to_string()
             .contains("no longer accept the staged envelope"),
+        "unexpected error: {error}"
+    );
+}
+
+// ─── 归约/同步兜底、租约直通与持久化边界 ───
+
+#[test]
+fn synchronize_recovers_a_failed_aggregate_view_from_gapless_history() {
+    // required 路线 A 留有失败证据、路线 B 无任何证据：verdict 聚合为
+    // Failed（非仅取消），因果完备的历史同步出恢复视图。
+    let (fixture, prepared, view) = completed_view(
+        &[("a", "publish-fails", true), ("b", "ok", true)],
+        "attempt-aggregate",
+    );
+    assert_eq!(
+        view.status,
+        publish_domain::PublishAttemptStatus::PartialDelivery
+    );
+    let mut events = view.events.clone();
+    events.retain(|event| {
+        !event.plan_node_id.starts_with("b.")
+            && !serde_json::to_string(&event.payload)
+                .is_ok_and(|payload| payload.contains(":\"b\""))
+    });
+    for (index, event) in events.iter_mut().enumerate() {
+        event.sequence = index as u64 + 1;
+    }
+    let sync = fixture
+        .runtime
+        .synchronize_attempt(&prepared, &view.attempt, &events, &[], None)
+        .expect("a gapless history synchronizes");
+    let recovered = sync
+        .view
+        .expect("a gapless history recovers a complete view");
+    assert_eq!(
+        recovered.status,
+        publish_domain::PublishAttemptStatus::Failed,
+        "failed required route plus evidence-free route aggregates to Failed: {recovered:?}"
+    );
+}
+
+#[test]
+fn recovery_rejects_events_that_bind_conflicting_manifests() {
+    // 同一尝试归约出两份不同 manifest 摘要：事件历史自相矛盾，拒绝恢复。
+    let (fixture, prepared, view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-manifest-conflict");
+    let mut events = view.events.clone();
+    let mut forged = events
+        .iter()
+        .find(|event| event.payload.contains_key("manifest_digest"))
+        .expect("the manifest binding event exists")
+        .clone();
+    forged.event_id = "forged-manifest-binding".to_string();
+    forged.sequence = events.len() as u64 + 1;
+    forged
+        .payload
+        .insert("manifest_digest".to_string(), Value::String("0".repeat(64)));
+    events.push(forged);
+    let error = fixture
+        .runtime
+        .synchronize_attempt(&prepared, &view.attempt, &events, &[], None)
+        .expect_err("conflicting manifest bindings must not reduce");
+    assert!(
+        error.to_string().contains("conflicting artifact manifests"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn recovery_uses_a_fallback_message_for_bare_node_failures() {
+    // 没有 error 载荷的 plan_node_failed：归约不得丢弃失败事实，
+    // 以节点 id 兜底成可读错误。
+    let (fixture, prepared, view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-bare-failure");
+    let mut events = view.events.clone();
+    let mut forged = events[0].clone();
+    forged.event_id = "bare-node-failure".to_string();
+    forged.kind = "plan_node_failed".to_string();
+    forged.plan_node_id = "provider.build".to_string();
+    forged.payload = BTreeMap::new();
+    forged.sequence = events.len() as u64 + 1;
+    events.push(forged);
+    let sync = fixture
+        .runtime
+        .synchronize_attempt(&prepared, &view.attempt, &events, &[], None)
+        .expect("a gapless history synchronizes");
+    let recovered = sync.view.expect("a gapless history recovers a view");
+    assert!(
+        recovered
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("publish plan node provider.build failed")),
+        "the fallback message must name the failed node: {recovered:?}"
+    );
+}
+
+#[test]
+fn recovery_accepts_pending_delivery_receipt_lifecycle_entries() {
+    // 修订 1 的 Pending Receipt 是合法初始生命周期状态；修订 2 推进到
+    // Published 经过 Pending→* 的迁移臂，路线按最落后状态呈现 Pending。
+    let (fixture, prepared, view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-pending-lifecycle");
+    let manifest_digest = view
+        .manifest
+        .as_ref()
+        .expect("sealed manifest")
+        .digest
+        .clone();
+    let mut events = view.events.clone();
+    let mut pending = publish_domain::DeliveryReceipt::published(
+        "receipt-scripted",
+        "scripted",
+        &manifest_digest,
+        "local://a",
+    );
+    pending.status = publish_domain::DeliveryStatus::Pending;
+    pending.revision = 1;
+    let mut published = pending.clone();
+    published.revision = 2;
+    published.status = publish_domain::DeliveryStatus::Published;
+    let mut forged = events[0].clone();
+    forged.event_id = "pending-receipt-revision-2".to_string();
+    forged.plan_node_id = "scripted.observe".to_string();
+    forged.sequence = events.len() as u64 + 1;
+    forged.kind = "delivery_receipt_observed".to_string();
+    forged.payload = BTreeMap::from([(
+        "receipt".to_string(),
+        serde_json::to_value(&published).expect("receipt serializes"),
+    )]);
+    for event in events.iter_mut() {
+        if event.kind == "delivery_receipt_observed" {
+            event.payload.insert(
+                "receipt".to_string(),
+                serde_json::to_value(&pending).expect("receipt serializes"),
+            );
+        }
+    }
+    events.push(forged);
+    let sync = fixture
+        .runtime
+        .synchronize_attempt(&prepared, &view.attempt, &events, &[], None)
+        .expect("pending lifecycle history still reduces");
+    let recovered = sync.view.expect("a gapless history recovers a view");
+    let route = recovered
+        .routes
+        .iter()
+        .find(|route| route.route_id == "scripted")
+        .expect("scripted route present");
+    assert_eq!(
+        route.status,
+        publish_domain::DeliveryStatus::Published,
+        "the latest revision presents the route as published: {route:?}"
+    );
+
+    // 只有一条 Pending 修订时，路线按最落后的 Receipt 呈现 Pending。
+    let mut pending_only = view.events.clone();
+    for event in pending_only.iter_mut() {
+        if event.kind == "delivery_receipt_observed" {
+            event.payload.insert(
+                "receipt".to_string(),
+                serde_json::to_value(&pending).expect("receipt serializes"),
+            );
+        }
+    }
+    let sync = fixture
+        .runtime
+        .synchronize_attempt(&prepared, &view.attempt, &pending_only, &[], None)
+        .expect("a pending-only history still reduces");
+    let recovered = sync.view.expect("a gapless history recovers a view");
+    let route = recovered
+        .routes
+        .iter()
+        .find(|route| route.route_id == "scripted")
+        .expect("scripted route present");
+    assert_eq!(
+        route.status,
+        publish_domain::DeliveryStatus::Pending,
+        "a pending-only receipt keeps the route pending: {route:?}"
+    );
+}
+
+#[test]
+fn resume_reports_no_resumable_route_when_everything_is_published() {
+    // 全部路线 Published 的尝试没有可续传工作：评估为空，按 blocked
+    // 原因显式阻断而不是空转成功。
+    let (fixture, prepared, view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-nothing-to-resume");
+    let error = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect_err("a fully published attempt has nothing to resume");
+    assert!(
+        matches!(error, PublishError::AutomaticRetryBlocked { .. })
+            && error.to_string().contains("no resumable delivery route"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn resume_propagates_uncertain_lease_failures_during_execution() {
+    // 续传执行期的租约维护失败升级为 AttemptStateUncertain 并原样上抛：
+    // 未完成的外部副作用不能伪装成普通失败。
+    let (fixture, prepared, mut view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-uncertain-resume");
+    view.events.retain(|event| {
+        !event.plan_node_id.starts_with("scripted.publish")
+            && !event.plan_node_id.starts_with("scripted.observe")
+    });
+    for (index, event) in view.events.iter_mut().enumerate() {
+        event.sequence = index as u64 + 1;
+    }
+    view.receipts.clear();
+    view.receipt_history.clear();
+    let port = Arc::new(RecordingLeasePort {
+        maintained: std::sync::Mutex::new(Vec::new()),
+        fail_at: Some(1),
+        uncertain_at: None,
+    });
+    let context = AttemptExecutionContext::at(0).with_lease_maintenance(port);
+    let error = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &context)
+        .expect_err("lease maintenance failures surface as uncertain");
+    assert!(
+        matches!(error, PublishError::AttemptStateUncertain { .. }),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn lease_maintenance_preserves_uncertain_errors_verbatim() {
+    // 维护端口自身报 AttemptStateUncertain 时不再二次包装：原因原文上抛。
+    let port = Arc::new(RecordingLeasePort {
+        maintained: std::sync::Mutex::new(Vec::new()),
+        fail_at: None,
+        uncertain_at: Some(1),
+    });
+    let (fixture, prepared) = scripted_fixture(&[("scripted", "ok", true)]);
+    let context = AttemptExecutionContext::at(0).with_lease_maintenance(port);
+    let error = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            start_request("attempt-lease-uncertain", &fixture.snapshot.source),
+            &context,
+        )
+        .expect_err("uncertain lease errors propagate unchanged");
+    assert!(
+        matches!(error, PublishError::AttemptStateUncertain { .. })
+            && error
+                .to_string()
+                .contains("simulated uncertain lease state"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn submitted_evidence_survives_cancellation_and_sibling_staging_is_cleaned() {
+    // publish-a 提交 Submitted Receipt 后请求取消：publish-b 在取消检查点
+    // 跳过；取消收尾保留 a 的已提交证据，清理 b 拥有的暂存并记事件。
+    let (fixture, prepared) =
+        scripted_fixture(&[("a", "submitted-then-cancel", true), ("b", "ok", true)]);
+    let view = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            start_request("attempt-cancel-cleanup", &fixture.snapshot.source),
+            &AttemptExecutionContext::at(0),
+        )
+        .expect("cancellation settles into a cancelled view");
+    assert_eq!(
+        view.status,
+        publish_domain::PublishAttemptStatus::Cancelled,
+        "unexpected view: {view:?}"
+    );
+    assert!(
+        view.receipts.iter().any(|receipt| {
+            receipt.route_id == "a" && receipt.status == publish_domain::DeliveryStatus::Submitted
+        }),
+        "the submitted receipt must survive cancellation: {view:?}"
+    );
+    assert!(
+        view.events.iter().any(|event| {
+            event.kind == "route_staging_cleaned"
+                && event.payload.get("route_id").and_then(Value::as_str) == Some("b")
+        }),
+        "owned staging for route b must be cleaned and evidenced: {view:?}"
+    );
+}
+
+#[test]
+fn persistence_failures_on_started_events_propagate() {
+    // 事件追加是证据写入：持久化失败不能静默吞掉，必须阻断执行上抛。
+    struct FailingAppend;
+    impl AttemptPersistencePort for FailingAppend {
+        fn begin_attempt(
+            &self,
+            _attempt: &publish_domain::ReleaseAttempt,
+        ) -> Result<(), PublishError> {
+            Ok(())
+        }
+        fn append_events(
+            &self,
+            _events: &[publish_domain::PublishEvent],
+            _manifest: Option<&publish_domain::ArtifactManifest>,
+        ) -> Result<(), PublishError> {
+            Err(PublishError::Execution(
+                "simulated event persistence failure".to_string(),
+            ))
+        }
+    }
+
+    let (fixture, prepared) = scripted_fixture(&[("scripted", "ok", true)]);
+    let context = AttemptExecutionContext::at(0).with_persistence(Arc::new(FailingAppend));
+    let error = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            start_request("attempt-append-fails", &fixture.snapshot.source),
+            &context,
+        )
+        .expect_err("event persistence failures must propagate");
+    assert!(
+        error
+            .to_string()
+            .contains("simulated event persistence failure"),
         "unexpected error: {error}"
     );
 }
