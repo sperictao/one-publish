@@ -60,6 +60,41 @@ describe("appStore.loadState", () => {
     );
   });
 
+  it("迁移 __legacy__ 收藏到选中仓库并把名称收藏改写为 ID 后持久化", async () => {
+    useAppStore.setState({
+      isLoading: true,
+      error: null,
+      favoriteConfigKeysByRepo: { __legacy__: ["userprofile:Release"] },
+    });
+    localStorage.removeItem("one-publish:favoriteConfigs");
+    getAppState.mockResolvedValue({
+      repositories: [
+        {
+          id: "repo-1",
+          publishConfig: {
+            profiles: [{ id: "profile-9", name: "Release" }],
+          },
+        },
+      ],
+      selectedRepoId: "repo-1",
+      executionHistory: [],
+      recentRepoIds: ["repo-1"],
+      recentConfigKeysByRepo: {},
+      theme: "dark",
+    });
+
+    await useAppStore.getState().loadState();
+
+    // 两段迁移依次发生：__legacy__ 落位 repo-1，随后 userprofile:<名>
+    // 经后端迁移后的 name→ID 表改写为 userprofile:<ID> 并回写存储。
+    expect(useAppStore.getState().favoriteConfigKeysByRepo).toEqual({
+      "repo-1": ["userprofile:profile-9"],
+    });
+    expect(localStorage.getItem("one-publish:favoriteConfigs")).toBe(
+      JSON.stringify({ "repo-1": ["userprofile:profile-9"] })
+    );
+  });
+
   it("applies the loaded app state and clears isLoading", async () => {
     getAppState.mockResolvedValue({
       repositories: [],
@@ -132,6 +167,15 @@ describe("appStore execution history", () => {
     expect(useAppStore.getState().executionHistory).toEqual(updated);
   });
 
+  it("swallows save failures", async () => {
+    apiMocks.addExecutionRecord.mockRejectedValue(new Error("io"));
+    useAppStore.setState({ executionHistory: [record("keep")] });
+
+    await useAppStore.getState().savePublishRecord(record("new"));
+
+    expect(useAppStore.getState().executionHistory).toEqual([record("keep")]);
+  });
+
   it("sets the snapshot path and stores the returned history", async () => {
     const updated = [record("a")];
     apiMocks.setExecutionRecordSnapshot.mockResolvedValue(updated);
@@ -143,6 +187,15 @@ describe("appStore execution history", () => {
       "/snap/a.md"
     );
     expect(useAppStore.getState().executionHistory).toEqual(updated);
+  });
+
+  it("swallows snapshot-path update failures", async () => {
+    apiMocks.setExecutionRecordSnapshot.mockRejectedValue(new Error("io"));
+    useAppStore.setState({ executionHistory: [record("keep")] });
+
+    await useAppStore.getState().setExecutionSnapshotPath("a", "/snap/a.md");
+
+    expect(useAppStore.getState().executionHistory).toEqual([record("keep")]);
   });
 
   it("restores authoritative state and returns it", async () => {
