@@ -109,3 +109,46 @@ fn load_shard_segments_reports_undecodable_files() {
         load_shard_segments(root.path()).expect_err("corrupt segments must surface as an error");
     assert!(matches!(error, PublishError::Io { .. }));
 }
+
+#[test]
+fn segment_directories_without_manifests_are_skipped() {
+    let root = tempfile::tempdir().expect("temp root");
+    fs::create_dir_all(root.path().join("empty-segment")).expect("empty segment");
+    let artifacts = load_staged_artifacts(root.path()).expect("load skips bare segments");
+    assert!(artifacts.is_empty());
+}
+
+#[test]
+fn staging_reports_io_failures_when_staging_roots_are_occupied() {
+    let root = tempfile::tempdir().expect("temp root");
+
+    // files/ 被同名文件占用：建目录失败必须以 io 错误呈现。
+    let segment = root.path().join("macos");
+    fs::create_dir_all(&segment).expect("segment root");
+    fs::write(segment.join("files"), b"occupied").expect("occupy files root");
+    let error = stage_shard_artifacts(
+        root.path(),
+        "macos",
+        std::slice::from_ref(&candidate("app.dmg")),
+    )
+    .expect_err("an occupied files root fails staging");
+    assert!(
+        error.to_string().contains("create staging macos"),
+        "unexpected error: {error}"
+    );
+
+    // 产物子目录父路径被占用：嵌套候选的父目录创建同样失败关闭。
+    let segment = root.path().join("linux");
+    fs::create_dir_all(segment.join("files")).expect("files root");
+    fs::write(segment.join("files").join("0-dmg"), b"occupied").expect("occupy nested parent");
+    let error = stage_shard_artifacts(
+        root.path(),
+        "linux",
+        std::slice::from_ref(&candidate("dmg/app.dmg")),
+    )
+    .expect_err("an occupied nested parent fails staging");
+    assert!(
+        error.to_string().contains("create staging parent"),
+        "unexpected error: {error}"
+    );
+}

@@ -4,9 +4,9 @@
 use std::collections::BTreeMap;
 
 use one_publish_runner::{
-    current_runtime_revision, installed_registry, validate_prepared_attempt, validate_projection,
-    verify_installed_projection, PreparedAttempt, RunnerPorts, RunnerProjection, StandaloneRunner,
-    RUNNER_PROJECTION_VERSION,
+    current_runtime_revision, installed_registry, installed_runner, validate_prepared_attempt,
+    validate_projection, verify_installed_projection, PreparedAttempt, RunnerPorts,
+    RunnerProjection, StandaloneRunner, RUNNER_PROJECTION_VERSION,
 };
 use publish_domain::{
     AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
@@ -548,4 +548,97 @@ fn installed_registry_materializes_selected_provider_and_custom_processors() {
     ];
     installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
         .expect("selected provider and custom processors must materialize");
+}
+
+#[test]
+fn installed_registry_rejects_unshipped_adapters_in_every_slot() {
+    // 每个绑定槽位都独立把关：投影可以声明任何 adapter 身份，
+    // 但本机 registry 只能物化随二进制分发的实现（决议 #86）。
+    let temp = tempfile::tempdir().expect("temp dirs");
+    let base = fixture_snapshot(
+        &temp.path().join("store").to_string_lossy(),
+        &temp.path().join("out").to_string_lossy(),
+    );
+    let reject = |mutate: fn(&mut PlanningInputSnapshot)| {
+        let mut snapshot = base.clone();
+        mutate(&mut snapshot);
+        let error = installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
+            .err()
+            .expect("unshipped adapters must fail materialization");
+        assert!(
+            matches!(error, PublishError::AdapterNotRegistered { .. }),
+            "unexpected error: {error}"
+        );
+    };
+
+    reject(|snapshot| {
+        snapshot.adapters.project_provider.adapter.id = "unshipped-provider".to_string();
+    });
+    reject(|snapshot| {
+        snapshot.adapters.artifact_processors[0].adapter.id = "unshipped-processor".to_string();
+    });
+    reject(|snapshot| {
+        snapshot.adapters.execution_backend.adapter.id = "unshipped-backend".to_string();
+    });
+    reject(|snapshot| {
+        snapshot.adapters.artifact_store.adapter.id = "unshipped-store".to_string();
+    });
+    reject(|snapshot| {
+        snapshot.adapters.delivery_routes[0].binding.adapter.id =
+            "unshipped-destination".to_string();
+    });
+}
+
+#[test]
+fn projection_and_attempt_revisions_must_match_the_installed_runtime() {
+    let temp = tempfile::tempdir().expect("temp dirs");
+    let snapshot = fixture_snapshot(
+        &temp.path().join("store").to_string_lossy(),
+        &temp.path().join("out").to_string_lossy(),
+    );
+
+    // 投影 adapter 集与本机实现漂移：钉住的修订与物化的修订不再一致。
+    let mut projection = fixture_projection(&snapshot);
+    projection.adapters.project_provider.adapter.id = "foreign-provider".to_string();
+    let error = verify_installed_projection(&projection)
+        .expect_err("adapter drift breaks the pinned revision");
+    assert!(
+        error.to_string().contains("installed runner provides"),
+        "unexpected error: {error}"
+    );
+
+    // 预备尝试钉住的修订与本机不符：installed_runner 拒绝执行。
+    // 校验链要求尝试内部自洽：快照钉住同一异质修订并重算快照摘要，
+    // 但快照 adapter 集仍是本机分发的——物化修订因此与钉住修订分叉。
+    let mut attempt = prepared_attempt();
+    let mut foreign_adapters: Vec<_> = attempt
+        .prepared
+        .snapshot
+        .adapters
+        .ordered_bindings()
+        .into_iter()
+        .map(|binding| binding.adapter.clone())
+        .collect();
+    foreign_adapters[0].id = "foreign-provider".to_string();
+    let foreign_revision = current_runtime_revision(foreign_adapters)
+        .expect("seal a foreign-but-valid runtime revision");
+    attempt.runtime_revision = foreign_revision.clone();
+    attempt.prepared.snapshot.runtime_revision = foreign_revision.identifier();
+    attempt.prepared.plan.snapshot_digest = attempt
+        .prepared
+        .snapshot
+        .digest()
+        .expect("reseal snapshot digest");
+    attempt.prepared.plan.digest = attempt
+        .prepared
+        .plan
+        .recomputed_digest()
+        .expect("reseal plan digest");
+    let error = installed_runner(&attempt)
+        .err()
+        .expect("attempts pinned to foreign revisions are rejected");
+    assert!(
+        error.to_string().contains("installed runner provides"),
+        "unexpected error: {error}"
+    );
 }
