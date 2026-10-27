@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const attachConsoleMock = vi.fn(() => Promise.resolve(() => {}));
 
 vi.mock("@tauri-apps/plugin-log", () => ({
-  attachConsole: (...args: unknown[]) => attachConsoleMock(...args),
+  attachConsole: () => attachConsoleMock(),
 }));
 
 import {
