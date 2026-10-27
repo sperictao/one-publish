@@ -4,7 +4,11 @@ use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::sync::mpsc;
 
-pub(crate) fn emit_publish_log(app: &AppHandle, session_id: &str, line: &str) {
+pub(crate) fn emit_publish_log<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session_id: &str,
+    line: &str,
+) {
     let payload = PublishLogChunkEvent {
         session_id: session_id.to_string(),
         line: line.to_string(),
@@ -18,7 +22,10 @@ pub(crate) fn emit_publish_log(app: &AppHandle, session_id: &str, line: &str) {
 ///
 /// 前端据此显式锁定活动会话，替代旧的"首 chunk 锁存"策略。
 /// emit 失败只 log 不中断——日志会话归属是观测性问题，不影响发布本身。
-pub(crate) fn emit_publish_session_started(app: &AppHandle, session_id: &str) {
+pub(crate) fn emit_publish_session_started<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session_id: &str,
+) {
     let payload = PublishSessionStartedEvent {
         session_id: session_id.to_string(),
     };
@@ -83,8 +90,8 @@ impl WarningCollector {
     }
 }
 
-pub(crate) async fn collect_log_chunks(
-    app: AppHandle,
+pub(crate) async fn collect_log_chunks<R: tauri::Runtime>(
+    app: AppHandle<R>,
     session_id: String,
     mut receiver: mpsc::UnboundedReceiver<(String, String)>,
 ) -> PublishLogSummary {
