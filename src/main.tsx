@@ -6,7 +6,10 @@ import "non.geist";
 import "non.geist/mono";
 import "./index.css";
 import { Toaster } from "@/components/ui/sonner";
+import { installFrontendErrorHooks } from "@/lib/frontendLog";
 import { isMacPlatform } from "@/lib/platform";
+
+installFrontendErrorHooks();
 
 // Add platform class for platform-specific styles
 try {
