@@ -902,3 +902,411 @@ pub(crate) fn migrate_repo_edit_state_v3_to_v4(repo: &mut Repository) -> bool {
     repo.publish_config.selection = selection;
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{default_preset, migrate_repo_edit_state_v3_to_v4, LegacyEditStateV3};
+    use crate::store::types::{
+        PublishConfigStore, PublishSelectionRef, RepoPublishConfig, Repository,
+    };
+
+    fn test_repo(id: &str, provider_id: Option<&str>) -> Repository {
+        Repository {
+            id: id.to_string(),
+            name: format!("Repo {id}"),
+            path: format!("/{id}"),
+            project_file: None,
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: true,
+            provider_id: provider_id.map(str::to_string),
+            publish_config: RepoPublishConfig::default(),
+        }
+    }
+
+    fn legacy_edit(selected_preset: &str, is_custom_mode: bool) -> LegacyEditStateV3 {
+        LegacyEditStateV3 {
+            selected_preset: selected_preset.to_string(),
+            is_custom_mode,
+            custom_config: PublishConfigStore::default(),
+        }
+    }
+
+    #[test]
+    fn v3_to_v4_is_a_noop_when_selection_or_drafts_already_exist() {
+        let mut repo = test_repo("a", Some("dotnet"));
+        repo.publish_config.selection = Some(PublishSelectionRef::Template {
+            provider_id: "dotnet".to_string(),
+            template_id: "release-fd".to_string(),
+        });
+        repo.publish_config.global_v3_edit = Some(legacy_edit("profile-x", false));
+
+        assert!(!migrate_repo_edit_state_v3_to_v4(&mut repo));
+        // 提前返回不得消费未迁移的遗留状态。
+        assert!(repo.publish_config.global_v3_edit.is_some());
+    }
+
+    #[test]
+    fn v3_to_v4_is_a_noop_without_legacy_edit_state() {
+        let mut repo = test_repo("a", Some("dotnet"));
+        assert!(!migrate_repo_edit_state_v3_to_v4(&mut repo));
+        assert!(repo.publish_config.selection.is_none());
+    }
+
+    #[test]
+    fn v3_to_v4_maps_pubxml_presets_to_project_profile_references() {
+        let mut repo = test_repo("a", Some("dotnet"));
+        repo.publish_config.global_v3_edit = Some(legacy_edit("profile-FolderProfile", false));
+
+        assert!(migrate_repo_edit_state_v3_to_v4(&mut repo));
+        assert!(repo.publish_config.global_v3_edit.is_none());
+        assert!(matches!(
+            repo.publish_config.selection,
+            Some(PublishSelectionRef::ProjectProfile {
+                ref provider_id,
+                ref reference,
+            }) if provider_id == "dotnet" && reference == "FolderProfile"
+        ));
+    }
+
+    #[test]
+    fn v3_to_v4_keeps_the_dotnet_default_preset_unselected() {
+        let mut repo = test_repo("a", Some("dotnet"));
+        repo.publish_config.global_v3_edit = Some(legacy_edit(&default_preset(), false));
+
+        assert!(migrate_repo_edit_state_v3_to_v4(&mut repo));
+        assert!(repo.publish_config.selection.is_none());
+        assert!(repo.publish_config.drafts.is_empty());
+    }
+
+    #[test]
+    fn v3_to_v4_turns_foreign_default_presets_into_empty_drafts() {
+        let mut repo = test_repo("a", Some("tauri"));
+        repo.publish_config.global_v3_edit = Some(legacy_edit(&default_preset(), false));
+
+        assert!(migrate_repo_edit_state_v3_to_v4(&mut repo));
+        assert!(matches!(
+            repo.publish_config.selection,
+            Some(PublishSelectionRef::Draft { ref provider_id, .. })
+                if provider_id == "tauri"
+        ));
+    }
+
+    #[test]
+    fn v3_to_v4_maps_dotnet_template_presets_to_template_selections() {
+        let mut repo = test_repo("a", Some("dotnet"));
+        repo.publish_config.global_v3_edit = Some(legacy_edit("release-portable", false));
+
+        assert!(migrate_repo_edit_state_v3_to_v4(&mut repo));
+        assert!(matches!(
+            repo.publish_config.selection,
+            Some(PublishSelectionRef::Template {
+                ref provider_id,
+                ref template_id,
+            }) if provider_id == "dotnet" && template_id == "release-portable"
+        ));
+    }
+
+    #[test]
+    fn v3_to_v4_maps_foreign_custom_presets_to_drafts() {
+        let mut repo = test_repo("a", Some("tauri"));
+        repo.publish_config.global_v3_edit = Some(legacy_edit("release-portable", false));
+
+        assert!(migrate_repo_edit_state_v3_to_v4(&mut repo));
+        assert!(matches!(
+            repo.publish_config.selection,
+            Some(PublishSelectionRef::Draft { ref provider_id, .. })
+                if provider_id == "tauri"
+        ));
+    }
+
+    #[test]
+    fn v3_to_v4_converts_standalone_custom_state_into_a_draft() {
+        let mut repo = test_repo("a", Some("dotnet"));
+        repo.publish_config.global_v3_edit = Some(legacy_edit("release-fd", true));
+
+        assert!(migrate_repo_edit_state_v3_to_v4(&mut repo));
+        assert!(matches!(
+            repo.publish_config.selection,
+            Some(PublishSelectionRef::Draft { ref provider_id, .. })
+                if provider_id == "dotnet"
+        ));
+        assert_eq!(repo.publish_config.drafts.len(), 1);
+        assert!(repo.publish_config.drafts[0].base_revision.is_none());
+    }
+
+    #[test]
+    fn v3_to_v4_resolves_userprofile_references_to_revision_selections() {
+        let mut repo = test_repo("a", Some("dotnet"));
+        repo.publish_config
+            .create_profile(
+                "Release".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({}),
+                None,
+                None,
+                "2026-01-01T00:00:00+00:00".to_string(),
+            )
+            .expect("create profile");
+        // 未保存修改比对需要 is_custom_mode；干净引用走 Revision 臂。
+        repo.publish_config.global_v3_edit = Some(legacy_edit("userprofile:Release", false));
+
+        assert!(migrate_repo_edit_state_v3_to_v4(&mut repo));
+        let Some(PublishSelectionRef::Revision {
+            configuration_id, ..
+        }) = &repo.publish_config.selection
+        else {
+            panic!("expected a revision selection");
+        };
+        let profile = &repo.publish_config.profiles[0];
+        assert_eq!(configuration_id, &profile.id);
+        assert!(repo.publish_config.drafts.is_empty());
+    }
+
+    #[test]
+    fn v3_to_v4_turns_unresolvable_userprofile_into_a_standalone_draft() {
+        let mut repo = test_repo("a", Some("dotnet"));
+        repo.publish_config.global_v3_edit = Some(legacy_edit("userprofile:ghost", false));
+
+        assert!(migrate_repo_edit_state_v3_to_v4(&mut repo));
+        assert!(matches!(
+            repo.publish_config.selection,
+            Some(PublishSelectionRef::Draft { ref provider_id, .. })
+                if provider_id == "dotnet"
+        ));
+        assert_eq!(repo.publish_config.drafts.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod stored_state_tests {
+    use super::{migrate_legacy_state, sanitize_stored_state, LegacyStoredAppState};
+    use crate::store::types::{
+        ExecutionRecord, PublishConfigStore, PublishSelectionRef, RepoPublishConfig, Repository,
+    };
+    use std::collections::BTreeMap;
+
+    fn test_repo(id: &str, provider_id: Option<&str>) -> Repository {
+        Repository {
+            id: id.to_string(),
+            name: format!("Repo {id}"),
+            path: format!("/{id}"),
+            project_file: None,
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: true,
+            provider_id: provider_id.map(str::to_string),
+            publish_config: RepoPublishConfig::default(),
+        }
+    }
+
+    fn history_record(command_line: Option<&str>) -> ExecutionRecord {
+        ExecutionRecord {
+            id: "record-1".to_string(),
+            repo_id: None,
+            configuration_id: None,
+            configuration_revision_id: None,
+            provider_id: "dotnet".to_string(),
+            project_path: "/a".to_string(),
+            started_at: "2026-01-01T00:00:00Z".to_string(),
+            finished_at: "2026-01-01T00:00:01Z".to_string(),
+            success: true,
+            cancelled: false,
+            output_dir: None,
+            error: None,
+            command_line: command_line.map(str::to_string),
+            snapshot_path: None,
+            failure_signature: None,
+            output_excerpt: None,
+            spec: None,
+            attempt_id: None,
+            recovery_snapshot: None,
+            file_count: 0,
+            warnings: None,
+            manifest_digest: None,
+        }
+    }
+
+    fn legacy_state(
+        repositories: Vec<Repository>,
+        selected_preset: &str,
+        is_custom_mode: bool,
+        profiles: Vec<crate::store::types::ConfigProfile>,
+    ) -> LegacyStoredAppState {
+        LegacyStoredAppState {
+            repositories,
+            selected_repo_id: None,
+            left_panel_width: 240,
+            middle_panel_width: 320,
+            panel_widths_customized: false,
+            selected_preset: selected_preset.to_string(),
+            is_custom_mode,
+            custom_config: PublishConfigStore::default(),
+            minimize_to_tray_on_close: false,
+            language: "zh-CN".to_string(),
+            default_output_dir: "dist".to_string(),
+            theme: "system".to_string(),
+            profiles,
+            execution_history_limit: 20,
+            environment_provider_ids: Vec::new(),
+            recent_repo_ids: Vec::new(),
+            recent_config_keys_by_repo: BTreeMap::new(),
+            execution_history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn sanitize_rewrites_name_scoped_references_to_profile_identities() {
+        let mut state = crate::store::types::AppState::default();
+        let mut repo = test_repo("a", Some("dotnet"));
+        repo.publish_config
+            .create_profile(
+                "Release".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({}),
+                None,
+                None,
+                "2026-01-01T00:00:00+00:00".to_string(),
+            )
+            .expect("create profile");
+        let profile_id = repo.publish_config.profiles[0].id.clone();
+        repo.publish_config.selection = Some(PublishSelectionRef::Revision {
+            configuration_id: "Release".to_string(),
+        });
+        state
+            .recent_config_keys_by_repo
+            .insert("a".to_string(), vec!["userprofile:Release".to_string()]);
+        state.repositories.push(repo);
+
+        let (state, migrated) = sanitize_stored_state(state);
+        assert!(migrated);
+        let repo = &state.repositories[0];
+        assert!(matches!(
+            &repo.publish_config.selection,
+            Some(PublishSelectionRef::Revision { configuration_id })
+                if configuration_id == &profile_id
+        ));
+        assert_eq!(
+            state.recent_config_keys_by_repo["a"],
+            vec![format!("userprofile:{profile_id}")]
+        );
+    }
+
+    #[test]
+    fn sanitize_scrubs_secret_bearing_history_and_flags_the_rewrite() {
+        let mut state = crate::store::types::AppState::default();
+        state
+            .execution_history
+            .push(history_record(Some("dotnet publish /p:Password=hunter2")));
+
+        let (state, migrated) = sanitize_stored_state(state);
+        assert!(migrated);
+        let command_line = state.execution_history[0]
+            .command_line
+            .as_deref()
+            .expect("command line retained");
+        assert!(!command_line.contains("hunter2"));
+        assert!(command_line.contains("Password="));
+    }
+
+    #[test]
+    fn sanitize_is_quiet_when_nothing_needs_migration() {
+        let mut state = crate::store::types::AppState::default();
+        state.repositories.push(test_repo("a", Some("dotnet")));
+        state
+            .execution_history
+            .push(history_record(Some("dotnet publish -c Release")));
+
+        let (_state, migrated) = sanitize_stored_state(state);
+        assert!(!migrated);
+    }
+
+    #[test]
+    fn legacy_state_injects_global_edit_state_into_default_repos_only() {
+        let default_repo = test_repo("default", Some("dotnet"));
+        let mut customized = test_repo("customized", Some("dotnet"));
+        customized
+            .publish_config
+            .create_profile(
+                "Custom".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({}),
+                None,
+                None,
+                "2026-01-01T00:00:00+00:00".to_string(),
+            )
+            .expect("create profile");
+
+        let state = migrate_legacy_state(legacy_state(
+            vec![default_repo, customized],
+            "profile-FolderProfile",
+            false,
+            Vec::new(),
+        ));
+
+        assert!(matches!(
+            state.repositories[0].publish_config.selection,
+            Some(PublishSelectionRef::ProjectProfile { ref reference, .. })
+                if reference == "FolderProfile"
+        ));
+        // 非默认仓库不吸收全局编辑状态。
+        assert!(state.repositories[1].publish_config.selection.is_none());
+        assert_eq!(state.repositories[1].publish_config.profiles.len(), 1);
+    }
+
+    #[test]
+    fn legacy_state_without_global_values_leaves_default_repos_untouched() {
+        let state = migrate_legacy_state(legacy_state(
+            vec![test_repo("a", Some("dotnet"))],
+            "release-fd",
+            false,
+            Vec::new(),
+        ));
+        assert!(state.repositories[0].publish_config.selection.is_none());
+        assert!(state.repositories[0].publish_config.drafts.is_empty());
+    }
+
+    #[test]
+    fn legacy_state_distributed_profiles_reach_only_default_repos() {
+        let mut source = crate::store::types::RepoPublishConfig::default();
+        source
+            .create_profile(
+                "Shared".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({}),
+                None,
+                None,
+                "2026-01-01T00:00:00+00:00".to_string(),
+            )
+            .expect("create profile");
+        let profiles = source.profiles.clone();
+
+        let mut customized = test_repo("customized", Some("dotnet"));
+        customized
+            .publish_config
+            .create_profile(
+                "Own".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({}),
+                None,
+                None,
+                "2026-01-01T00:00:00+00:00".to_string(),
+            )
+            .expect("create profile");
+
+        let state = migrate_legacy_state(legacy_state(
+            vec![test_repo("default", Some("dotnet")), customized],
+            "release-fd",
+            true, // 让 global_has_value 为真以触发分发
+            profiles,
+        ));
+
+        assert_eq!(state.repositories[0].publish_config.profiles.len(), 1);
+        assert_eq!(
+            state.repositories[0].publish_config.profiles[0].name,
+            "Shared"
+        );
+        assert_eq!(state.repositories[1].publish_config.profiles.len(), 1);
+        assert_eq!(state.repositories[1].publish_config.profiles[0].name, "Own");
+    }
+}
