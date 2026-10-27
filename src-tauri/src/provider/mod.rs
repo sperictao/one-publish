@@ -255,3 +255,165 @@ pub trait Provider: Send + Sync {
         Ok(program.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 只实现必需方法的最小 Provider：用于钉住 trait 默认实现的契约
+    /// （默认行为本身就是公共语义，不只是"空实现"）。
+    struct StubProvider {
+        manifest: ProviderManifest,
+        capabilities: ProviderCapabilities,
+        catalog: ProviderCatalogEntry,
+        discovery: ProviderRepositoryDiscovery,
+        templates: Vec<ProviderTemplate>,
+    }
+
+    fn stub_provider(templates: Vec<ProviderTemplate>) -> StubProvider {
+        StubProvider {
+            manifest: ProviderManifest {
+                id: "stub".to_string(),
+                display_name: "Stub".to_string(),
+                version: "1".to_string(),
+            },
+            capabilities: ProviderCapabilities {
+                requires_project_binding: false,
+                project_path_kind: ProviderProjectPathKind::RepositoryRoot,
+                supports_command_import: false,
+                appends_project_path: false,
+                output_layout: None,
+                project_profiles: None,
+                framework_tags: Vec::new(),
+            },
+            catalog: ProviderCatalogEntry {
+                id: "stub".to_string(),
+                display_name: "Stub".to_string(),
+                version: "1".to_string(),
+                label: "Stub".to_string(),
+                command_example: String::new(),
+                environment_label: String::new(),
+                environment_description: String::new(),
+                requires_project_binding: false,
+                project_path_kind: ProviderProjectPathKind::RepositoryRoot,
+                supports_command_import: false,
+                supports_project_profiles: false,
+                templates: Vec::new(),
+            },
+            discovery: ProviderRepositoryDiscovery {
+                provider_id: "stub".to_string(),
+                repository_markers: Vec::new(),
+                project_file_matchers: Vec::new(),
+                solution_file_extensions: Vec::new(),
+                owns_project_recommendation: false,
+            },
+            templates,
+        }
+    }
+
+    impl Provider for StubProvider {
+        fn manifest(&self) -> &ProviderManifest {
+            &self.manifest
+        }
+
+        fn capabilities(&self) -> &ProviderCapabilities {
+            &self.capabilities
+        }
+
+        fn catalog(&self) -> &ProviderCatalogEntry {
+            &self.catalog
+        }
+
+        fn repository_discovery(&self) -> &ProviderRepositoryDiscovery {
+            &self.discovery
+        }
+
+        fn templates(&self) -> Vec<ProviderTemplate> {
+            self.templates.clone()
+        }
+
+        fn get_schema(&self) -> Result<ParameterSchema, RenderError> {
+            Ok(ParameterSchema {
+                parameters: std::collections::BTreeMap::new(),
+            })
+        }
+
+        fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
+            Ok(ExecutionPlan {
+                version: crate::plan::PLAN_VERSION,
+                spec: spec.clone(),
+                steps: Vec::new(),
+            })
+        }
+
+        fn resolve_working_dir(&self, _spec: &PublishSpec) -> Option<PathBuf> {
+            None
+        }
+
+        fn classify_source_input(&self, _relative: &Path) -> ProviderSourceInputKind {
+            ProviderSourceInputKind::DeclaredNonSecret
+        }
+
+        fn infer_output_dir(&self, _spec: &PublishSpec) -> String {
+            "dist".to_string()
+        }
+
+        fn configured_output_dir(&self, _spec: &PublishSpec) -> Option<String> {
+            None
+        }
+    }
+
+    fn template(id: &str) -> ProviderTemplate {
+        ProviderTemplate {
+            id: id.to_string(),
+            name: format!("Template {id}"),
+            description: format!("Description {id}"),
+            parameters: serde_json::json!({ "key": id }),
+        }
+    }
+
+    #[test]
+    fn default_templates_is_empty_and_summary_strips_parameters() {
+        let bare = stub_provider(Vec::new());
+        assert!(bare.templates().is_empty());
+        assert_eq!(bare.resolve_template("anything"), None);
+
+        let summary = template("release").summary();
+        assert_eq!(summary.id, "release");
+        assert_eq!(summary.name, "Template release");
+        assert_eq!(summary.description, "Description release");
+    }
+
+    #[test]
+    fn resolve_template_finds_by_id_across_declared_templates() {
+        let provider = stub_provider(vec![template("debug"), template("release")]);
+
+        let found = provider
+            .resolve_template("release")
+            .expect("template found");
+        assert_eq!(found.parameters, serde_json::json!({ "key": "release" }));
+        assert_eq!(provider.resolve_template("missing"), None);
+    }
+
+    #[test]
+    fn trait_defaults_keep_native_behavior_for_unextended_providers() {
+        let provider = stub_provider(Vec::new());
+        let spec = PublishSpec::default();
+
+        assert_eq!(
+            provider.command_prefix(&spec).expect("command prefix"),
+            None
+        );
+        assert_eq!(provider.default_output(&spec, "/tmp/out"), None);
+        assert_eq!(provider.resolve_implicit_output(&spec), None);
+        assert!(provider.verify_build_output(Path::new("/anywhere")).is_ok());
+        assert!(provider.artifact_filter().is_none());
+        assert!(!provider.clears_stale_artifacts());
+        assert_eq!(
+            provider
+                .resolve_runtime_program("dotnet", None)
+                .expect("runtime program"),
+            "dotnet"
+        );
+    }
+}
