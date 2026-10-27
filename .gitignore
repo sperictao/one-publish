@@ -106,3 +106,4 @@ src-tauri/tauri.conf.updater.prod.json
 
 # UI/UX audit workspace (recording specs, screenshots, self-contained reports — local evidence only)
 /.ui-audit/
+coverage-rust/
