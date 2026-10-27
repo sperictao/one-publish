@@ -1310,16 +1310,18 @@ mod tests {
 
     mod lease_lifecycle {
         use super::super::{
-            AttemptJournalHeader, AttemptJournalRepository, JOURNAL_SCHEMA_VERSION,
+            AttemptJournalHeader, AttemptJournalRecord, AttemptJournalRepository,
+            JOURNAL_SCHEMA_VERSION,
         };
         use publish_domain::{
-            AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
-            PlanningInputSnapshot, PublishError, PublishPlan, PublishResource, PublishResourceKind,
-            PublishResourceLease, ReleaseAttempt, ReleaseIdentity, SourceSnapshot,
-            PLANNING_INPUT_SNAPSHOT_VERSION, PUBLISH_PLAN_VERSION, PUBLISH_RESOURCE_LEASE_VERSION,
-            RELEASE_ATTEMPT_VERSION,
+            sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection,
+            AdapterSettings, ArtifactManifest, ArtifactManifestEntry, PlanningInputSnapshot,
+            PublishError, PublishPlan, PublishResource, PublishResourceKind, PublishResourceLease,
+            ReleaseAttempt, ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
+            PUBLISH_PLAN_VERSION, PUBLISH_RESOURCE_LEASE_VERSION, RELEASE_ATTEMPT_VERSION,
         };
-        use publish_runner_core::PreparedPublishPlan;
+        use publish_adapters::AdapterRegistry;
+        use publish_runner_core::{PreparedPublishPlan, PublishRuntime};
         use std::collections::{BTreeMap, BTreeSet};
 
         fn source_snapshot() -> SourceSnapshot {
@@ -1377,7 +1379,9 @@ mod tests {
                             AdapterKind::ExecutionBackend,
                         ),
                         artifact_store: minimal_binding("store", AdapterKind::ArtifactStore),
-                        delivery_routes: Vec::new(),
+                        delivery_routes: vec![publish_domain::DeliveryRoute::required(
+                            minimal_binding("delivery", AdapterKind::DeliveryDestination),
+                        )],
                     },
                 },
                 plan: PublishPlan {
@@ -1385,7 +1389,10 @@ mod tests {
                     snapshot_digest: "snapshot-1".to_string(),
                     adapters: Vec::new(),
                     execution_backend: backend.clone(),
-                    routes: Vec::new(),
+                    routes: vec![publish_domain::PlanRoute {
+                        route_id: "route-1".to_string(),
+                        required: true,
+                    }],
                     nodes: Vec::new(),
                     digest: "plan-1".to_string(),
                 },
@@ -1636,5 +1643,78 @@ mod tests {
                 Some("attempt-1")
             );
         }
+
+        fn manifest_entry(file_name: &str) -> ArtifactManifestEntry {
+            ArtifactManifestEntry {
+                role: "installer".to_string(),
+                file_name: file_name.to_string(),
+                media_type: "application/octet-stream".to_string(),
+                platform: "test-os".to_string(),
+                architecture: "test-arch".to_string(),
+                size: 4,
+                digest: sha256_hex(b"data"),
+                locator: format!("/tmp/{file_name}"),
+                retention: "temporary".to_string(),
+                executable: Some(false),
+            }
+        }
+
+        fn bound_manifest(file_name: &str) -> ArtifactManifest {
+            ArtifactManifest::seal("snapshot-1", vec![manifest_entry(file_name)])
+                .expect("seal fixture manifest")
+        }
+
+        fn stub_runtime() -> PublishRuntime {
+            // 仅供 guard 臂使用：这些断言在 runtime 介入前就已被拒绝。
+            PublishRuntime::new(AdapterRegistry::new())
+        }
+
+        #[test]
+        fn synchronize_rejects_manifest_bound_to_a_foreign_snapshot() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+            let foreign = ArtifactManifest::seal("other-snapshot", vec![manifest_entry("a.bin")])
+                .expect("seal foreign manifest");
+
+            let error = repository
+                .synchronize(&stub_runtime(), "attempt-1", Vec::new(), Some(foreign), None)
+                .expect_err("foreign-snapshot manifest must fail provenance");
+            let PublishError::Execution(message) = error else {
+                panic!("expected execution error, got {error:?}")
+            };
+            assert!(message.contains("planning snapshot"));
+        }
+
+        #[test]
+        fn synchronize_rejects_manifest_conflicting_with_seeded_evidence() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+            repository
+                .append_records(
+                    "attempt-1",
+                    &[AttemptJournalRecord::Manifest {
+                        manifest: bound_manifest("first.bin"),
+                    }],
+                )
+                .expect("seed manifest evidence");
+
+            let error = repository
+                .synchronize(
+                    &stub_runtime(),
+                    "attempt-1",
+                    Vec::new(),
+                    Some(bound_manifest("second.bin")),
+                    None,
+                )
+                .expect_err("a different manifest must conflict with seeded evidence");
+            let PublishError::Execution(message) = error else {
+                panic!("expected execution error, got {error:?}")
+            };
+            assert!(message.contains("already bound to a different artifact manifest"));
+        }
+
+
+
+
     }
 }
