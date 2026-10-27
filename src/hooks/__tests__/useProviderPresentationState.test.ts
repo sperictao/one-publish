@@ -160,4 +160,129 @@ describe("useProviderPresentationState", () => {
         "无法加载 Provider 参数定义 | schema.json: No such file or directory",
     });
   });
+
+  it("resolves the active provider from activeProviderId when the object is absent", () => {
+    const { result } = renderHook(() =>
+      useProviderPresentationState({
+        providerRuntimeProviders: [dotnetProvider, cargoProvider],
+        providerListState: readyProviders([dotnetProvider, cargoProvider]),
+        activeProviderSchemaState: idleSchema,
+        activeProvider: null,
+        activeProviderId: "cargo",
+        appT: {},
+        retryProviderList: vi.fn(),
+        retryProviderSchema: vi.fn(),
+      })
+    );
+
+    expect(result.current.activeProviderLabel).toBe("Rust (cargo)");
+    expect(result.current.activeProviderUsesProjectFile).toBe(false);
+  });
+
+  it("falls back to built-in copy when error banner translations are absent", () => {
+    const { result, rerender } = renderHook(
+      ({
+        providerListState,
+        activeProviderSchemaState,
+      }: {
+        providerListState: ResourceState<ProviderManifest[]>;
+        activeProviderSchemaState: ResourceState<ParameterSchema>;
+      }) =>
+        useProviderPresentationState({
+          providerRuntimeProviders: [],
+          providerListState,
+          activeProviderSchemaState,
+          activeProvider: null,
+          activeProviderId: "dotnet",
+          appT: {},
+          retryProviderList: vi.fn(),
+          retryProviderSchema: vi.fn(),
+        }),
+      {
+        initialProps: {
+          providerListState: {
+            status: "error",
+            data: null,
+            error: null,
+          },
+          activeProviderSchemaState: idleSchema,
+        },
+      }
+    );
+
+    expect(result.current.providerRuntimeBanner).toMatchObject({
+      key: "provider-error",
+      title: "Provider 列表加载失败",
+      description: "未能读取可用 Provider，请重试。",
+    });
+
+    rerender({
+      providerListState: readyProviders([dotnetProvider]),
+      activeProviderSchemaState: {
+        status: "error",
+        data: null,
+        error: "   ",
+      },
+    });
+
+    expect(result.current.providerRuntimeBanner).toMatchObject({
+      key: "provider-schema-error",
+      title: "Provider 参数定义加载失败",
+      description: "无法读取当前 Provider 的参数定义，请重试。",
+    });
+  });
+
+  it("shows a loading banner while the provider list is empty and loading", () => {
+    const retryProviderList = vi.fn();
+    const { result } = renderHook(() =>
+      useProviderPresentationState({
+        providerRuntimeProviders: [],
+        providerListState: {
+          status: "loading",
+          data: null,
+          error: null,
+        },
+        activeProviderSchemaState: idleSchema,
+        activeProvider: null,
+        activeProviderId: "dotnet",
+        appT: {},
+        retryProviderList,
+        retryProviderSchema: vi.fn(),
+      })
+    );
+
+    expect(result.current.providerRuntimeBanner).toMatchObject({
+      key: "provider-loading",
+      status: "loading",
+      title: "正在加载 Provider 列表...",
+      onRetry: retryProviderList,
+    });
+  });
+
+  it("shows a schema-loading banner while the schema is absent and loading", () => {
+    const retryProviderSchema = vi.fn();
+    const { result } = renderHook(() =>
+      useProviderPresentationState({
+        providerRuntimeProviders: [dotnetProvider],
+        providerListState: readyProviders([dotnetProvider]),
+        activeProviderSchemaState: {
+          status: "loading",
+          data: null,
+          error: null,
+        },
+        activeProvider: dotnetProvider,
+        activeProviderId: "dotnet",
+        appT: {},
+        retryProviderList: vi.fn(),
+        retryProviderSchema,
+      })
+    );
+
+    expect(result.current.providerRuntimeBanner).toMatchObject({
+      key: "provider-schema-loading",
+      status: "loading",
+      title: "正在加载 Provider 参数定义...",
+      onRetry: retryProviderSchema,
+    });
+  });
 });
