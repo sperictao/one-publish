@@ -1502,4 +1502,56 @@ mod shard_materialization_tests {
         .expect_err("a missing bundle root must fail loudly");
         assert!(error.to_string().contains("no bundle output"));
     }
+
+    #[test]
+    fn tauri_artifact_classification_covers_updater_installer_and_support_roles() {
+        let cases: &[(&str, &str, &str)] = &[
+            (
+                "bundle/app.sig",
+                "updater-signature",
+                "application/octet-stream",
+            ),
+            (
+                "bundle/app.APP.TAR.GZ",
+                "updater-archive",
+                "application/gzip",
+            ),
+            ("bundle/app.nsis.zip", "updater-archive", "application/zip"),
+            ("bundle/app.msi.zip", "updater-archive", "application/zip"),
+            (
+                "bundle/app.dmg",
+                "installer",
+                "application/x-apple-diskimage",
+            ),
+            ("bundle/app.MSI", "installer", "application/x-msi"),
+            (
+                "bundle/app.exe",
+                "installer",
+                "application/vnd.microsoft.portable-executable",
+            ),
+            (
+                "bundle/app.AppImage",
+                "installer",
+                "application/vnd.appimage",
+            ),
+            (
+                "bundle/app.deb",
+                "installer",
+                "application/vnd.debian.binary-package",
+            ),
+            ("bundle/app.rpm", "installer", "application/x-rpm"),
+            (
+                "bundle/app.txt",
+                "build-support",
+                "application/octet-stream",
+            ),
+        ];
+        for (relative, role, media_type) in cases {
+            assert_eq!(
+                classify_tauri_artifact(Path::new(relative)),
+                (*role, *media_type),
+                "{relative} must classify as {role}"
+            );
+        }
+    }
 }
