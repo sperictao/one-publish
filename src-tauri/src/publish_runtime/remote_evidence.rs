@@ -1318,4 +1318,110 @@ mod tests {
         );
         assert!(port.dispatched.borrow().is_empty());
     }
+
+    #[test]
+    fn archive_paths_reject_unsafe_attempt_ids() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let archive = RemoteEvidenceArchive::new(dir.path().join("remote"));
+
+        archive
+            .attempt_dir("../escape")
+            .expect_err("traversal attempt id must be rejected");
+        archive
+            .pending_path("../escape")
+            .expect_err("traversal pending id must be rejected");
+
+        let attempt_dir = archive.attempt_dir("attempt-1").expect("safe id");
+        assert_eq!(attempt_dir, dir.path().join("remote").join("attempt-1"));
+        assert_eq!(
+            archive
+                .segment_path("attempt-1", "macos-arm64")
+                .expect("segment"),
+            attempt_dir.join("segments").join("macos-arm64.json")
+        );
+        assert_eq!(
+            archive.prepared_path("attempt-1").expect("prepared"),
+            attempt_dir.join("prepared.json")
+        );
+        assert_eq!(
+            archive.pending_path("attempt-1").expect("pending"),
+            dir.path()
+                .join("remote")
+                .join("pending")
+                .join("attempt-1.json")
+        );
+    }
+
+    #[test]
+    fn archive_write_read_json_roundtrip_and_corruption() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let archive = RemoteEvidenceArchive::new(dir.path().join("remote"));
+
+        let path = archive.prepared_path("attempt-1").expect("path");
+        // 缺失文件读为 None 而非报错
+        let missing: Option<serde_json::Value> = archive.read_json(&path).expect("missing");
+        assert!(missing.is_none());
+
+        // write 自动建父目录并写入；read_json 还原
+        archive
+            .write(&path, br#"{"sealed":true}"#)
+            .expect("write creates parents");
+        let loaded: Option<serde_json::Value> = archive.read_json(&path).expect("read");
+        assert_eq!(loaded, Some(serde_json::json!({"sealed": true})));
+
+        // 损坏内容显式报错（不静默吞证据）
+        std::fs::write(&path, "{broken").expect("corrupt");
+        archive
+            .read_json::<serde_json::Value>(&path)
+            .expect_err("corrupt archive must fail");
+    }
+
+    #[test]
+    fn unzip_single_json_extracts_only_the_json_payload() {
+        let content =
+            unzip_single_json(&zip_bytes("segment.json", br#"{"ok":true}"#)).expect("json payload");
+        assert_eq!(content, br#"{"ok":true}"#);
+
+        let error = unzip_single_json(&zip_bytes("binary.bin", b"\x00\x01"))
+            .expect_err("non-json zip must fail");
+        assert_eq!(error.code.as_deref(), Some("remote_evidence_sync_failed"));
+        assert!(error
+            .details
+            .as_deref()
+            .is_some_and(|details| details.contains("JSON")));
+
+        unzip_single_json(b"not a zip").expect_err("garbage bytes must fail");
+    }
+
+    #[test]
+    fn repository_root_requires_an_existing_directory() {
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        let error = repository_root("").expect_err("empty path must fail");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("remote_evidence_repository_unavailable")
+        );
+
+        let file = dir.path().join("file.txt");
+        std::fs::write(&file, "x").expect("write file");
+        repository_root(&file.to_string_lossy()).expect_err("file path must fail");
+
+        repository_root(&dir.path().to_string_lossy()).expect("directory passes");
+    }
+
+    #[test]
+    fn expected_segments_derives_from_projection_and_includes_aggregate() {
+        let mut binding = fixture_binding();
+
+        // 无法解析的固化投影 → 显式错误（证据目标未知不可静默）
+        binding.backend_projection = serde_json::json!({"bogus": 1});
+        expected_segments(&binding).expect_err("unparseable projection must fail");
+
+        binding.backend_projection =
+            serde_json::to_value(crate::tauri_release::TauriReleaseConfig::default())
+                .expect("serialize projection");
+        let segments = expected_segments(&binding).expect("segments");
+        assert!(segments.contains(&AGGREGATE_SEGMENT.to_string()));
+    }
 }
