@@ -308,3 +308,145 @@ describe("runtime preparation error localization", () => {
     expect(prepare).toHaveBeenCalledOnce();
   });
 });
+
+describe("publish source resolution arms", () => {
+  it("projectProfile selection passes through unchanged", () => {
+    const repository = repo();
+    repository.publishConfig.selection = {
+      kind: "projectProfile",
+      providerId: "dotnet",
+      reference: "Release",
+    } as unknown as typeof repository.publishConfig.selection;
+
+    expect(resolveSelectedPublishSource(repository, "dotnet")).toEqual({
+      kind: "projectProfile",
+      providerId: "dotnet",
+      reference: "Release",
+    });
+  });
+
+  it("rejects a stored draft whose content scope mismatches its binding", () => {
+    const repository = repo();
+    const mismatched = draft("project-b");
+    mismatched.content = {
+      ...mismatched.content,
+      projectBinding: "project-a",
+    };
+    repository.publishConfig.drafts = [mismatched];
+
+    expect(() => resolveSelectedPublishSource(repository, "dotnet")).toThrow(
+      PublishSourceSelectionError
+    );
+    expect(() => resolveSelectedPublishSource(repository, "dotnet")).toThrow(
+      "draftScopeMismatch"
+    );
+  });
+});
+
+describe("publish start blocker and request resolution arms", () => {
+  it("reports runtime-not-ready while preparation is still pending", () => {
+    prepare.mockReturnValue(new Promise(() => {}));
+    const { result } = renderHook(() => usePublishValidate(props()));
+
+    expect(result.current.getPublishStartBlocker()).toBe("runtime-not-ready");
+  });
+
+  it("reports runtime-blocked for a blocked runtime without access remedy", async () => {
+    prepare.mockResolvedValue(blocked);
+    const { result } = renderHook(() => usePublishValidate(props()));
+    await waitFor(() =>
+      expect(result.current.preparedRuntime).toEqual(blocked)
+    );
+
+    expect(result.current.getPublishStartBlocker()).toBe("runtime-blocked");
+  });
+
+  it("resolves no request when the stored selection is unresolvable", async () => {
+    prepare.mockResolvedValue(blocked);
+    const input = props();
+    input.selectedRepo!.publishConfig.drafts = [];
+    const { result } = renderHook(() => usePublishValidate(input));
+
+    await expect(result.current.resolvePublishRequest()).resolves.toBeNull();
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it("resolves no request when preparation yields no runtime", async () => {
+    prepare.mockResolvedValue(null);
+    const { result } = renderHook(() => usePublishValidate(props()));
+    await waitFor(() => expect(prepare).toHaveBeenCalled());
+
+    await expect(result.current.resolvePublishRequest()).resolves.toBeNull();
+  });
+});
+
+describe("剩余解析臂", () => {
+  it("template selection 归一化为空 projectBinding", () => {
+    const repository = repo();
+    repository.publishConfig.selection = {
+      kind: "template",
+      providerId: "dotnet",
+      templateId: "release",
+    } as unknown as typeof repository.publishConfig.selection;
+
+    expect(resolveSelectedPublishSource(repository, "dotnet")).toEqual({
+      kind: "template",
+      providerId: "dotnet",
+      templateId: "release",
+      projectBinding: null,
+    });
+  });
+
+  it("revision selection 解析到匹配的 profile revision", () => {
+    const repository = repo();
+    repository.publishConfig.selection = {
+      kind: "revision",
+      configurationId: "cfg",
+    } as unknown as typeof repository.publishConfig.selection;
+    repository.publishConfig.profiles = [
+      { id: "cfg", revisionId: "rev-1" } as never,
+    ];
+
+    expect(resolveSelectedPublishSource(repository, "dotnet")).toEqual({
+      kind: "revision",
+      configurationId: "cfg",
+      revisionId: "rev-1",
+    });
+  });
+
+  it("无选中仓库时 blocker 报 missing-repository 且不准备", () => {
+    prepare.mockResolvedValue(blocked);
+    const input = props();
+    input.selectedRepo = null;
+    const { result } = renderHook(() => usePublishValidate(input));
+
+    expect(result.current.getPublishStartBlocker()).toBe("missing-repository");
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it("显式解析期间 prepare 拒绝时记录错误并返回 null", async () => {
+    const userAgent = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    prepare.mockRejectedValue(new Error("prepare blew up"));
+
+    try {
+      const { result } = renderHook(() => usePublishValidate(props()));
+      await act(async () => Promise.resolve());
+      expect(prepare).not.toHaveBeenCalled();
+
+      let request: Promise<unknown> | null = null;
+      await act(async () => {
+        request = result.current.resolvePublishRequest();
+        await request;
+      });
+      await expect(request).resolves.toBeNull();
+      expect(prepare).toHaveBeenCalledOnce();
+      await waitFor(() =>
+        expect(result.current.runtimePreparationError).toBeTruthy()
+      );
+    } finally {
+      userAgent.mockRestore();
+    }
+  });
+});
