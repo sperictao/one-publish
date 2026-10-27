@@ -119,7 +119,7 @@ describe("createPublishExecutionRecord", () => {
     );
   });
 
-  it("后端命令缺失或为空时从输出日志提取 $ 行，均无则 null", () => {
+  it("display_command 仅有空白时从输出日志提取 $ 行，均无则 null", () => {
     const baseParams = {
       spec: {
         version: 1 as const,
@@ -135,7 +135,7 @@ describe("createPublishExecutionRecord", () => {
         success: true,
         cancelled: false,
         error: null,
-        command: null,
+        command: createCommand("   "),
         output_log: "restoring…",
         output_dir: "/repo/out",
         file_count: 0,
@@ -144,18 +144,10 @@ describe("createPublishExecutionRecord", () => {
       outputLog: "restoring…\n$ dotnet publish -c Release\nbuild ok",
     };
 
-    // command 为 null：扫描输出日志的首个 "$ " 行。
+    // display_command 为空白串：扫描输出日志的首个 "$ " 行。
     expect(createPublishExecutionRecord(baseParams).commandLine).toBe(
       "$ dotnet publish -c Release"
     );
-
-    // display_command 仅有空白同样回落到日志扫描。
-    expect(
-      createPublishExecutionRecord({
-        ...baseParams,
-        result: { ...baseParams.result, command: createCommand("   ") },
-      }).commandLine
-    ).toBe("$ dotnet publish -c Release");
 
     // 日志中没有 "$ " 行时保持 null。
     expect(
@@ -183,7 +175,7 @@ describe("createPublishExecutionRecord", () => {
         success: false,
         cancelled: false,
         error: "spawn dotnet failed",
-        command: null,
+        command: createCommand(""),
         output_log: "",
         output_dir: "",
         file_count: 0,
@@ -211,7 +203,7 @@ describe("createPublishExecutionRecord", () => {
         success: false,
         cancelled: false,
         error: "build failed",
-        command: null,
+        command: createCommand("dotnet publish"),
         output_log: longLines.join("\n"),
         output_dir: "",
         file_count: 0,
