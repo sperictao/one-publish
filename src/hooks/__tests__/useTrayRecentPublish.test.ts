@@ -527,4 +527,181 @@ describe("useTrayRecentPublish", () => {
 
     expect(mocks.showMainWindow).toHaveBeenCalled();
   });
+
+  it("无法解析的配置键直接拒绝", async () => {
+    await expect(
+      resolveTrayPublishRequest({
+        payload: { repoId: "repo-1", configKey: "not-a-key" },
+      })
+    ).rejects.toThrow("invalid tray config key: not-a-key");
+    expect(mocks.getProfiles).not.toHaveBeenCalled();
+  });
+
+  it("preset 等非托盘可执行键直接拒绝", async () => {
+    await expect(
+      resolveTrayPublishRequest({
+        payload: { repoId: "repo-1", configKey: "preset:release" },
+      })
+    ).rejects.toThrow("unsupported tray config key: preset:release");
+  });
+
+  it("项目发布配置缺少绑定 Provider 时拒绝执行", async () => {
+    mocks.getRepository.mockResolvedValue(
+      createRepository({ providerId: undefined })
+    );
+
+    await expect(
+      resolveTrayPublishRequest({
+        payload: { repoId: "repo-1", configKey: "pubxml:Release" },
+      })
+    ).rejects.toThrow("repository has no bound provider: repo-1");
+  });
+
+  it("卸载后晚到的解析结果不会触发发布", async () => {
+    const runPublishSpec = vi.fn().mockResolvedValue(undefined);
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
+    mocks.listen.mockImplementation(async (_eventName, callback) => {
+      handler = callback;
+      return () => {};
+    });
+    let resolveRepo!: (repo: Repository) => void;
+    mocks.getRepository.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRepo = resolve;
+        })
+    );
+
+    const { unmount } = renderHook(() =>
+      useTrayRecentPublish({ appT: {}, runPublishSpec })
+    );
+
+    await waitFor(() => {
+      expect(handler).not.toBeNull();
+    });
+    if (!handler) {
+      throw new Error("tray handler missing");
+    }
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
+
+    const pending = trayHandler({
+      payload: { repoId: "repo-1", configKey: "pubxml:Release" },
+    });
+    unmount();
+    resolveRepo(createRepository());
+    await pending;
+
+    expect(runPublishSpec).not.toHaveBeenCalled();
+    expect(mocks.showSystemNotification).not.toHaveBeenCalled();
+  });
+
+  it("托盘状态上报失败时仍发送系统通知", async () => {
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
+    mocks.listen.mockImplementation(async (_eventName, callback) => {
+      handler = callback;
+      return () => {};
+    });
+    mocks.setTrayPublishStatus.mockRejectedValue(new Error("status down"));
+
+    renderHook(() =>
+      useTrayRecentPublish({
+        appT: { trayPublishFailed: "状态栏发布启动失败" },
+        runPublishSpec: vi.fn(),
+      })
+    );
+
+    await waitFor(() => {
+      expect(handler).not.toBeNull();
+    });
+    if (!handler) {
+      throw new Error("tray handler missing");
+    }
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
+
+    await trayHandler({
+      payload: { repoId: "repo-1", configKey: "invalid" },
+    });
+
+    expect(mocks.showSystemNotification).toHaveBeenCalled();
+  });
+
+  it("主窗口回退拉起失败时静默吞错", async () => {
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
+    mocks.listen.mockImplementation(async (_eventName, callback) => {
+      handler = callback;
+      return () => {};
+    });
+    mocks.showSystemNotification.mockResolvedValue(false);
+    mocks.showMainWindow.mockRejectedValue(new Error("window gone"));
+
+    renderHook(() =>
+      useTrayRecentPublish({
+        appT: {},
+        runPublishSpec: vi.fn(),
+      })
+    );
+
+    await waitFor(() => {
+      expect(handler).not.toBeNull();
+    });
+    if (!handler) {
+      throw new Error("tray handler missing");
+    }
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
+
+    await expect(
+      trayHandler({
+        payload: { repoId: "repo-1", configKey: "invalid" },
+      })
+    ).resolves.toBeUndefined();
+    expect(mocks.showMainWindow).toHaveBeenCalled();
+  });
+
+  it("非 Tauri 环境不订阅托盘事件", async () => {
+    mocks.isTauri.mockReturnValue(false);
+
+    renderHook(() =>
+      useTrayRecentPublish({
+        appT: {},
+        runPublishSpec: vi.fn(),
+      })
+    );
+
+    await Promise.resolve();
+    expect(mocks.listen).not.toHaveBeenCalled();
+
+    mocks.isTauri.mockReturnValue(true);
+  });
+
+  it("托盘事件订阅失败时记录错误而不抛出", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.listen.mockRejectedValue(new Error("listener unavailable"));
+
+    const { unmount } = renderHook(() =>
+      useTrayRecentPublish({
+        appT: {},
+        runPublishSpec: vi.fn(),
+      })
+    );
+
+    await waitFor(() => {
+      expect(errorSpy).toHaveBeenCalledWith(
+        "监听 tray-publish-request 失败:",
+        expect.any(Error)
+      );
+    });
+    unmount();
+  });
 });
