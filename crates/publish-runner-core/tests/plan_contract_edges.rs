@@ -931,6 +931,20 @@ impl AdapterContract for ScriptedDestination {
         &self.descriptor
     }
 
+    /// v0 → v1 迁移补默认 mode：密封计划若仍携带迁移前设置，
+    /// preflight 必须拒绝而不是悄悄就地迁移（ADR-0029）。
+    fn migrate_settings(
+        &self,
+        settings: &AdapterSettings,
+    ) -> Result<AdapterSettings, PublishError> {
+        if settings.schema_version == 0 {
+            return Ok(AdapterSettings::new(1)
+                .with_value("mode", Value::String("ok".to_string()))
+                .with_value("directory", Value::String("/tmp/scripted".to_string())));
+        }
+        Ok(settings.clone())
+    }
+
     fn default_settings(&self) -> AdapterSettings {
         AdapterSettings::new(1)
             .with_value("mode", Value::String("ok".to_string()))
@@ -1179,6 +1193,20 @@ impl AdapterContract for ScriptedDestination {
                 }],
                 ..AdapterExecutionOutput::default()
             },
+            (false, "receipt-cancelled") => AdapterExecutionOutput {
+                receipts: vec![publish_domain::DeliveryReceipt {
+                    status: publish_domain::DeliveryStatus::Cancelled,
+                    ..receipt(1, "local://rejected")
+                }],
+                ..AdapterExecutionOutput::default()
+            },
+            (false, "receipt-expired") => AdapterExecutionOutput {
+                receipts: vec![publish_domain::DeliveryReceipt {
+                    status: publish_domain::DeliveryStatus::Expired,
+                    ..receipt(1, "local://rejected")
+                }],
+                ..AdapterExecutionOutput::default()
+            },
             (false, "submitted-then-backwards") => AdapterExecutionOutput {
                 receipts: vec![
                     publish_domain::DeliveryReceipt {
@@ -1234,10 +1262,17 @@ impl AdapterContract for ScriptedDestination {
 impl publish_adapters::DeliveryDestination for ScriptedDestination {
     fn validate_staged_envelope(
         &self,
-        _node: &PlanNode,
+        node: &PlanNode,
         _context: &AdapterExecutionContext<'_>,
         _envelope: &publish_domain::DeliveryEnvelope,
     ) -> Result<(), PublishError> {
+        if node.settings.string("mode", "scripted-destination").ok()
+            == Some("reject-staged-envelope")
+        {
+            return Err(PublishError::Execution(
+                "sealed settings no longer accept the staged envelope".to_string(),
+            ));
+        }
         Ok(())
     }
 
@@ -1993,9 +2028,27 @@ fn a_route_that_emits_no_receipt_fails_completion() {
 #[test]
 fn failed_delivery_status_receipts_fail_their_routes() {
     // 终态失败状态的 Receipt 是目的地自报失败：保留证据并把路线记为失败。
-    for (mode, expected) in [
-        ("receipt-failed", "is failed"),
-        ("receipt-rejected", "is rejected"),
+    for (mode, expected_status, expected) in [
+        (
+            "receipt-failed",
+            publish_domain::PublishAttemptStatus::Failed,
+            "is failed",
+        ),
+        (
+            "receipt-rejected",
+            publish_domain::PublishAttemptStatus::Failed,
+            "is rejected",
+        ),
+        (
+            "receipt-cancelled",
+            publish_domain::PublishAttemptStatus::Cancelled,
+            "is cancelled",
+        ),
+        (
+            "receipt-expired",
+            publish_domain::PublishAttemptStatus::Failed,
+            "is expired",
+        ),
     ] {
         let (fixture, prepared) = scripted_fixture(&[("scripted", mode, true)]);
         let view = fixture
@@ -2006,7 +2059,10 @@ fn failed_delivery_status_receipts_fail_their_routes() {
                 &AttemptExecutionContext::at(0),
             )
             .expect("failed-status receipts settle as route failures");
-        assert_eq!(view.status, publish_domain::PublishAttemptStatus::Failed);
+        assert_eq!(
+            view.status, expected_status,
+            "unexpected view for {mode}: {view:?}"
+        );
         let route = view
             .routes
             .iter()
@@ -2347,6 +2403,157 @@ fn resume_rejects_a_prepared_plan_that_no_longer_matches_its_snapshot() {
         error
             .to_string()
             .contains("no longer matches its planning input snapshot"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn preflight_rejects_settings_that_still_require_migration() {
+    // 绑定级：快照 adapter 携带 v0 设置（迁移前），密封计划不得就地原谅。
+    let (fixture, mut prepared) = {
+        let (fixture, prepared) = scripted_fixture(&[("scripted", "ok", true)]);
+        (fixture, prepared)
+    };
+    prepared
+        .plan
+        .adapters
+        .iter_mut()
+        .find(|binding| binding.binding_id == "scripted")
+        .expect("scripted binding")
+        .settings
+        .schema_version = 0;
+    prepared.plan.digest = prepared
+        .plan
+        .recomputed_digest()
+        .expect("reseal migrated-plan");
+    let error = fixture
+        .runtime
+        .start(&prepared.plan, "attempt-binding-migration")
+        .expect_err("stale binding settings must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("contains settings that require migration"),
+        "unexpected error: {error}"
+    );
+
+    // 节点级：节点设置与绑定一致漂移同样拒绝。
+    let (fixture, mut prepared) = {
+        let (fixture, prepared) = scripted_fixture(&[("scripted", "ok", true)]);
+        (fixture, prepared)
+    };
+    prepared
+        .plan
+        .nodes
+        .iter_mut()
+        .find(|node| node.id == "scripted.stage")
+        .expect("scripted stage node")
+        .settings
+        .schema_version = 0;
+    prepared.plan.digest = prepared
+        .plan
+        .recomputed_digest()
+        .expect("reseal migrated-plan");
+    let error = fixture
+        .runtime
+        .start(&prepared.plan, "attempt-node-migration")
+        .expect_err("stale node settings must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("contains settings that require migration"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn cancel_preserves_route_failures_recorded_in_the_projection() {
+    // 取消归约不重写已有失败证据：视图持有 route_failed 但无任何
+    // manifest/交付证据时，失败路线的错误在取消收尾时保留。
+    let (fixture, prepared, mut view) = completed_view(
+        &[("scripted", "publish-fails", true)],
+        "attempt-cancel-failed",
+    );
+    view.manifest = None;
+    view.attempt.manifest_digest = None;
+    view.events.retain(|event| {
+        !event.payload.contains_key("manifest_digest")
+            && !event.payload.contains_key("delivery_envelopes")
+    });
+    for (index, event) in view.events.iter_mut().enumerate() {
+        event.sequence = index as u64 + 1;
+    }
+    view.receipts.clear();
+    view.receipt_history.clear();
+    let cancelled = fixture
+        .runtime
+        .cancel_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect("cancel settles a failed attempt deterministically");
+    let route = cancelled
+        .routes
+        .iter()
+        .find(|route| route.route_id == "scripted")
+        .expect("scripted route present");
+    assert!(
+        route.error.is_some(),
+        "the recorded route failure must survive cancellation: {route:?}"
+    );
+}
+
+#[test]
+fn resume_reports_retried_routes_that_fail_again() {
+    // Pending 路线重试后再次失败：finish_failed_attempt 以路线错误收尾。
+    let (fixture, prepared, mut view) = completed_view(
+        &[("scripted", "publish-fails", true)],
+        "attempt-retry-refail",
+    );
+    // 清除失败证据但保留已完成节点事实：路线回到 Pending，可重试。
+    view.events.retain(|event| {
+        !event.plan_node_id.starts_with("scripted.publish")
+            && !event.plan_node_id.starts_with("scripted.observe")
+    });
+    view.receipts.clear();
+    view.receipt_history.clear();
+    let resumed = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect("a retried route failure still produces a verdict");
+    assert_eq!(resumed.status, publish_domain::PublishAttemptStatus::Failed);
+    let route = resumed
+        .routes
+        .iter()
+        .find(|route| route.route_id == "scripted")
+        .expect("scripted route present");
+    assert!(
+        route
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("delivery outage")),
+        "route must carry the retried failure: {route:?}"
+    );
+}
+
+#[test]
+fn resume_revalidates_staged_envelopes_against_sealed_settings() {
+    // 恢复出的暂存信封按封存设置重校验：目的地拒绝即阻断续传（ADR-0055）。
+    let (fixture, prepared, mut view) = completed_view(
+        &[("scripted", "reject-staged-envelope", true)],
+        "attempt-revalidate-envelope",
+    );
+    view.events.retain(|event| {
+        !event.plan_node_id.starts_with("scripted.publish")
+            && !event.plan_node_id.starts_with("scripted.observe")
+    });
+    view.receipts.clear();
+    view.receipt_history.clear();
+    let error = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect_err("destination rejection of staged evidence blocks resume");
+    assert!(
+        error
+            .to_string()
+            .contains("no longer accept the staged envelope"),
         "unexpected error: {error}"
     );
 }
