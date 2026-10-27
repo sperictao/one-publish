@@ -1609,6 +1609,46 @@ fn the_fake_api_rejects_duplicate_tags_and_blank_tokens() {
 }
 
 #[test]
+fn the_fake_api_enforces_release_and_asset_invariants() {
+    use publish_adapters::{GitHubReleaseApi, NewGitHubRelease};
+
+    let api = FakeGitHubReleaseApi::new();
+    let token = CredentialValue::new(TOKEN);
+    let release = api
+        .create_draft_release(
+            &token,
+            "acme/demo",
+            &NewGitHubRelease {
+                tag: "v1.2.3".to_string(),
+                name: "Demo".to_string(),
+                body: String::new(),
+                prerelease: false,
+            },
+        )
+        .expect("draft");
+
+    // 同名资产禁止二次上传；不存在的 release/asset 一律 404。
+    api.upload_asset(&token, "acme/demo", release.id, "Demo.dmg", b"bytes")
+        .expect("first upload");
+    assert!(matches!(
+        api.upload_asset(&token, "acme/demo", release.id, "Demo.dmg", b"other"),
+        Err(GitHubApiFailure::Http { status: 422, .. })
+    ));
+    assert!(matches!(
+        api.upload_asset(&token, "acme/demo", 999_999, "x", b"y"),
+        Err(GitHubApiFailure::Http { status: 404, .. })
+    ));
+    assert!(matches!(
+        api.delete_asset(&token, "acme/demo", 999_999),
+        Err(GitHubApiFailure::Http { status: 404, .. })
+    ));
+    assert!(matches!(
+        api.publish_release(&token, "acme/demo", 999_999),
+        Err(GitHubApiFailure::Http { status: 404, .. })
+    ));
+}
+
+#[test]
 fn publishing_rejects_assets_missing_from_the_sealed_manifest() {
     let fixture = Fixture::new();
     let manifest = desktop_manifest(fixture.root.path());

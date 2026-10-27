@@ -1411,3 +1411,53 @@ fn binding_resolution_requires_a_registered_adapter() {
         PublishError::AdapterNotRegistered { .. }
     ));
 }
+
+#[test]
+fn version_drift_surfaces_available_versions_instead_of_not_registered() {
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_delivery_destination(
+            Arc::new(capability_adapter(
+                AdapterKind::DeliveryDestination,
+                "dest",
+                vec![],
+                vec![],
+            )),
+            &fixture,
+        )
+        .expect("register v1");
+
+    // 同 id 异版本 → AdapterVersionMismatch 并附可用版本清单。
+    let drifted = AdapterIdentity::new(AdapterKind::DeliveryDestination, "dest", 2);
+    let error = registry
+        .probe_delivery(
+            &drifted,
+            &AdapterSettings::new(1),
+            &DeliveryIdempotencyIdentity {
+                attempt_id: "attempt".to_string(),
+                plan_node_id: "node".to_string(),
+                release_identity: ReleaseIdentity::new(
+                    "project",
+                    SourceSnapshot {
+                        revision: "0123456789abcdef".to_string(),
+                        workspace_digest: None,
+                        dirty: false,
+                        captured_at: "2026-10-27T10:00:00Z".to_string(),
+                        reproducible: true,
+                    },
+                    "1.0.0",
+                    "stable",
+                    None,
+                ),
+                manifest_digest: "digest".to_string(),
+                route_id: "route".to_string(),
+            },
+            &BTreeMap::new(),
+        )
+        .expect_err("version drift cannot resolve");
+    assert!(matches!(
+        error,
+        PublishError::AdapterVersionMismatch { requested: 2, .. }
+    ));
+}

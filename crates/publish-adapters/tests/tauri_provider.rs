@@ -1237,3 +1237,38 @@ fn mirrors_resolving_outside_the_repository_are_skipped_not_reported() {
         .iter()
         .any(|mirror| mirror.path == "src-tauri/Cargo.toml"));
 }
+
+#[test]
+fn root_level_configs_resolve_the_repository_as_the_app_root() {
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join("tauri.conf.json"),
+        r#"{"productName":"Rooted","version":"1.0.0"}"#,
+    );
+    write_file(
+        &repository.path().join("package.json"),
+        r#"{"packageManager":"pnpm@10.0.0"}"#,
+    );
+    write_file(&repository.path().join("pnpm-lock.yaml"), "");
+
+    let inspection = TauriProjectProvider::new()
+        .inspect(repository.path(), "tauri.conf.json")
+        .expect("root-level config inspects");
+    assert_eq!(inspection.app_root, ".");
+}
+
+#[test]
+fn inspection_surfaces_conflicting_build_driver_markers() {
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join("src-tauri/tauri.conf.json"),
+        r#"{"productName":"Demo","version":"1.2.3"}"#,
+    );
+    write_file(&repository.path().join("package-lock.json"), "{}");
+    write_file(&repository.path().join("pnpm-lock.yaml"), "");
+
+    let error = TauriProjectProvider::new()
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("conflicting lockfiles must not pick a driver");
+    assert!(error.to_string().contains("lockfile") || error.to_string().contains("driver"));
+}
