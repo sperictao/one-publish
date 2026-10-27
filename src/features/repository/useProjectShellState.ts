@@ -115,7 +115,6 @@ export function useProjectShellState(params: {
     )
   );
   const projectInfo = visibleProjectInfoSnapshot.projectInfo;
-  const projectProfilesRevision = visibleProjectInfoSnapshot.revision;
   useEffect(() => {
     selectedScopeKeyRef.current = currentScopeKey;
     canExposeProjectInfoRef.current = Boolean(
@@ -321,7 +320,6 @@ export function useProjectShellState(params: {
 
   return {
     projectInfo,
-    projectProfilesRevision,
     isProjectInfoRefreshing,
     scanProject,
   };

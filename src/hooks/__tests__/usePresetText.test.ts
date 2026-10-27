@@ -12,21 +12,23 @@ describe("usePresetText", () => {
       })
     );
 
-    expect(result.current.presetTextMap["release-fd"]).toEqual({
-      name: "自定义 Release",
-      description: "自定义描述",
-    });
+    expect(result.current.getPresetText("release-fd", "fb", "fb desc")).toEqual(
+      {
+        name: "自定义 Release",
+        description: "自定义描述",
+      }
+    );
   });
 
   it("falls back to built-in copy for missing translation keys", () => {
     const { result } = renderHook(() => usePresetText({}));
 
-    expect(result.current.presetTextMap["debug-win-x64"].name).toBe(
+    expect(result.current.getPresetText("debug-win-x64", "fb", "fb").name).toBe(
       "Debug - Windows x64"
     );
-    expect(result.current.presetTextMap["release-osx-arm64"].description).toBe(
-      "Apple Silicon"
-    );
+    expect(
+      result.current.getPresetText("release-osx-arm64", "fb", "fb").description
+    ).toBe("Apple Silicon");
   });
 
   it("getPresetText returns preset text for known ids", () => {
@@ -54,10 +56,14 @@ describe("usePresetText", () => {
       initialProps: { t: translations },
     });
 
-    expect(result.current.presetTextMap["release-fd"].name).toBe("第一版");
+    expect(result.current.getPresetText("release-fd", "fb", "fb").name).toBe(
+      "第一版"
+    );
 
     rerender({ t: { releaseFd: "第二版" } });
 
-    expect(result.current.presetTextMap["release-fd"].name).toBe("第二版");
+    expect(result.current.getPresetText("release-fd", "fb", "fb").name).toBe(
+      "第二版"
+    );
   });
 });

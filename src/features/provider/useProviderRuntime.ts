@@ -133,7 +133,6 @@ export function useProviderRuntime() {
 
     return Object.fromEntries(entries);
   }, [providerSchemaStates]);
-  const activeProviderSchema = activeProviderSchemaState.data ?? undefined;
 
   const retryProviderList = useCallback(() => {
     void loadProviders();
@@ -153,13 +152,11 @@ export function useProviderRuntime() {
     activeProviderId,
     setActiveProviderId,
     providerListState,
-    providerSchemaStates,
     activeProviderSchemaState,
     retryProviderList,
     retryProviderSchema,
     providerSchemas,
     availableProviders,
     activeProvider,
-    activeProviderSchema,
   };
 }

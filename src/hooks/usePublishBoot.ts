@@ -606,7 +606,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     // Derived
     projectFrameworkOptions,
     isProjectProfilesRefreshing,
-    isPublishRunCardRefreshing,
     publishConfigPanelProps,
     publishRunCardProps,
     commandImportResultCardProps,

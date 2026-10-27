@@ -246,7 +246,7 @@ describe("useProjectShellState", () => {
     });
   });
 
-  it("切回已访问仓库时只回显缓存 revision，提交新项目配置快照后才推进 projectProfilesRevision", async () => {
+  it("切回已访问仓库时先回显缓存项目信息，新项目配置提交后随之更新", async () => {
     const repoAInitial = createDeferred<ProjectInfo | null>();
     const repoB = createDeferred<ProjectInfo | null>();
     const repoARefresh = createDeferred<ProjectInfo | null>();
@@ -280,7 +280,6 @@ describe("useProjectShellState", () => {
       expect(result.current.projectInfo?.project_file).toBe(
         "/repo-a/App.csproj"
       );
-      expect(result.current.projectProfilesRevision).toBe(1);
     });
 
     rerender({
@@ -298,7 +297,6 @@ describe("useProjectShellState", () => {
       expect(result.current.projectInfo?.project_file).toBe(
         "/repo-b/App.csproj"
       );
-      expect(result.current.projectProfilesRevision).toBe(1);
     });
 
     rerender({
@@ -309,7 +307,6 @@ describe("useProjectShellState", () => {
     });
 
     expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
-    expect(result.current.projectProfilesRevision).toBe(1);
     expect(result.current.isProjectInfoRefreshing).toBe(true);
 
     await act(async () => {
@@ -324,7 +321,6 @@ describe("useProjectShellState", () => {
         "FolderProfile",
         "ClickOnce",
       ]);
-      expect(result.current.projectProfilesRevision).toBe(2);
       expect(result.current.isProjectInfoRefreshing).toBe(false);
     });
   });

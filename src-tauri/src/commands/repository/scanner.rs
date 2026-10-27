@@ -379,7 +379,6 @@ pub async fn detect_repository_provider(
 }
 
 /// Scan project files for the detected provider.
-#[tauri::command]
 pub async fn scan_project_files(path: String) -> Result<Vec<String>, crate::errors::AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new(
         "commands::repository::scanner::scan_project_files",

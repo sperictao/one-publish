@@ -1136,9 +1136,6 @@ export async function installMockTauri(
               };
             }
 
-            case "scan_project_files":
-              return [];
-
             case "read_project_publish_profile": {
               const profileName =
                 (args?.profileName as string) || "FolderProfile";

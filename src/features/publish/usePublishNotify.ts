@@ -32,11 +32,6 @@ export interface UsePublishNotifyResult {
     description?: string,
     mode?: "toast" | "system"
   ) => Promise<boolean>;
-  openOutputDirectoryIfNeeded: (
-    shouldOpen: boolean,
-    outputDir: string,
-    feedbackMode: "toast" | "system"
-  ) => Promise<void>;
   restoreMainWindowIfNeeded: (shouldRestore: boolean) => Promise<void>;
   syncTrayPublishStatus: (
     status: "idle" | "success" | "failure"
@@ -218,7 +213,6 @@ export function usePublishNotify({
 
   return {
     notifyFeedback,
-    openOutputDirectoryIfNeeded,
     restoreMainWindowIfNeeded,
     syncTrayPublishStatus,
   };

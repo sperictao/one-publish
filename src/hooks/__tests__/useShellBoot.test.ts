@@ -85,7 +85,6 @@ describe("useShellBoot", () => {
     );
 
     await waitFor(() => expect(result.current.language).toBe("en"));
-    expect(result.current.normalizedPreferenceLanguage).toBe("en");
   });
 
   it("does not sync language while state is still loading", async () => {
