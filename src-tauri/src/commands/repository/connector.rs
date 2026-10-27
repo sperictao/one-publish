@@ -369,3 +369,324 @@ pub async fn scan_repository_branches(
     );
     scan_repository_branches_internal(path, refresh_remote.unwrap_or(true)).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    #[test]
+    fn classify_repository_path_error_maps_io_kinds() {
+        assert_eq!(
+            classify_repository_path_error(IoErrorKind::NotFound),
+            "path_not_found"
+        );
+        assert_eq!(
+            classify_repository_path_error(IoErrorKind::NotADirectory),
+            "not_directory"
+        );
+        assert_eq!(
+            classify_repository_path_error(IoErrorKind::PermissionDenied),
+            "permission_denied"
+        );
+        assert_eq!(
+            classify_repository_path_error(IoErrorKind::Other),
+            "read_failed"
+        );
+    }
+
+    #[test]
+    fn classify_git_execution_error_maps_spawn_failures() {
+        assert_eq!(
+            classify_git_execution_error(IoErrorKind::NotFound),
+            "git_missing"
+        );
+        assert_eq!(
+            classify_git_execution_error(IoErrorKind::PermissionDenied),
+            "permission_denied"
+        );
+        assert_eq!(classify_git_execution_error(IoErrorKind::Other), "unknown");
+    }
+
+    #[test]
+    fn classify_git_branch_scan_error_maps_known_stderr() {
+        let cases = [
+            ("fatal: not a git repository", "not_git_repo"),
+            ("fatal: 不是一个git仓库", "not_git_repo"),
+            (
+                "fatal: detected dubious ownership in repository",
+                "dubious_ownership",
+            ),
+            ("error: Permission denied", "permission_denied"),
+            ("fatal: 权限不足", "permission_denied"),
+            ("ssh: Could not resolve hostname x", "cannot_connect_repo"),
+            ("fatal: connection timed out", "cannot_connect_repo"),
+            (
+                "fatal: authentication failed for 'x'",
+                "cannot_connect_repo",
+            ),
+            (
+                "fatal: publickey authentication required",
+                "cannot_connect_repo",
+            ),
+            ("ERROR: Repository not found.", "cannot_connect_repo"),
+            ("fatal: 无法解析主机名", "cannot_connect_repo"),
+            ("fatal: 网络不可达", "cannot_connect_repo"),
+            ("some unrelated git failure", "unknown"),
+        ];
+        for (stderr, expected) in cases {
+            assert_eq!(
+                classify_git_branch_scan_error(stderr),
+                expected,
+                "stderr: {stderr}"
+            );
+        }
+    }
+
+    #[test]
+    fn git_command_failure_error_puts_stderr_in_details_only_when_present() {
+        let with_stderr = git_command_failure_error(
+            "remote",
+            b"fatal: not a git repository (or any parent up to mount point)",
+        );
+        assert_eq!(with_stderr.code.as_deref(), Some("not_git_repo"));
+        assert!(with_stderr
+            .details
+            .as_deref()
+            .is_some_and(|details| details.contains("not a git repository")));
+
+        let empty = git_command_failure_error("branch", b"  \n");
+        assert_eq!(empty.code.as_deref(), Some("unknown"));
+        assert!(empty.details.is_none());
+    }
+
+    fn git(dir: &Path, args: &[&str]) -> std::process::Output {
+        Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .output()
+            .expect("spawn git")
+    }
+
+    fn commit_empty(repo: &Path) {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(["-c", "user.email=test@test", "-c", "user.name=test"])
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .expect("spawn git commit");
+        assert!(output.status.success(), "commit failed: {:?}", output);
+    }
+
+    /// 本地文件 remote：init bare → seed push → clone，获得一个带 upstream
+    /// 追踪且 `ls-remote` 离线可达的工作副本。
+    fn cloned_repo(temp: &TempDir) -> (PathBuf, PathBuf) {
+        let remote = temp.path().join("remote.git");
+        let seed = temp.path().join("seed");
+        let work = temp.path().join("work");
+        std::fs::create_dir_all(&seed).expect("create seed");
+
+        let init = Command::new("git")
+            .args(["init", "--bare"])
+            .arg(&remote)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .expect("spawn git init --bare");
+        assert!(init.status.success());
+
+        git(&seed, &["init", "-b", "main"]);
+        commit_empty(&seed);
+        git(
+            &seed,
+            &["remote", "add", "origin", remote.to_str().expect("utf8")],
+        );
+        git(&seed, &["push", "-u", "origin", "main"]);
+        // init --bare 的 HEAD 默认指向 master：未出生的 remote HEAD 会让
+        // clone 不带任何本地分支。
+        git(&remote, &["symbolic-ref", "HEAD", "refs/heads/main"]);
+
+        let clone = Command::new("git")
+            .args(["clone"])
+            .arg(&remote)
+            .arg(&work)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .output()
+            .expect("spawn git clone");
+        assert!(
+            clone.status.success(),
+            "clone failed: {}",
+            String::from_utf8_lossy(&clone.stderr)
+        );
+        (remote, work)
+    }
+
+    #[tokio::test]
+    async fn scan_repository_branches_rejects_missing_and_non_directory_paths() {
+        let temp = TempDir::new().expect("temp dir");
+        let missing = temp.path().join("missing");
+        let err = scan_repository_branches_internal(missing.to_string_lossy().to_string(), false)
+            .await
+            .expect_err("missing path");
+        assert_eq!(err.code.as_deref(), Some("path_not_found"));
+
+        let file = temp.path().join("file.txt");
+        std::fs::write(&file, "x").expect("write file");
+        let err = scan_repository_branches_internal(file.to_string_lossy().to_string(), false)
+            .await
+            .expect_err("file path");
+        assert_eq!(err.code.as_deref(), Some("not_directory"));
+    }
+
+    #[tokio::test]
+    async fn scan_repository_branches_reports_not_git_repo_for_plain_directory() {
+        let temp = TempDir::new().expect("temp dir");
+        let err =
+            scan_repository_branches_internal(temp.path().to_string_lossy().to_string(), false)
+                .await
+                .expect_err("plain directory");
+        // `git remote` 失败的 stderr 经分类器落到 not_git_repo。
+        assert_eq!(err.code.as_deref(), Some("not_git_repo"));
+    }
+
+    #[tokio::test]
+    async fn scan_repository_branches_reports_no_branches_for_empty_repo() {
+        let temp = TempDir::new().expect("temp dir");
+        let repo = temp.path().join("repo");
+        std::fs::create_dir_all(&repo).expect("create repo");
+        git(&repo, &["init", "-b", "main"]);
+
+        let err = scan_repository_branches_internal(repo.to_string_lossy().to_string(), false)
+            .await
+            .expect_err("empty repo");
+        assert_eq!(err.code.as_deref(), Some("no_branches"));
+    }
+
+    #[tokio::test]
+    async fn scan_repository_branches_lists_branches_with_current_and_main_flags() {
+        let temp = TempDir::new().expect("temp dir");
+        let (_remote, work) = cloned_repo(&temp);
+        git(&work, &["branch", "feature/login"]);
+
+        let result = scan_repository_branches(work.to_string_lossy().to_string(), Some(false))
+            .await
+            .expect("scan");
+
+        assert_eq!(result.current_branch, "main");
+        let main = result
+            .branches
+            .iter()
+            .find(|branch| branch.name == "main")
+            .expect("main branch");
+        assert!(main.is_current && main.is_main);
+        let feature = result
+            .branches
+            .iter()
+            .find(|branch| branch.name == "feature/login")
+            .expect("feature branch");
+        assert!(!feature.is_current && !feature.is_main);
+    }
+
+    #[tokio::test]
+    async fn scan_repository_branches_with_refresh_fetches_local_remote() {
+        let temp = TempDir::new().expect("temp dir");
+        let (_remote, work) = cloned_repo(&temp);
+
+        // refresh_remote=true 会对本地 remote 跑 `git fetch --all --prune`（离线可行）。
+        let result = scan_repository_branches(work.to_string_lossy().to_string(), Some(true))
+            .await
+            .expect("scan with refresh");
+        assert_eq!(result.current_branch, "main");
+    }
+
+    #[tokio::test]
+    async fn scan_repository_branches_detached_head_reports_head_as_current() {
+        let temp = TempDir::new().expect("temp dir");
+        let (_remote, work) = cloned_repo(&temp);
+        git(&work, &["branch", "other"]);
+        git(&work, &["checkout", "--detach", "HEAD"]);
+
+        let result = scan_repository_branches(work.to_string_lossy().to_string(), Some(false))
+            .await
+            .expect("scan detached");
+
+        // detached 态 `git branch` 输出 `* (HEAD detached at <oid>)`——
+        // 伪分支名原样成为 current，不做特判。
+        assert!(
+            result.current_branch.starts_with("(HEAD detached"),
+            "current_branch: {}",
+            result.current_branch
+        );
+        assert!(result
+            .branches
+            .iter()
+            .any(|branch| branch.is_current && branch.name == result.current_branch));
+    }
+
+    #[tokio::test]
+    async fn connectivity_is_false_for_missing_file_and_no_upstream_paths() {
+        let temp = TempDir::new().expect("temp dir");
+        assert!(
+            !check_repository_branch_connectivity(
+                temp.path().join("missing").to_string_lossy().to_string(),
+                None
+            )
+            .await
+            .can_connect
+        );
+
+        let file = temp.path().join("file.txt");
+        std::fs::write(&file, "x").expect("write file");
+        assert!(
+            !check_repository_branch_connectivity(file.to_string_lossy().to_string(), None)
+                .await
+                .can_connect
+        );
+
+        // 有分支但无 upstream 追踪 → rev-parse @{upstream} 失败 → false。
+        let repo = temp.path().join("repo");
+        std::fs::create_dir_all(&repo).expect("create repo");
+        git(&repo, &["init", "-b", "main"]);
+        commit_empty(&repo);
+        assert!(
+            !check_repository_branch_connectivity(
+                repo.to_string_lossy().to_string(),
+                Some("main".to_string())
+            )
+            .await
+            .can_connect
+        );
+    }
+
+    #[tokio::test]
+    async fn connectivity_is_true_for_branch_tracking_a_reachable_local_remote() {
+        let temp = TempDir::new().expect("temp dir");
+        let (_remote, work) = cloned_repo(&temp);
+
+        // 完整 happy path：upstream 解析 + `git ls-remote` 本地 remote。
+        let result =
+            check_repository_branch_connectivity(work.to_string_lossy().to_string(), None).await;
+        assert!(result.can_connect);
+
+        // 未知分支无法解析 upstream → false。
+        let missing = check_repository_branch_connectivity(
+            work.to_string_lossy().to_string(),
+            Some("no-such-branch".to_string()),
+        )
+        .await;
+        assert!(!missing.can_connect);
+
+        // detached HEAD → branch_name 为空/"HEAD" → false。
+        git(&work, &["checkout", "--detach", "HEAD"]);
+        let detached =
+            check_repository_branch_connectivity(work.to_string_lossy().to_string(), None).await;
+        assert!(!detached.can_connect);
+    }
+}

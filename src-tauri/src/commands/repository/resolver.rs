@@ -96,3 +96,78 @@ pub async fn resolve_project_info(
         target_frameworks,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn resolve_project_info_rejects_missing_and_unsupported_files() {
+        let temp = TempDir::new().expect("temp dir");
+
+        let missing = temp.path().join("missing.csproj");
+        let err = resolve_project_info(missing.to_string_lossy().to_string())
+            .await
+            .expect_err("missing file");
+        assert_eq!(err.code.as_deref(), Some("project_file_not_found"));
+        assert!(err
+            .details
+            .as_deref()
+            .is_some_and(|details| details.contains("missing.csproj")));
+
+        let unsupported = temp.path().join("notes.txt");
+        std::fs::write(&unsupported, "hello").expect("write file");
+        let err = resolve_project_info(unsupported.to_string_lossy().to_string())
+            .await
+            .expect_err("unsupported file");
+        assert_eq!(err.code.as_deref(), Some("project_file_not_found"));
+    }
+
+    #[tokio::test]
+    async fn resolve_project_info_treats_solution_files_as_plain_files() {
+        let temp = TempDir::new().expect("temp dir");
+        let nested = temp.path().join("src").join("App");
+        std::fs::create_dir_all(&nested).expect("create nested");
+        let solution = nested.join("App.sln");
+        std::fs::write(&solution, "").expect("write solution");
+
+        let info = resolve_project_info(solution.to_string_lossy().to_string())
+            .await
+            .expect("solution resolves to plain-file info");
+        // 解决方案文件无项目语义：root 退到父目录，无 profile/框架。
+        assert_eq!(info.root_path, nested.to_string_lossy());
+        assert!(info.publish_profiles.is_empty());
+        assert!(info.target_frameworks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn resolve_project_info_lifts_tauri_config_root_out_of_src_tauri() {
+        let temp = TempDir::new().expect("temp dir");
+        let app_dir = temp.path().join("src-tauri");
+        std::fs::create_dir_all(&app_dir).expect("create src-tauri");
+        let config = app_dir.join("tauri.conf.json");
+        std::fs::write(&config, "{}").expect("write config");
+
+        let info = resolve_project_info(config.to_string_lossy().to_string())
+            .await
+            .expect("tauri config resolves");
+        // 配置文件宿主在 src-tauri/ 内时，root 上抬到仓库根。
+        assert_eq!(info.root_path, temp.path().to_string_lossy());
+        assert!(info.publish_profiles.is_empty());
+        assert!(info.target_frameworks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn scan_project_candidates_delegates_to_explicit_start_path() {
+        let temp = TempDir::new().expect("temp dir");
+        std::fs::write(temp.path().join("App.csproj"), "<Project />").expect("write");
+
+        let candidates =
+            scan_project_candidates(Some(temp.path().to_string_lossy().to_string()), None)
+                .await
+                .expect("scan");
+        assert_eq!(candidates.project_files.len(), 1);
+        assert!(candidates.project_files[0].ends_with("App.csproj"));
+    }
+}
