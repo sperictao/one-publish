@@ -142,8 +142,8 @@ fn resolve_status_title(
     }
 }
 
-fn apply_tray_status_title(
-    app: &AppHandle,
+fn apply_tray_status_title<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     status: TrayPublishStatus,
     frame_index: usize,
 ) -> Result<bool, crate::errors::AppError> {
@@ -183,7 +183,7 @@ fn apply_tray_status_title(
     Ok(true)
 }
 
-fn spawn_publishing_animation(app: AppHandle, revision: u64) {
+fn spawn_publishing_animation<R: tauri::Runtime>(app: AppHandle<R>, revision: u64) {
     thread::spawn(move || {
         let mut frame_index = 1;
         while tray_animation_controller().is_current(revision) {
@@ -202,7 +202,7 @@ fn spawn_publishing_animation(app: AppHandle, revision: u64) {
     });
 }
 
-fn spawn_result_clear_animation(app: AppHandle, revision: u64) {
+fn spawn_result_clear_animation<R: tauri::Runtime>(app: AppHandle<R>, revision: u64) {
     thread::spawn(move || {
         thread::sleep(TRAY_RESULT_EFFECT_DURATION);
 
@@ -214,8 +214,8 @@ fn spawn_result_clear_animation(app: AppHandle, revision: u64) {
     });
 }
 
-fn set_tray_publish_status_internal(
-    app: &AppHandle,
+fn set_tray_publish_status_internal<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     status: TrayPublishStatus,
 ) -> Result<bool, crate::errors::AppError> {
     let revision = tray_animation_controller().begin_transition();
@@ -849,5 +849,87 @@ mod tests {
         );
         assert!(menus.iter().all(|menu| menu.config_items.len() <= 3));
         assert!(menus.iter().all(|menu| menu.repo_id != "repo-7"));
+    }
+
+    #[test]
+    fn tray_texts_localizes_english_and_falls_back_to_chinese() {
+        let en = TrayTexts::from_language("en");
+        assert_eq!(en.show_main, "Show Main Window");
+        assert_eq!(en.quit, "Quit");
+        assert_eq!(en.publishing, "Publishing");
+        assert_eq!(en.publish_success, "Publish Succeeded");
+        assert_eq!(en.publish_failure, "Publish Failed");
+
+        // 未知语言与默认实现都落到中文文案。
+        for language in ["zh", "fr", ""] {
+            let texts = TrayTexts::from_language(language);
+            assert_eq!(texts.publishing, "发布中", "language: {language}");
+        }
+        assert_eq!(TrayTexts::default().publishing, "发布中");
+    }
+
+    #[test]
+    fn animation_controller_superseded_revisions_stop_animation() {
+        let controller = TrayAnimationController::default();
+        let first = controller.begin_transition();
+        assert!(controller.is_current(first));
+
+        let second = controller.begin_transition();
+        assert!(!controller.is_current(first), "旧修订必须失效");
+        assert!(controller.is_current(second));
+    }
+
+    #[test]
+    fn tray_publish_event_id_rejects_malformed_payloads() {
+        for bad in [
+            "unrelated:event",
+            "tray_publish:",
+            "tray_publish:repo-only",
+            "tray_publish::config",
+            "tray_publish:repo:",
+            "tray_publish:  :config",
+            "",
+        ] {
+            assert_eq!(parse_tray_publish_event_id(bad), None, "malformed: {bad}");
+        }
+        // config_key 内可含冒号（userprofile:x:y 按首个冒号切分）。
+        let parsed = parse_tray_publish_event_id("tray_publish:repo:userprofile:a:b");
+        assert!(parsed.is_some());
+    }
+
+    #[test]
+    fn load_tray_icon_rejects_undecodable_bytes() {
+        assert!(load_tray_icon(b"not a png", "test").is_none());
+        assert!(load_tray_icon(b"", "test").is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_tray_icon_decodes_bundled_template() {
+        assert!(macos_tray_icon().is_some());
+    }
+
+    #[test]
+    fn apply_status_title_returns_false_without_tray() {
+        let app = tauri::test::mock_app();
+        let updated =
+            apply_tray_status_title(&app.handle(), TrayPublishStatus::Success, 0).expect("apply");
+        assert!(!updated, "无托盘实例时必须返回 false 而非错误");
+    }
+
+    #[test]
+    fn set_publish_status_returns_false_without_tray() {
+        let app = tauri::test::mock_app();
+        // 无托盘 → 早退 false，且不进入动画分发。
+        for status in [
+            TrayPublishStatus::Idle,
+            TrayPublishStatus::Publishing,
+            TrayPublishStatus::Success,
+            TrayPublishStatus::Failure,
+        ] {
+            let updated =
+                set_tray_publish_status_internal(&app.handle(), status).expect("set status");
+            assert!(!updated);
+        }
     }
 }
