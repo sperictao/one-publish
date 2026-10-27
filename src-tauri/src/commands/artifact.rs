@@ -48,3 +48,63 @@ pub async fn sign_artifact(
             .with_details(e.to_string())
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn package_artifact_defaults_format_and_root_dir() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let input = dir.path().join("bundle");
+        std::fs::create_dir_all(&input).expect("create input");
+        std::fs::write(input.join("a.txt"), "hi").expect("write");
+
+        let output = dir.path().join("out").join("bundle.zip");
+        // None/None 走默认值：Zip + include_root_dir
+        let result = package_artifact(
+            input.to_string_lossy().to_string(),
+            output.to_string_lossy().to_string(),
+            None,
+            None,
+        )
+        .await
+        .expect("package");
+
+        assert_eq!(result.format, PackageFormat::Zip);
+        assert_eq!(result.file_count, 1);
+        let mut archive =
+            zip::ZipArchive::new(std::fs::File::open(&output).expect("open")).expect("zip");
+        assert!(archive.by_name("bundle/a.txt").is_ok());
+    }
+
+    #[tokio::test]
+    async fn package_artifact_maps_failures_to_artifact_error_code() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let error = package_artifact(
+            dir.path().join("ghost").to_string_lossy().to_string(),
+            dir.path().join("out.zip").to_string_lossy().to_string(),
+            None,
+            None,
+        )
+        .await
+        .expect_err("missing input must fail");
+
+        assert_eq!(error.code.as_deref(), Some("artifact_package_failed"));
+    }
+
+    #[tokio::test]
+    async fn sign_artifact_maps_validation_failures_to_artifact_error_code() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let error = sign_artifact(
+            dir.path().join("ghost.zip").to_string_lossy().to_string(),
+            SignMethod::GpgDetached,
+            None,
+            None,
+        )
+        .await
+        .expect_err("missing artifact must fail");
+
+        assert_eq!(error.code.as_deref(), Some("artifact_sign_failed"));
+    }
+}

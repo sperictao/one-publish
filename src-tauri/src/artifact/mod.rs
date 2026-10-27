@@ -305,11 +305,13 @@ pub async fn sign_artifact(
     }
 }
 
-async fn sign_gpg_detached(
+/// gpg 签名的纯决策：校验工件存在性、推导签名路径与参数列表。
+/// 进程执行前可完整测试的部分与 spawn 分开（命令体只做建目录与调用）。
+fn gpg_sign_plan(
     artifact_path: &Path,
     output_path: Option<&Path>,
     key_id: Option<&str>,
-) -> Result<SignResult> {
+) -> Result<(PathBuf, Vec<String>)> {
     if !artifact_path.exists() {
         return Err(validation_error(format!(
             "artifact does not exist: {}",
@@ -326,18 +328,6 @@ async fn sign_gpg_detached(
     let signature_path = output_path
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(format!("{}.asc", artifact_path.to_string_lossy())));
-
-    if let Some(parent) = signature_path.parent() {
-        fs::create_dir_all(parent).map_err(|source| {
-            io_error(
-                format!(
-                    "failed to create signature output directory: {}",
-                    parent.display()
-                ),
-                source,
-            )
-        })?;
-    }
 
     let mut args: Vec<String> = vec![
         "--batch".to_string(),
@@ -356,6 +346,28 @@ async fn sign_gpg_detached(
     args.push("--output".to_string());
     args.push(signature_path.to_string_lossy().to_string());
     args.push(artifact_path.to_string_lossy().to_string());
+
+    Ok((signature_path, args))
+}
+
+async fn sign_gpg_detached(
+    artifact_path: &Path,
+    output_path: Option<&Path>,
+    key_id: Option<&str>,
+) -> Result<SignResult> {
+    let (signature_path, args) = gpg_sign_plan(artifact_path, output_path, key_id)?;
+
+    if let Some(parent) = signature_path.parent() {
+        fs::create_dir_all(parent).map_err(|source| {
+            io_error(
+                format!(
+                    "failed to create signature output directory: {}",
+                    parent.display()
+                ),
+                source,
+            )
+        })?;
+    }
 
     let output = timeout(
         Duration::from_secs(10 * 60),
@@ -457,5 +469,136 @@ mod tests {
         let mut buf = String::new();
         entry.read_to_string(&mut buf).expect("read");
         assert_eq!(buf, "binary");
+    }
+
+    #[test]
+    fn packaging_wraps_entries_under_root_name_when_requested() {
+        let dir = tempdir().expect("tempdir");
+        let input = dir.path().join("release-out");
+        fs::create_dir_all(&input).expect("create input");
+        fs::write(input.join("app.bin"), "x").expect("write");
+
+        let output = dir.path().join("out.zip");
+        let rt = tokio::runtime::Runtime::new().expect("runtime");
+        let result = rt
+            .block_on(package_directory(&input, &output, PackageFormat::Zip, true))
+            .expect("package");
+
+        assert_eq!(result.file_count, 1);
+        let mut archive =
+            zip::ZipArchive::new(File::open(&output).expect("open zip")).expect("zip archive");
+        assert!(archive.by_name("release-out/app.bin").is_ok());
+    }
+
+    #[test]
+    fn packaging_rejects_missing_input() {
+        let dir = tempdir().expect("tempdir");
+        let rt = tokio::runtime::Runtime::new().expect("runtime");
+        let error = rt
+            .block_on(package_directory(
+                &dir.path().join("ghost"),
+                &dir.path().join("out.zip"),
+                PackageFormat::Zip,
+                true,
+            ))
+            .expect_err("missing input must fail");
+
+        assert!(matches!(error, ArtifactError::Validation { .. }));
+        assert!(error.to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn packaging_an_empty_directory_produces_an_empty_archive() {
+        let dir = tempdir().expect("tempdir");
+        let input = dir.path().join("empty");
+        fs::create_dir_all(&input).expect("create input");
+        let output = dir.path().join("out.zip");
+
+        let rt = tokio::runtime::Runtime::new().expect("runtime");
+        let result = rt
+            .block_on(package_directory(&input, &output, PackageFormat::Zip, true))
+            .expect("package empty dir");
+
+        assert_eq!(result.file_count, 0);
+        assert_eq!(result.bytes, fs::metadata(&output).unwrap().len());
+    }
+
+    #[test]
+    fn normalize_zip_path_converts_separators() {
+        assert_eq!(
+            normalize_zip_path(Path::new("sub").join("nested").join("f.txt").as_path()),
+            "sub/nested/f.txt"
+        );
+        assert_eq!(normalize_zip_path(Path::new("dir\\win.txt")), "dir/win.txt");
+    }
+
+    #[test]
+    fn compute_sha256_hex_matches_known_digest() {
+        let dir = tempdir().expect("tempdir");
+        let file = dir.path().join("blob");
+        fs::write(&file, "hello").expect("write");
+        assert_eq!(
+            compute_sha256_hex(&file).expect("sha256"),
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+        assert!(compute_sha256_hex(&dir.path().join("ghost")).is_err());
+    }
+
+    #[test]
+    fn gpg_sign_plan_rejects_missing_and_directory_artifacts() {
+        let dir = tempdir().expect("tempdir");
+
+        let error = gpg_sign_plan(&dir.path().join("ghost.zip"), None, None)
+            .expect_err("missing artifact must fail");
+        assert!(error.to_string().contains("does not exist"));
+
+        let error =
+            gpg_sign_plan(dir.path(), None, None).expect_err("directory artifact must fail");
+        assert!(error.to_string().contains("is not a file"));
+    }
+
+    #[test]
+    fn gpg_sign_plan_derives_signature_path_and_args() {
+        let dir = tempdir().expect("tempdir");
+        let artifact = dir.path().join("app.zip");
+        fs::write(&artifact, "zip-bytes").expect("write artifact");
+
+        // 默认签名路径：<artifact>.asc；不带 key 不加 --local-user
+        let (signature_path, args) =
+            gpg_sign_plan(&artifact, None, None).expect("plan without key");
+        assert_eq!(
+            signature_path,
+            PathBuf::from(format!("{}.asc", artifact.to_string_lossy()))
+        );
+        assert_eq!(args[..4], ["--batch", "--yes", "--detach-sign", "--armor"]);
+        assert!(!args.contains(&"--local-user".to_string()));
+        // --output <sig> <artifact> 收尾
+        let output_position = args
+            .iter()
+            .position(|arg| arg == "--output")
+            .expect("output flag");
+        assert_eq!(
+            args[output_position + 1],
+            format!("{}.asc", artifact.to_string_lossy())
+        );
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some(artifact.to_string_lossy().as_ref())
+        );
+
+        // 显式输出路径 + key → --local-user 参与参数
+        let custom = dir.path().join("sig").join("app.asc");
+        let (signature_path, args) =
+            gpg_sign_plan(&artifact, Some(&custom), Some(" KEY-ID ")).expect("plan with key");
+        assert_eq!(signature_path, custom);
+        let key_position = args
+            .iter()
+            .position(|arg| arg == "--local-user")
+            .expect("local-user flag");
+        assert_eq!(args[key_position + 1], " KEY-ID ");
+
+        // 空白 key 按无 key 处理
+        let (_, args) = gpg_sign_plan(&artifact, None, Some("   ")).expect("blank key");
+        assert!(!args.contains(&"--local-user".to_string()));
     }
 }
