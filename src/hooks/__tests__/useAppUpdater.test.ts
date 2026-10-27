@@ -11,15 +11,31 @@ const mocks = vi.hoisted(() => ({
   listenHandler: {
     current: null as null | ((event: { payload: unknown }) => void),
   },
+  listenMode: { current: "resolve" as "resolve" | "reject" | "deferred" },
+  listenDeferred: {
+    current: null as null | {
+      resolve: (fn: () => void) => void;
+      reject: (err: unknown) => void;
+    },
+  },
   unlisten: vi.fn(),
   toastSuccess: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(
-    async (_name: string, handler: (event: { payload: unknown }) => void) => {
+    (_name: string, handler: (event: { payload: unknown }) => void) => {
+      if (mocks.listenMode.current === "reject") {
+        return Promise.reject(new Error("listen unavailable"));
+      }
+      if (mocks.listenMode.current === "deferred") {
+        return new Promise<() => void>((resolve, reject) => {
+          mocks.listenHandler.current = handler;
+          mocks.listenDeferred.current = { resolve, reject };
+        });
+      }
       mocks.listenHandler.current = handler;
-      return mocks.unlisten;
+      return Promise.resolve(mocks.unlisten);
     }
   ),
 }));
@@ -63,6 +79,8 @@ describe("useAppUpdater", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.listenHandler.current = null;
+    mocks.listenMode.current = "resolve";
+    mocks.listenDeferred.current = null;
     mocks.getCurrentVersion.mockResolvedValue("1.0.0");
     mocks.checkUpdate.mockResolvedValue(updateInfo);
     mocks.getUpdaterConfigHealth.mockResolvedValue({
@@ -275,5 +293,74 @@ describe("useAppUpdater", () => {
     unmount();
 
     expect(mocks.unlisten).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns early from check/install/help outside Tauri", async () => {
+    setTauri(false);
+    const { result } = renderHook(() => useAppUpdater());
+
+    let checkResult: unknown;
+    await act(async () => {
+      checkResult = await result.current.checkForUpdates();
+    });
+    expect(checkResult).toBeNull();
+
+    await act(async () => {
+      await result.current.installAvailableUpdate();
+      await result.current.openUpdaterHelpTarget("docs");
+    });
+    expect(mocks.checkUpdate).not.toHaveBeenCalled();
+    expect(mocks.installUpdate).not.toHaveBeenCalled();
+    expect(mocks.openUpdaterHelp).not.toHaveBeenCalled();
+  });
+
+  it("keeps isOpeningUpdaterHelp false when help path lookup fails", async () => {
+    setTauri(true);
+    mocks.getUpdaterConfigHealth.mockResolvedValue({
+      configured: false,
+      message: "missing",
+    });
+    mocks.getUpdaterHelpPaths.mockRejectedValue(new Error("fs gone"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { result } = renderHook(() => useAppUpdater());
+    await waitFor(() =>
+      expect(mocks.getUpdaterConfigHealth).toHaveBeenCalled()
+    );
+
+    await act(async () => {
+      await result.current.checkForUpdates();
+    });
+
+    await act(async () => {
+      await result.current.openUpdaterHelpTarget("docs");
+    });
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("disposes a late-resolving listener after unmount", async () => {
+    setTauri(true);
+    mocks.listenMode.current = "deferred";
+    const { unmount } = renderHook(() => useAppUpdater());
+    await waitFor(() => expect(mocks.listenHandler.current).not.toBeNull());
+
+    unmount();
+    await act(async () => {
+      mocks.listenDeferred.current?.resolve(mocks.unlisten);
+      await Promise.resolve();
+    });
+
+    expect(mocks.unlisten).toHaveBeenCalled();
+  });
+
+  it("logs and survives a listener registration failure", async () => {
+    setTauri(true);
+    mocks.listenMode.current = "reject";
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { unmount } = renderHook(() => useAppUpdater());
+    await waitFor(() => expect(errorSpy).toHaveBeenCalled());
+
+    unmount();
   });
 });
