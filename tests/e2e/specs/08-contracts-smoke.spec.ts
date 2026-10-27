@@ -249,4 +249,102 @@ test.describe("Contract Drift Detection", () => {
 
     expect(error).toBe("injected test error");
   });
+
+  test("list_publish_adapter_catalog returns valid PublishAdapterCatalog shape", async ({
+    page,
+  }) => {
+    const catalog = (await invoke(
+      page,
+      "list_publish_adapter_catalog"
+    )) as Record<string, unknown>;
+
+    // builtin_adapter_catalog（publish_runtime.rs）：camelCase 契约
+    expect(catalog).toHaveProperty("executionBackends");
+    expect(catalog).toHaveProperty("artifactStores");
+    expect(catalog).toHaveProperty("artifactProcessors");
+    expect(catalog).toHaveProperty("deliveryDestinations");
+    expect(catalog.executionBackends).toContain("local-execution");
+    expect(catalog.deliveryDestinations).toContain("local-directory");
+  });
+
+  test("describe_publish_output_target parses local and remote targets", async ({
+    page,
+  }) => {
+    const local = (await invoke(page, "describe_publish_output_target", {
+      raw: "/workspace/dist",
+    })) as Record<string, unknown>;
+    expect(local.kind).toBe("local");
+    expect(local.path).toBe("/workspace/dist");
+    expect(local.raw).toBe("/workspace/dist");
+
+    const remote = (await invoke(page, "describe_publish_output_target", {
+      raw: "sftp://example.com/releases",
+    })) as Record<string, unknown>;
+    expect(remote.kind).toBe("remote");
+    expect(remote.scheme).toBe("sftp");
+    expect(remote.host).toBe("example.com");
+  });
+
+  test("release-settings commands reject non-tauri providers with contract errors", async ({
+    page,
+  }) => {
+    // release_settings_provider_unsupported 属前端分支的错误码契约
+    for (const cmd of [
+      "load_release_settings_draft",
+      "update_profile_release_settings",
+    ]) {
+      const error = await page.evaluate(async (command) => {
+        const win = window as unknown as {
+          __TAURI_INTERNALS__?: {
+            invoke: (
+              c: string,
+              a?: Record<string, unknown>
+            ) => Promise<unknown>;
+          };
+        };
+        try {
+          await win.__TAURI_INTERNALS__!.invoke(command, {
+            repoId: "repo-a",
+            profileId: "profile-folder",
+            settings: {},
+          });
+          return null;
+        } catch (e) {
+          return (e as { code?: string }).code ?? String(e);
+        }
+      }, cmd);
+      expect(error).toBe("release_settings_provider_unsupported");
+    }
+  });
+
+  test("rebind_profile_project reports unknown profiles with contract error", async ({
+    page,
+  }) => {
+    const error = await page.evaluate(async () => {
+      const win = window as unknown as {
+        __TAURI_INTERNALS__?: {
+          invoke: (c: string, a?: Record<string, unknown>) => Promise<unknown>;
+        };
+      };
+      try {
+        await win.__TAURI_INTERNALS__!.invoke("rebind_profile_project", {
+          repoId: "repo-a",
+          profileId: "profile-missing",
+        });
+        return null;
+      } catch (e) {
+        return (e as { code?: string }).code ?? String(e);
+      }
+    });
+    expect(error).toBe("profile_not_found");
+  });
+
+  test("synchronize_remote_publish_evidence returns RemoteAttemptEvidenceView array", async ({
+    page,
+  }) => {
+    const evidence = await invoke(page, "synchronize_remote_publish_evidence", {
+      repoId: "repo-a",
+    });
+    expect(Array.isArray(evidence)).toBe(true);
+  });
 });

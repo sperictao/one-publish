@@ -773,6 +773,227 @@ export async function installMockTauri(
               return clone({ ...appState, executionHistory: [] });
             }
 
+            case "load_release_settings_draft": {
+              // 与 store/commands.rs#load_release_settings_draft 对齐：当前
+              // 修订带 releaseSettings 参数时 stored:true 原样返回，否则回
+              // 建议默认值；非 tauri provider 报 provider_unsupported。
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === (args?.repoId as string)
+              );
+              const profile = repo?.publishConfig.profiles?.find(
+                (p: ConfigProfile) => p.id === (args?.profileId as string)
+              );
+              const revision = profile?.revisions?.find(
+                (r) => r.id === profile.currentRevisionId
+              ) as
+                | {
+                    id: string;
+                    providerId: string;
+                    parameters?: Record<string, unknown>;
+                  }
+                | undefined;
+              if (!profile || !revision) {
+                throw { code: "profile_not_found", message: "配置不存在" };
+              }
+              if (revision.providerId !== "tauri") {
+                throw {
+                  code: "release_settings_provider_unsupported",
+                  message: `Provider ${revision.providerId} 没有发布设置`,
+                };
+              }
+              const stored = revision.parameters?.releaseSettings;
+              if (stored) {
+                return { settings: clone(stored), stored: true };
+              }
+              return {
+                settings: {
+                  appConfigPath: "src-tauri/tauri.conf.json",
+                  appName: "mock-app",
+                  buildDriver: "pnpm",
+                  enabledTargets: [
+                    "windows_x64",
+                    "linux_x64",
+                    "macos_x64",
+                    "macos_arm64",
+                  ],
+                  releaseAssetPatterns: ["release/${version}/**"],
+                  updater: {
+                    enabled: false,
+                    endpoint: null,
+                    publicKey: null,
+                    privateKeySecretName: null,
+                  },
+                  allowUnsignedRelease: false,
+                  requiredActionsSecretNames: [],
+                  actionsSecretEnvironment: {},
+                  tagPrefix: "v",
+                  releaseGates: [],
+                  localDeliveryDir: "release/local",
+                  versionMirrors: [],
+                  managedWorkflowVersion: 1,
+                },
+                stored: false,
+              };
+            }
+
+            case "update_profile_release_settings": {
+              // 与 store/commands.rs#update_profile_release_settings 对齐：
+              // 设置写入新修订的 releaseSettings 参数并切为当前修订，
+              // 返回新 AppState。
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === (args?.repoId as string)
+              );
+              const profile = repo?.publishConfig.profiles?.find(
+                (p: ConfigProfile) => p.id === (args?.profileId as string)
+              );
+              const current = profile?.revisions?.find(
+                (r) => r.id === profile.currentRevisionId
+              );
+              if (!repo || !profile || !current) {
+                throw { code: "profile_not_found", message: "配置不存在" };
+              }
+              if (current.providerId !== "tauri") {
+                throw {
+                  code: "release_settings_provider_unsupported",
+                  message: `Provider ${current.providerId} 没有发布设置`,
+                };
+              }
+              const nextSequence =
+                Math.max(...profile.revisions.map((r) => r.sequence ?? 0)) + 1;
+              const nextRevision = {
+                ...clone(current),
+                id: `${profile.id}-revision-${nextSequence}`,
+                sequence: nextSequence,
+                createdAt: new Date().toISOString(),
+                parameters: {
+                  ...(clone(current.parameters ?? {}) as Record<
+                    string,
+                    unknown
+                  >),
+                  releaseSettings: clone(
+                    args?.settings as Record<string, unknown>
+                  ),
+                },
+              };
+              profile.revisions = [...profile.revisions, nextRevision];
+              profile.currentRevisionId = nextRevision.id;
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "rebind_profile_project": {
+              // 与 store/commands.rs#rebind_profile_project 对齐：候选与当前
+              // 绑定时无操作；否则追加带 projectBinding 的新修订并返回
+              // AppState。系统默认配置不可换绑。
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === (args?.repoId as string)
+              );
+              const profile = repo?.publishConfig.profiles?.find(
+                (p: ConfigProfile) => p.id === (args?.profileId as string)
+              );
+              const current = profile?.revisions?.find(
+                (r) => r.id === profile.currentRevisionId
+              );
+              if (!repo || !profile || !current) {
+                throw { code: "profile_not_found", message: "配置不存在" };
+              }
+              if (profile.isSystemDefault) {
+                throw {
+                  code: "system_profile_immutable",
+                  message: "不能编辑系统默认配置文件",
+                };
+              }
+              const candidate =
+                current.providerId === "tauri"
+                  ? `${repo.path}/src-tauri/tauri.conf.json`
+                  : `${repo.path}/App.csproj`;
+              if ((current.projectBinding ?? null) === candidate) {
+                return clone({ ...appState, executionHistory: [] });
+              }
+              const nextSequence =
+                Math.max(...profile.revisions.map((r) => r.sequence ?? 0)) + 1;
+              const nextRevision = {
+                ...clone(current),
+                id: `${profile.id}-revision-${nextSequence}`,
+                sequence: nextSequence,
+                createdAt: new Date().toISOString(),
+                projectBinding: candidate,
+              };
+              profile.revisions = [...profile.revisions, nextRevision];
+              profile.currentRevisionId = nextRevision.id;
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "list_publish_adapter_catalog":
+              // 与 publish_runtime.rs#builtin_adapter_catalog 对齐（决议
+              // #80/#89：本机执行后端只暴露 local-execution + github-actions）。
+              return {
+                executionBackends: ["local-execution", "github-actions"],
+                artifactStores: ["temporary-artifact-store"],
+                artifactProcessors: ["checksum"],
+                deliveryDestinations: [
+                  "local-directory",
+                  "sftp",
+                  "github-release",
+                ],
+              };
+
+            case "describe_publish_output_target": {
+              // 与 output_target#describe_output_target 对齐：本地路径 →
+              // local 且 path 原样回填；scheme:// → remote；\\ → mounted。
+              const raw = (args?.raw as string) ?? "";
+              const schemeMatch = raw.match(
+                /^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/(.*)$/
+              );
+              if (schemeMatch) {
+                const [, scheme, rest] = schemeMatch;
+                const host = rest.split(/[/:?]/)[0] ?? null;
+                return {
+                  kind: "remote",
+                  raw,
+                  path: null,
+                  mountKind: null,
+                  fsType: null,
+                  scheme,
+                  host,
+                  port: null,
+                  user: null,
+                  query: null,
+                };
+              }
+              if (raw.startsWith("\\\\")) {
+                return {
+                  kind: "mounted_remote",
+                  raw,
+                  path: null,
+                  mountKind: "unc",
+                  fsType: null,
+                  scheme: null,
+                  host: null,
+                  port: null,
+                  user: null,
+                  query: null,
+                };
+              }
+              return {
+                kind: "local",
+                raw,
+                path: raw,
+                mountKind: null,
+                fsType: null,
+                scheme: null,
+                host: null,
+                port: null,
+                user: null,
+                query: null,
+              };
+            }
+
+            case "synchronize_remote_publish_evidence":
+              // 与 remote_evidence#synchronize_remote_publish_evidence 对齐：
+              // 默认无远端运行记录（spec 可经 mockState.initialState 或
+              // __MOCK_INVOCATIONS__ 断言调用发生）。
+              return [];
+
             case "update_profile":
             case "delete_profile":
             case "remove_recent_publish_config":
