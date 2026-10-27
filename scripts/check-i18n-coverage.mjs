@@ -389,10 +389,10 @@ if (uniqueHardcodedCjkUi.length > 0) {
   );
 }
 
-// Stage 3 (warn-only): locale keys with no static source reference — the
-// reverse direction of the missing-used-keys check. Prints the orphan list
-// without affecting the exit code; promote to a hard failure (push into
-// `problems`) only after it runs clean for a few release cycles.
+// Stage 3: locale keys with no static source reference — the reverse
+// direction of the missing-used-keys check. Orphans now fail the gate;
+// dynamically constructed keys belong in UNUSED_KEYS_ALLOWLIST with a
+// comment citing the construction site.
 for (const locale of localeKeySets) {
   const orphans = [...locale.keys]
     .filter(
@@ -401,8 +401,8 @@ for (const locale of localeKeySets) {
     )
     .sort();
   if (orphans.length > 0) {
-    console.warn(
-      `⚠ unused i18n keys in ${locale.file} (${orphans.length}):\n${orphans.join("\n")}`
+    problems.push(
+      `unused i18n keys in ${locale.file} (${orphans.length}):\n${orphans.join("\n")}`
     );
   }
 }
