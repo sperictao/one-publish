@@ -43,6 +43,7 @@ describe("ExecutionHistoryCard", () => {
         historyFilterWindow="all"
         historyFilterKeyword=""
         isExportingHistory={false}
+        isExportingDiagnosticsIndex={false}
         isExportingFailureGroups={false}
         failureGroupCount={0}
         isPublishing={false}
@@ -66,6 +67,7 @@ describe("ExecutionHistoryCard", () => {
         onHistoryFilterKeywordChange={vi.fn()}
         onExportExecutionHistory={vi.fn(async () => undefined)}
         onExportFailureGroups={vi.fn(async () => undefined)}
+        onExportDiagnosticsIndex={vi.fn(async () => undefined)}
         onClearFilters={vi.fn()}
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
@@ -96,6 +98,7 @@ describe("ExecutionHistoryCard", () => {
         historyFilterWindow="all"
         historyFilterKeyword=""
         isExportingHistory={false}
+        isExportingDiagnosticsIndex={false}
         isExportingFailureGroups={false}
         failureGroupCount={0}
         isPublishing={false}
@@ -121,6 +124,7 @@ describe("ExecutionHistoryCard", () => {
         onHistoryFilterKeywordChange={vi.fn()}
         onExportExecutionHistory={vi.fn(async () => undefined)}
         onExportFailureGroups={vi.fn(async () => undefined)}
+        onExportDiagnosticsIndex={vi.fn(async () => undefined)}
         onClearFilters={vi.fn()}
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
@@ -139,8 +143,8 @@ describe("ExecutionHistoryCard", () => {
       screen.queryByRole("button", { name: "复制 GHA 片段" })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "导出诊断索引" })
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "导出诊断索引" })
+    ).toBeInTheDocument();
   });
 
   it("带 warnings 的记录展示警告摘要", () => {
@@ -165,6 +169,7 @@ describe("ExecutionHistoryCard", () => {
         historyFilterWindow="all"
         historyFilterKeyword=""
         isExportingHistory={false}
+        isExportingDiagnosticsIndex={false}
         isExportingFailureGroups={false}
         failureGroupCount={0}
         isPublishing={false}
@@ -187,6 +192,7 @@ describe("ExecutionHistoryCard", () => {
         onHistoryFilterKeywordChange={vi.fn()}
         onExportExecutionHistory={vi.fn(async () => undefined)}
         onExportFailureGroups={vi.fn(async () => undefined)}
+        onExportDiagnosticsIndex={vi.fn(async () => undefined)}
         onClearFilters={vi.fn()}
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
@@ -217,6 +223,7 @@ describe("ExecutionHistoryCard", () => {
         historyFilterWindow="all"
         historyFilterKeyword=""
         isExportingHistory={false}
+        isExportingDiagnosticsIndex={false}
         isExportingFailureGroups={false}
         failureGroupCount={0}
         isPublishing={false}
@@ -239,6 +246,7 @@ describe("ExecutionHistoryCard", () => {
         onHistoryFilterKeywordChange={vi.fn()}
         onExportExecutionHistory={vi.fn(async () => undefined)}
         onExportFailureGroups={vi.fn(async () => undefined)}
+        onExportDiagnosticsIndex={vi.fn(async () => undefined)}
         onClearFilters={vi.fn()}
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
@@ -268,6 +276,7 @@ describe("ExecutionHistoryCard", () => {
         historyFilterWindow="all"
         historyFilterKeyword=""
         isExportingHistory={false}
+        isExportingDiagnosticsIndex={false}
         isExportingFailureGroups={false}
         failureGroupCount={0}
         isPublishing={false}
@@ -280,6 +289,7 @@ describe("ExecutionHistoryCard", () => {
         onHistoryFilterKeywordChange={vi.fn()}
         onExportExecutionHistory={vi.fn(async () => undefined)}
         onExportFailureGroups={vi.fn(async () => undefined)}
+        onExportDiagnosticsIndex={vi.fn(async () => undefined)}
         onClearFilters={vi.fn()}
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}

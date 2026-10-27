@@ -23,6 +23,7 @@ interface UseExecutionHistoryCardPropsParams {
   historyFilterKeyword: string;
   isExportingHistory: boolean;
   isExportingFailureGroups: boolean;
+  isExportingDiagnosticsIndex: boolean;
   failureGroupCount: number;
   isPublishing: boolean;
   appT: TranslationMap;
@@ -34,6 +35,7 @@ interface UseExecutionHistoryCardPropsParams {
   setHistoryFilterKeyword: (value: string) => void;
   exportExecutionHistory: () => Promise<void>;
   exportFailureGroupBundle: () => Promise<void>;
+  exportDiagnosticsIndex: () => Promise<void>;
   clearHistoryFilters: () => void;
   openSnapshotFromRecord: (record: ExecutionRecord) => Promise<void>;
   rerunFromHistory: (record: ExecutionRecord) => Promise<void>;
@@ -60,6 +62,7 @@ export function useExecutionHistoryCardProps(
       historyFilterKeyword: params.historyFilterKeyword,
       isExportingHistory: params.isExportingHistory,
       isExportingFailureGroups: params.isExportingFailureGroups,
+      isExportingDiagnosticsIndex: params.isExportingDiagnosticsIndex,
       failureGroupCount: params.failureGroupCount,
       isPublishing: params.isPublishing,
       appT: params.appT,
@@ -71,6 +74,7 @@ export function useExecutionHistoryCardProps(
       onHistoryFilterKeywordChange: params.setHistoryFilterKeyword,
       onExportExecutionHistory: params.exportExecutionHistory,
       onExportFailureGroups: params.exportFailureGroupBundle,
+      onExportDiagnosticsIndex: params.exportDiagnosticsIndex,
       onClearFilters: params.clearHistoryFilters,
       onOpenSnapshotFromRecord: params.openSnapshotFromRecord,
       onRerunFromHistory: params.rerunFromHistory,

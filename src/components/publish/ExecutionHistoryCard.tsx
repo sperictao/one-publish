@@ -47,6 +47,7 @@ export interface ExecutionHistoryCardProps {
   historyFilterKeyword: string;
   isExportingHistory: boolean;
   isExportingFailureGroups: boolean;
+  isExportingDiagnosticsIndex: boolean;
   failureGroupCount: number;
   isPublishing: boolean;
   appT: Record<string, string | undefined>;
@@ -58,6 +59,7 @@ export interface ExecutionHistoryCardProps {
   onHistoryFilterKeywordChange: (value: string) => void;
   onExportExecutionHistory: () => Promise<void>;
   onExportFailureGroups: () => Promise<void>;
+  onExportDiagnosticsIndex: () => Promise<void>;
   onClearFilters: () => void;
   onOpenSnapshotFromRecord: (record: ExecutionRecord) => Promise<void>;
   onRerunFromHistory: (record: ExecutionRecord) => Promise<void>;
@@ -80,6 +82,7 @@ export function ExecutionHistoryCard({
   historyFilterKeyword,
   isExportingHistory,
   isExportingFailureGroups,
+  isExportingDiagnosticsIndex,
   failureGroupCount,
   isPublishing,
   appT,
@@ -91,6 +94,7 @@ export function ExecutionHistoryCard({
   onHistoryFilterKeywordChange,
   onExportExecutionHistory,
   onExportFailureGroups,
+  onExportDiagnosticsIndex,
   onClearFilters,
   onOpenSnapshotFromRecord,
   onRerunFromHistory,
@@ -240,6 +244,24 @@ export function ExecutionHistoryCard({
                 </>
               ) : (
                 historyT.exportFailureGroups || "导出失败分组"
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              onClick={() => void onExportDiagnosticsIndex()}
+              disabled={isExportingDiagnosticsIndex}
+              data-testid="export-diagnostics-index-btn"
+            >
+              {isExportingDiagnosticsIndex ? (
+                <>
+                  <Loader2 className="mr-1 size-3 animate-spin" />
+                  {appT.exporting || "导出中…"}
+                </>
+              ) : (
+                historyT.exportDiagnosticsIndex || "导出诊断索引"
               )}
             </Button>
           </div>
