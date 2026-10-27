@@ -329,6 +329,10 @@
   "app": {
     "appTitle": "One Publish",
     "loading": "Loading…",
+    "errorBoundaryTitle": "The interface ran into a problem",
+    "errorBoundaryDescription": "An unhandled rendering error occurred. Reload to recover — your saved configuration is not affected.",
+    "errorBoundaryDetails": "Error details",
+    "errorBoundaryReload": "Reload",
     "refreshBranches": "Refresh branch list",
     "expandRepoList": "Expand repository list",
     "importFromCommand": "Import from Command",

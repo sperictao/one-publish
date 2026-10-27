@@ -329,6 +329,10 @@
   "app": {
     "appTitle": "One Publish",
     "loading": "加载中…",
+    "errorBoundaryTitle": "界面渲染遇到问题",
+    "errorBoundaryDescription": "应用发生了未处理的界面异常。可以重新加载恢复，已保存的配置不会丢失。",
+    "errorBoundaryDetails": "错误详情",
+    "errorBoundaryReload": "重新加载",
     "refreshBranches": "刷新分支列表",
     "expandRepoList": "展开仓库列表",
     "importFromCommand": "从命令导入",
