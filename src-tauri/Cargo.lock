@@ -2884,10 +2884,8 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 name = "one-publish"
 version = "1.0.3"
 dependencies = [
- "anyhow",
  "chrono",
  "dirs",
- "glob",
  "hex",
  "log",
  "one-publish-runner",
@@ -2895,9 +2893,7 @@ dependencies = [
  "publish-adapters",
  "publish-domain",
  "publish-runner-core",
- "regex",
  "rustls",
- "semver",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -2913,7 +2909,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
- "toml_edit 0.25.17+spec-1.1.0",
  "ts-rs",
  "walkdir",
  "windows-sys 0.61.2",

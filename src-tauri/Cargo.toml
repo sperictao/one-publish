@@ -35,16 +35,11 @@ tauri-plugin-decorum = { path = "vendor/tauri-plugin-decorum" }
 dirs = "7.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "time"] }
 thiserror = "2.0"
-anyhow = "1.0"
-glob = "0.3"
 open = "5.0"
 walkdir = "2.5"
 zip = "9"
 sha2 = "0.11"
 hex = "0.4"
-regex = "1.11"
-semver = "1.0"
-toml_edit = "0.25"
 ts-rs = { version = "12.0.1", features = ["chrono-impl", "serde-json-impl"] }
 publish-adapters = { path = "../crates/publish-adapters" }
 publish-domain = { path = "../crates/publish-domain" }
