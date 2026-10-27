@@ -673,3 +673,295 @@ fn execute_rejects_operations_that_are_not_tauri_actions() {
         .expect_err("foreign actions cannot execute on the tauri provider");
     assert!(matches!(error, publish_domain::PublishError::Execution(_)));
 }
+
+#[test]
+fn inspect_repository_reports_invalid_repository_roots() {
+    let provider = TauriProjectProvider::new();
+    let error = provider
+        .inspect_repository(Path::new("/definitely/not/a/repository"))
+        .expect_err("a missing repository root must fail loudly");
+    assert_eq!(inspection_code(&error), "tauri_repository_path_invalid");
+
+    let repository = single_app_repository();
+    let candidates = provider
+        .inspect_repository(repository.path())
+        .expect("a valid repository reports its candidates");
+    assert_eq!(candidates.len(), 1);
+}
+
+#[test]
+fn inspect_reports_config_read_and_parse_failures() {
+    let provider = TauriProjectProvider::new();
+    let repository = tempfile::tempdir().expect("temp repository");
+    std::fs::create_dir_all(repository.path().join("src-tauri")).expect("create src-tauri");
+
+    let error = provider
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("a missing config cannot be read");
+    assert_eq!(inspection_code(&error), "tauri_config_read_failed");
+
+    write_file(
+        &repository.path().join("src-tauri/tauri.conf.json"),
+        "{not json",
+    );
+    let error = provider
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("an unparseable config cannot be inspected");
+    assert_eq!(inspection_code(&error), "tauri_config_parse_failed");
+
+    write_file(
+        &repository.path().join("src-tauri/Tauri.toml"),
+        "version = ",
+    );
+    let error = provider
+        .inspect(repository.path(), "src-tauri/Tauri.toml")
+        .expect_err("an unparseable Tauri.toml cannot be inspected");
+    assert_eq!(inspection_code(&error), "tauri_config_parse_failed");
+}
+
+#[test]
+fn inspect_reports_cargo_version_source_failures() {
+    let provider = TauriProjectProvider::new();
+
+    // 配置缺 version → 回落 Cargo.toml；缺文件/坏 TOML/缺字段分别报专属错误。
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join("src-tauri/tauri.conf.json"),
+        r#"{"productName":"Demo"}"#,
+    );
+    write_file(&repository.path().join("pnpm-lock.yaml"), "");
+    let error = provider
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("a missing Cargo.toml cannot supply a version");
+    assert_eq!(inspection_code(&error), "tauri_cargo_toml_read_failed");
+
+    write_file(
+        &repository.path().join("src-tauri/Cargo.toml"),
+        "[package\nname =",
+    );
+    let error = provider
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("a malformed Cargo.toml cannot supply a version");
+    assert_eq!(inspection_code(&error), "tauri_cargo_toml_parse_failed");
+
+    write_file(
+        &repository.path().join("src-tauri/Cargo.toml"),
+        "[package]\nname = \"demo\"\n",
+    );
+    let error = provider
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("a Cargo.toml without package.version cannot supply a version");
+    assert_eq!(inspection_code(&error), "tauri_version_missing");
+
+    write_file(
+        &repository.path().join("src-tauri/Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"not-semver\"\n",
+    );
+    let error = provider
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("a non-semver Cargo version is invalid");
+    assert_eq!(inspection_code(&error), "tauri_version_invalid");
+
+    write_file(
+        &repository.path().join("src-tauri/Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"1.0.0-beta.1\"\n",
+    );
+    let error = provider
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("a prerelease Cargo version is not stable");
+    assert_eq!(inspection_code(&error), "tauri_version_not_stable");
+}
+
+#[test]
+fn inspect_reports_referenced_version_file_failures() {
+    let provider = TauriProjectProvider::new();
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join("src-tauri/tauri.conf.json"),
+        r#"{"productName":"Demo","version":"pkg-version.json"}"#,
+    );
+    write_file(&repository.path().join("pnpm-lock.yaml"), "");
+    write_file(
+        &repository.path().join("src-tauri/Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"1.2.3\"\n",
+    );
+
+    let error = provider
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("a missing referenced version file fails loudly");
+    assert_eq!(inspection_code(&error), "tauri_version_file_read_failed");
+
+    write_file(
+        &repository.path().join("src-tauri/pkg-version.json"),
+        "{not json",
+    );
+    let error = provider
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("a malformed referenced version file fails loudly");
+    assert_eq!(inspection_code(&error), "tauri_version_file_parse_failed");
+
+    write_file(
+        &repository.path().join("src-tauri/pkg-version.json"),
+        r#"{"name":"demo"}"#,
+    );
+    let error = provider
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("a referenced file without version fails loudly");
+    assert_eq!(inspection_code(&error), "tauri_version_missing");
+}
+
+#[test]
+fn invalid_package_json_blocks_build_driver_resolution() {
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join("src-tauri/tauri.conf.json"),
+        r#"{"productName":"Demo","version":"1.2.3"}"#,
+    );
+    write_file(&repository.path().join("package.json"), "{not json");
+
+    let error = TauriProjectProvider::new()
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("an unparseable package.json cannot resolve a build driver");
+    assert_eq!(inspection_code(&error), "tauri_package_json_invalid");
+}
+
+#[test]
+fn project_provider_default_constructs_a_usable_provider() {
+    let provider = TauriProjectProvider::default();
+    assert_eq!(provider.descriptor().identity().id, TAURI_PROVIDER_ID);
+}
+
+#[test]
+fn validate_settings_rejects_non_portable_config_paths() {
+    let provider = TauriProjectProvider::new();
+    let settings = AdapterSettings::new(1)
+        .with_value(
+            "config_path",
+            Value::String("/etc/absolute.conf".to_string()),
+        )
+        .with_value("build_driver", Value::String("pnpm".to_string()));
+    let error = provider
+        .validate_settings(&settings)
+        .expect_err("absolute config paths are not portable");
+    assert!(matches!(
+        error,
+        publish_domain::PublishError::InvalidAdapterSettings { .. }
+    ));
+}
+
+#[test]
+fn runtime_provider_delegates_discovery_descriptor_and_defaults() {
+    let repository = single_app_repository();
+    let provider = runtime(&repository);
+
+    assert_eq!(provider.descriptor().identity().id, TAURI_PROVIDER_ID);
+    let settings = provider.default_settings();
+    assert_eq!(
+        settings.values.get("config_path"),
+        Some(&Value::String("src-tauri/tauri.conf.json".to_string()))
+    );
+    let candidates = provider
+        .discover_candidates(repository.path())
+        .expect("runtime provider delegates candidate discovery");
+    assert_eq!(candidates.len(), 1);
+}
+
+#[test]
+fn sealed_build_operations_are_validated_before_execution() {
+    let repository = single_app_repository();
+    let provider = runtime(&repository);
+    let driver = TauriBuildDriver::Pnpm;
+    let sealed_args = driver.build_command_args("src-tauri/tauri.conf.json");
+
+    let build_node = |operation| publish_domain::PlanNode {
+        operation,
+        ..action_node("build", inspect_settings("pnpm"))
+    };
+    let program = |program: &str, args: Vec<String>| PlanOperation::RunProgram {
+        program: program.to_string(),
+        args,
+        working_directory: None,
+        environment_references: BTreeMap::new(),
+    };
+    let expect_invalid = |node: &publish_domain::PlanNode, marker: &str| {
+        let error = execute(&provider, node).expect_err("tampered sealed builds are rejected");
+        assert!(
+            matches!(error, publish_domain::PublishError::InvalidPlan(_)),
+            "expected InvalidPlan, got {error:?}"
+        );
+        assert!(error.to_string().contains(marker), "{error}");
+    };
+
+    expect_invalid(
+        &build_node(program("tauri-driver:npm", sealed_args.clone())),
+        "not the sealed tauri build operation",
+    );
+    expect_invalid(
+        &build_node(program(
+            &driver.program_id(),
+            vec!["tauri".to_string(), "dev".to_string()],
+        )),
+        "not the sealed tauri build operation",
+    );
+    let mut tampered = program(&driver.program_id(), sealed_args.clone());
+    if let PlanOperation::RunProgram {
+        working_directory, ..
+    } = &mut tampered
+    {
+        *working_directory = Some("/tmp".to_string());
+    }
+    expect_invalid(
+        &build_node(tampered),
+        "not the sealed tauri build operation",
+    );
+    let mut tampered = program(&driver.program_id(), sealed_args.clone());
+    if let PlanOperation::RunProgram {
+        environment_references,
+        ..
+    } = &mut tampered
+    {
+        environment_references.insert("SECRET".to_string(), "env:secret".to_string());
+    }
+    expect_invalid(
+        &build_node(tampered),
+        "not the sealed tauri build operation",
+    );
+
+    // 校验通过但无注入执行端口 → 明确拒绝而非猜测执行。
+    let error = execute(
+        &provider,
+        &build_node(program(&driver.program_id(), sealed_args)),
+    )
+    .expect_err("a runtime provider without an execution port cannot build");
+    assert!(error.to_string().contains("execution port"));
+}
+
+#[test]
+fn release_gate_snapshots_must_decode_and_gates_need_programs() {
+    let repository = single_app_repository();
+    let provider = runtime(&repository);
+    let settings = inspect_settings("pnpm");
+
+    let mut snapshot = fixture_snapshot();
+    snapshot
+        .release_input
+        .insert("release_gates".to_string(), json!({"program": 42}));
+    let error = provider
+        .plan_fragment(&snapshot, &settings)
+        .expect_err("malformed sealed release gates cannot be decoded");
+    assert!(
+        matches!(error, publish_domain::PublishError::InvalidPlan(_)),
+        "expected InvalidPlan, got {error:?}"
+    );
+    assert!(error.to_string().contains("decoded"), "{error}");
+
+    let mut snapshot = fixture_snapshot();
+    snapshot.release_input.insert(
+        "release_gates".to_string(),
+        json!([{"program": "   ", "args": []}]),
+    );
+    let error = provider
+        .plan_fragment(&snapshot, &settings)
+        .expect_err("an empty gate program is rejected");
+    assert!(error.to_string().contains("cannot be empty"), "{error}");
+}
