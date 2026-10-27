@@ -19,6 +19,13 @@ updates:
     groups:
       npm-minor-patch:
         update-types: ["minor", "patch"]
+    # typescript 7 (tsgo) has no JS compiler API; the
+    # tauriCommandContract test consumes ts.TypeChecker semantics that
+    # only exist in the TypeScript <=6 implementation. Revisit once a
+    # native-preview JS API or a rewritten test path exists.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # Rust workspace crates (publish-domain/-adapters/-planner/
   # -runner-core, one-publish-runner).
