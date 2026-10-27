@@ -798,7 +798,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 3.0.9",
+ "syn 2.0.114",
 ]
 
 [[package]]
@@ -2934,7 +2934,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
- "toml_edit 0.24.1+spec-1.1.0",
+ "toml_edit 0.25.17+spec-1.1.0",
  "ts-rs",
  "walkdir",
  "windows-sys 0.59.0",
@@ -5081,19 +5081,6 @@ dependencies = [
  "indexmap 2.13.0",
  "toml_datetime 0.7.5+spec-1.1.0",
  "toml_parser",
- "winnow 0.7.14",
-]
-
-[[package]]
-name = "toml_edit"
-version = "0.24.1+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01f2eadbbc6b377a847be05f60791ef1058d9f696ecb51d2c07fe911d8569d8e"
-dependencies = [
- "indexmap 2.13.0",
- "toml_datetime 0.7.5+spec-1.1.0",
- "toml_parser",
- "toml_writer",
  "winnow 0.7.14",
 ]
 
