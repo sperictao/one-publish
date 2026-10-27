@@ -1057,4 +1057,61 @@ mod tests {
             .content
             .contains("cargo install tauri-cli --locked"));
     }
+
+    #[test]
+    fn render_rejects_shard_platforms_missing_a_pinned_digest() {
+        let backend = GitHubActionsBackend::new(Arc::new(crate::StaticCredentialSource::new()));
+        // 只为 Linux/macOS 钉 digest，shardPlatforms 仍要求 Windows——渲染
+        // 必须在缺 pin 的三元组上 fail-closed，不得静默跳过分片。
+        let mut binding = binding("stable", "v", "revision-stable");
+        binding.runtime_revision = AutomationRuntimeRevision::seal(
+            RuntimeComponentRevision::new("0.1.0", publish_domain::sha256_hex(b"runner"))
+                .with_binary_digests(BTreeMap::from([
+                    ("x86_64-unknown-linux-gnu".to_string(), "a".repeat(64)),
+                    ("aarch64-apple-darwin".to_string(), "b".repeat(64)),
+                ])),
+            RuntimeComponentRevision::new("1", publish_domain::sha256_hex(b"plan")),
+            vec![RuntimeAdapterRevision::new(
+                AdapterIdentity::new(AdapterKind::ExecutionBackend, GITHUB_ACTIONS_BACKEND_ID, 1),
+                publish_domain::sha256_hex(b"adapters"),
+            )],
+        )
+        .expect("partial digests still seal");
+
+        let error = backend
+            .render_automation_bundle(&[binding])
+            .expect_err("a shard without a pinned digest cannot render");
+        assert!(
+            error
+                .to_string()
+                .contains("x86_64-pc-windows-msvc is not pinned"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn backend_requires_at_least_one_binding_and_delegates_credentials() {
+        let backend =
+            GitHubActionsBackend::new(Arc::new(crate::StaticCredentialSource::new().with_secret(
+                "vault://token",
+                publish_domain::CredentialKind::Token,
+                "secret-value",
+            )));
+
+        let error = backend
+            .render_automation_bundle(&[])
+            .expect_err("empty bindings cannot render a bundle");
+        assert!(error.to_string().contains("at least one binding"));
+
+        let resolved = backend
+            .resolve_credential("vault://token")
+            .expect("credential source delegates");
+        assert_eq!(resolved.kind, publish_domain::CredentialKind::Token);
+        assert!(matches!(
+            backend
+                .resolve_credential("vault://missing")
+                .expect_err("missing credentials stay classified"),
+            CredentialResolveFailure::Missing
+        ));
+    }
 }
