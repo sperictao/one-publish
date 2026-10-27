@@ -1313,17 +1313,17 @@ mod tests {
             AttemptJournalHeader, AttemptJournalRecord, AttemptJournalRepository,
             JOURNAL_SCHEMA_VERSION,
         };
+        use publish_adapters::{
+            AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor, FixtureAppProvider,
+            LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore,
+            CHECKSUM_PROCESSOR_ID, FIXTURE_PROVIDER_ID, LOCAL_DESTINATION_ID,
+        };
         use publish_domain::{
             sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection,
             AdapterSettings, ArtifactManifest, ArtifactManifestEntry, PlanningInputSnapshot,
             PublishError, PublishPlan, PublishResource, PublishResourceKind, PublishResourceLease,
             ReleaseAttempt, ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
             PUBLISH_PLAN_VERSION, PUBLISH_RESOURCE_LEASE_VERSION, RELEASE_ATTEMPT_VERSION,
-        };
-        use publish_adapters::{
-            AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor, FixtureAppProvider,
-            LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore,
-            CHECKSUM_PROCESSOR_ID, FIXTURE_PROVIDER_ID, LOCAL_DESTINATION_ID,
         };
         use publish_runner_core::{PreparedPublishPlan, PublishRuntime};
         use std::collections::{BTreeMap, BTreeSet};
@@ -1408,10 +1408,7 @@ mod tests {
                                     "root_directory",
                                     serde_json::Value::String("/tmp/store".to_string()),
                                 )
-                                .with_value(
-                                    "retention_seconds",
-                                    serde_json::Value::from(3600u64),
-                                ),
+                                .with_value("retention_seconds", serde_json::Value::from(3600u64)),
                         ),
                         delivery_routes: vec![publish_domain::DeliveryRoute::required(
                             AdapterBinding::new(
@@ -1492,10 +1489,7 @@ mod tests {
                 attempt: ReleaseAttempt {
                     version: RELEASE_ATTEMPT_VERSION,
                     attempt_id: attempt_id.to_string(),
-                    configuration_revision: prepared
-                        .snapshot
-                        .configuration_revision
-                        .clone(),
+                    configuration_revision: prepared.snapshot.configuration_revision.clone(),
                     planning_snapshot_digest: prepared.plan.snapshot_digest.clone(),
                     plan_version: prepared.plan.version,
                     plan_digest: prepared.plan.digest.clone(),
@@ -1811,7 +1805,6 @@ mod tests {
                 .expect("seal fixture manifest")
         }
 
-
         #[test]
         fn synchronize_rejects_manifest_bound_to_a_foreign_snapshot() {
             let fixture =
@@ -1821,7 +1814,13 @@ mod tests {
 
             let error = fixture
                 .repository
-                .synchronize(&fixture.runtime, "attempt-1", Vec::new(), Some(foreign), None)
+                .synchronize(
+                    &fixture.runtime,
+                    "attempt-1",
+                    Vec::new(),
+                    Some(foreign),
+                    None,
+                )
                 .expect_err("foreign-snapshot manifest must fail provenance");
             let PublishError::Execution(message) = error else {
                 panic!("expected execution error, got {error:?}")
