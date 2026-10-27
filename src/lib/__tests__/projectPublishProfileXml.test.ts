@@ -121,4 +121,12 @@ describe("parseProjectPublishProfileXml", () => {
       },
     });
   });
+
+  describe("解析守卫", () => {
+    it("空白 XML 直接拒绝", () => {
+      expect(() => parseProjectPublishProfileXml("   ")).toThrow(
+        "Empty publish profile XML."
+      );
+    });
+  });
 });

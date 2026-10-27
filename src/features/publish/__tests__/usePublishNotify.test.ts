@@ -115,3 +115,40 @@ describe("usePublishNotify 打开输出目录失败", () => {
     );
   });
 });
+
+describe("trayStatusEffect 关闭时跳过托盘同步", () => {
+  it("publish:failed 不调用 setTrayPublishStatus 但仍通知", async () => {
+    const { setTrayPublishStatus } = await import("@/lib/store/api");
+    renderPublishNotify();
+    const failedEvent = {
+      ...completedEvent(),
+      error: "boom",
+      feedbackTitle: "发布失败",
+      feedbackDescription: "build failed",
+      restoreWindowOnFailure: false,
+      trayStatusEffect: false,
+    };
+
+    emit("publish:failed", failedEvent);
+    await waitFor(() => expect(mocks.toast.error).toHaveBeenCalled());
+    expect(vi.mocked(setTrayPublishStatus)).not.toHaveBeenCalled();
+  });
+
+  it("publish:cancelled 不调用 setTrayPublishStatus 但仍通知", async () => {
+    const { setTrayPublishStatus } = await import("@/lib/store/api");
+    renderPublishNotify();
+    const cancelledEvent = {
+      repoId: "repo-1",
+      error: "cancelled",
+      outputLog: "",
+      feedbackMode: "toast" as const,
+      trayStatusEffect: false,
+      restoreWindowOnFailure: false,
+      record: { id: "record-1" } as ExecutionRecord,
+    };
+
+    emit("publish:cancelled", cancelledEvent);
+    await waitFor(() => expect(mocks.toast.warning).toHaveBeenCalled());
+    expect(vi.mocked(setTrayPublishStatus)).not.toHaveBeenCalled();
+  });
+});

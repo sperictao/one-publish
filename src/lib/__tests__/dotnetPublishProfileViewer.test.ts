@@ -153,4 +153,26 @@ describe("buildProjectPublishProfileSupplementSections", () => {
       []
     );
   });
+
+  it("空白 path 的 PropertyGroup 条目被过滤", () => {
+    const sections = buildProjectPublishProfileSupplementSections({
+      sections: [
+        {
+          tagName: "PropertyGroup",
+          attributes: {},
+          entries: [
+            { key: "", path: "   ", value: "x", attributes: {} },
+            {
+              key: "Item.Group",
+              path: "Item.Group",
+              value: "keep",
+              attributes: {},
+            },
+          ],
+        },
+      ],
+    } as never);
+
+    expect(sections[0]?.entries.map((e) => e.path)).toEqual(["Item.Group"]);
+  });
 });

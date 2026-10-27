@@ -242,4 +242,17 @@ describe("requestPreparedOutputDirectoryAccess", () => {
       requestPreparedOutputDirectoryAccess(summary, {})
     ).resolves.toBe(false);
   });
+
+  it("未识别 location 回落到文件与文件夹", () => {
+    const result = preflightResult();
+    result.access.protectedLocation = "other_volume" as never;
+    expect(buildProtectedOutputAccessDescription(result, {})).toContain(
+      "文件与文件夹"
+    );
+
+    result.access.protectedLocation = null;
+    expect(buildProtectedOutputAccessDescription(result, {})).toContain(
+      "文件与文件夹"
+    );
+  });
 });
