@@ -1590,5 +1590,51 @@ mod tests {
                 ("/workspace/repository".to_string(), "config-1".to_string())
             );
         }
+
+        #[test]
+        fn find_latest_attempt_matches_repository_and_revision() {
+            let (_journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            assert_eq!(
+                repository
+                    .find_latest_attempt("/workspace/repository", "config-1")
+                    .expect("scan journals")
+                    .as_deref(),
+                Some("attempt-1")
+            );
+            assert!(repository
+                .find_latest_attempt("/workspace/repository", "config-2")
+                .expect("scan mismatched revision")
+                .is_none());
+            assert!(repository
+                .find_latest_attempt("/workspace/other", "config-1")
+                .expect("scan mismatched repository")
+                .is_none());
+        }
+
+        #[test]
+        fn find_latest_attempt_skips_malformed_and_foreign_headers() {
+            let (journal, repository) =
+                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+            let malformed_dir = journal.path().join("malformed-journal");
+            std::fs::create_dir_all(&malformed_dir).expect("create malformed journal dir");
+            std::fs::write(malformed_dir.join("attempt.json"), b"not-json")
+                .expect("write malformed header");
+            let mut foreign =
+                fixture_header("attempt-2", fixture_lease("attempt-2", "lease-2", 100));
+            foreign.repository_path = "/workspace/foreign".to_string();
+            repository
+                .write_header(&foreign)
+                .expect("seed foreign repository journal");
+
+            assert_eq!(
+                repository
+                    .find_latest_attempt("/workspace/repository", "config-1")
+                    .expect("malformed and foreign headers are ignored")
+                    .as_deref(),
+                Some("attempt-1")
+            );
+        }
     }
 }
