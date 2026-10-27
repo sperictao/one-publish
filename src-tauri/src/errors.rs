@@ -247,5 +247,84 @@ mod tests {
         assert_eq!(e.kind, ErrorKind::UnsupportedSpecVersion);
         assert_eq!(e.code.as_deref(), Some("unsupported_spec_version"));
         assert_eq!(e.details.as_deref(), Some("999"));
+
+        let e: AppError = CompileError::RenderError("bad param".to_string()).into();
+        assert_eq!(e.kind, ErrorKind::RenderError);
+        assert_eq!(e.code.as_deref(), Some("render_error"));
+        assert_eq!(e.details.as_deref(), Some("bad param"));
+    }
+
+    #[test]
+    fn categorized_constructors_attach_kind_and_code() {
+        let cases = [
+            (AppError::unknown_with_code("m", "c"), ErrorKind::Unknown),
+            (
+                AppError::validation_with_code("m", "c"),
+                ErrorKind::Validation,
+            ),
+            (AppError::artifact_with_code("m", "c"), ErrorKind::Artifact),
+            (AppError::config_with_code("m", "c"), ErrorKind::Config),
+            (AppError::provider_with_code("m", "c"), ErrorKind::Provider),
+            (AppError::export_with_code("m", "c"), ErrorKind::Export),
+            (
+                AppError::repository_with_code("m", "c"),
+                ErrorKind::Repository,
+            ),
+            (AppError::publish_with_code("m", "c"), ErrorKind::Publish),
+            (
+                AppError::external_open_with_code("m", "c"),
+                ErrorKind::ExternalOpen,
+            ),
+            (
+                AppError::external_command_with_code("m", "c"),
+                ErrorKind::ExternalCommand,
+            ),
+            (AppError::store_with_code("m", "c"), ErrorKind::Store),
+            (AppError::updater_with_code("m", "c"), ErrorKind::Updater),
+            (AppError::tray_with_code("m", "c"), ErrorKind::Tray),
+        ];
+        for (error, kind) in cases {
+            assert_eq!(error.kind, kind);
+            assert_eq!(error.message, "m");
+            assert_eq!(error.code.as_deref(), Some("c"));
+            assert!(error.details.is_none());
+            assert_eq!(format!("{error}"), "m");
+        }
+
+        let bare = AppError::unknown("plain");
+        assert_eq!(bare.kind, ErrorKind::Unknown);
+        assert!(bare.code.is_none());
+        let bare = AppError::validation("plain");
+        assert_eq!(bare.kind, ErrorKind::Validation);
+        assert!(bare.code.is_none());
+    }
+
+    #[test]
+    fn from_project_inspection_preserves_code_and_wrappers_get_stable_code() {
+        let inspection = publish_domain::PublishError::ProjectInspection {
+            code: "project_rules_failed".to_string(),
+            message: "inspection failed".to_string(),
+        };
+        let error = AppError::from_project_inspection(inspection);
+        assert_eq!(error.kind, ErrorKind::Provider);
+        assert_eq!(error.code.as_deref(), Some("project_rules_failed"));
+        assert_eq!(error.message, "inspection failed");
+
+        let other = publish_domain::PublishError::Cancelled("stopped".to_string());
+        let error = AppError::from_project_inspection(other);
+        assert_eq!(error.kind, ErrorKind::Provider);
+        assert_eq!(error.code.as_deref(), Some("tauri_inspection_failed"));
+    }
+
+    #[test]
+    fn render_and_with_details_carry_language_neutral_details() {
+        let error = AppError::render_with_details_and_code("render failed", "param=x", "render_x");
+        assert_eq!(error.kind, ErrorKind::RenderError);
+        assert_eq!(error.details.as_deref(), Some("param=x"));
+        assert_eq!(error.code.as_deref(), Some("render_x"));
+
+        let detailed = AppError::validation("m").with_details("/path/one");
+        assert_eq!(detailed.details.as_deref(), Some("/path/one"));
+        assert_eq!(detailed.code, None);
     }
 }
