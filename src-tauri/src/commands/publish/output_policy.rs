@@ -426,4 +426,210 @@ mod tests {
             }
         );
     }
+
+    fn preflight_result(
+        validation_status: preflight::PublishOutputValidationStatus,
+        validation_issue: Option<PublishOutputValidationIssue>,
+        access_status: preflight::PublishOutputAccessStatus,
+        remote_location: Option<RemoteLocationSummary>,
+    ) -> preflight::PublishOutputPreflightResult {
+        preflight::PublishOutputPreflightResult {
+            output_dir: "/tmp/out".to_string(),
+            configured_output_dir: None,
+            validation: preflight::PublishOutputValidation {
+                status: validation_status,
+                issue: validation_issue,
+            },
+            access: preflight::PublishOutputAccess {
+                status: access_status,
+                protected_location: None,
+                protected_root: None,
+                probe_directory: None,
+                detail: None,
+                remote_location,
+            },
+        }
+    }
+
+    #[test]
+    fn preflight_validation_issues_map_to_specific_codes() {
+        use preflight::{PublishOutputValidationIssue as Issue, PublishOutputValidationStatus};
+
+        for (issue, code) in [
+            (
+                Issue::WindowsStylePathOnPosix,
+                "publish_output_windows_style_path_on_posix",
+            ),
+            (
+                Issue::PosixAbsolutePathOnWindows,
+                "publish_output_posix_absolute_path_on_windows",
+            ),
+            (
+                Issue::WindowsDriveRootMissing,
+                "publish_output_windows_drive_root_missing",
+            ),
+        ] {
+            let result = preflight_result(
+                PublishOutputValidationStatus::Incompatible,
+                Some(issue),
+                preflight::PublishOutputAccessStatus::Granted,
+                None,
+            );
+            let error = ensure_preflight_allows_execution(&result).unwrap_err();
+            assert_eq!(error.code.as_deref(), Some(code), "issue: {issue:?}");
+        }
+
+        let result = preflight_result(
+            PublishOutputValidationStatus::Incompatible,
+            None,
+            preflight::PublishOutputAccessStatus::Granted,
+            None,
+        );
+        let error = ensure_preflight_allows_execution(&result).unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_output_path_incompatible")
+        );
+    }
+
+    #[test]
+    fn preflight_denied_access_reports_protected_location_with_fallbacks() {
+        use preflight::{PublishOutputAccessStatus, PublishOutputValidationStatus};
+
+        let mut result = preflight_result(
+            PublishOutputValidationStatus::Compatible,
+            None,
+            PublishOutputAccessStatus::Denied,
+            None,
+        );
+        // 无 location → 泛化 macOS 文案；有 location → 命名目录 + detail 兜底链。
+        let generic = ensure_preflight_allows_execution(&result).unwrap_err();
+        assert_eq!(
+            generic.code.as_deref(),
+            Some("publish_protected_directory_access_denied")
+        );
+        assert!(generic.message.contains("macOS protected folder access"));
+        assert!(generic.message.contains("/tmp/out"));
+
+        result.access.protected_location = Some(ProtectedDirectoryLocation::Documents);
+        result.access.probe_directory = Some("/Users/x/Documents/app".to_string());
+        let error = ensure_preflight_allows_execution(&result).unwrap_err();
+        assert!(error.message.contains("Documents"), "{error:?}");
+        assert!(error.message.contains("/Users/x/Documents/app"));
+
+        // probe 缺失 → protected_root → output_dir → "-" 逐级兜底。
+        result.access.probe_directory = None;
+        result.access.protected_root = Some("/Users/x/Documents".to_string());
+        let error = ensure_preflight_allows_execution(&result).unwrap_err();
+        assert!(error.message.contains("/Users/x/Documents"));
+        result.access.protected_root = None;
+        let error = ensure_preflight_allows_execution(&result).unwrap_err();
+        assert!(error.message.contains("/tmp/out"), "{error:?}");
+    }
+
+    #[test]
+    fn preflight_remote_targets_fail_closed_with_scheme_context() {
+        use preflight::{PublishOutputAccessStatus, PublishOutputValidationStatus};
+
+        for (kind, should_pass) in [
+            (RemoteLocationKind::Remote, false),
+            (RemoteLocationKind::Unc, true),
+            (RemoteLocationKind::Mounted, true),
+        ] {
+            let result = preflight_result(
+                PublishOutputValidationStatus::Compatible,
+                None,
+                PublishOutputAccessStatus::Granted,
+                Some(RemoteLocationSummary {
+                    kind,
+                    display: "//nas/share".to_string(),
+                    host: None,
+                    scheme: Some("sftp".to_string()),
+                    fs_type: None,
+                }),
+            );
+            let outcome = ensure_preflight_allows_execution(&result);
+            assert_eq!(outcome.is_ok(), should_pass, "kind: {kind:?}");
+            if let Err(error) = outcome {
+                assert_eq!(
+                    error.code.as_deref(),
+                    Some("publish_remote_target_not_implemented")
+                );
+                assert!(error.message.contains("sftp"), "{error:?}");
+            }
+        }
+
+        // scheme 缺失 → "remote" 兜底词。
+        let result = preflight_result(
+            PublishOutputValidationStatus::Compatible,
+            None,
+            PublishOutputAccessStatus::Granted,
+            Some(RemoteLocationSummary {
+                kind: RemoteLocationKind::Remote,
+                display: "obj-store".to_string(),
+                host: None,
+                scheme: None,
+                fs_type: None,
+            }),
+        );
+        let error = ensure_preflight_allows_execution(&result).unwrap_err();
+        assert!(error.message.contains("scheme=remote"), "{error:?}");
+    }
+
+    #[test]
+    fn cleanup_error_builders_preserve_codes_and_generic_io_fallback() {
+        let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "missing");
+        let error = build_cleanup_remove_error("/tmp/out", &io_error);
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_remove_failed")
+        );
+        let error = build_cleanup_recreate_error("/tmp/out", &io_error);
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_recreate_failed")
+        );
+
+        // PermissionDenied 在非受保护路径上回落到通用错误。
+        let denied = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        let unprotected = tempfile::tempdir()
+            .expect("temp dir")
+            .path()
+            .join("out")
+            .to_string_lossy()
+            .to_string();
+        let error = build_cleanup_remove_error(&unprotected, &denied);
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_remove_failed"),
+            "unprotected paths keep the generic code: {error:?}"
+        );
+    }
+
+    #[test]
+    fn cleanup_rejects_root_level_output_directory() {
+        let spec = cleanup_spec("");
+        let error = resolve_cleanup_decision(&spec, "/")
+            .expect_err("cleaning the filesystem root must be refused");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_safety_root_directory")
+        );
+    }
+
+    #[test]
+    fn protected_location_labels_match_macos_folder_names() {
+        assert_eq!(
+            protected_location_label(ProtectedDirectoryLocation::Desktop),
+            "Desktop"
+        );
+        assert_eq!(
+            protected_location_label(ProtectedDirectoryLocation::Documents),
+            "Documents"
+        );
+        assert_eq!(
+            protected_location_label(ProtectedDirectoryLocation::Downloads),
+            "Downloads"
+        );
+    }
 }
