@@ -2937,7 +2937,7 @@ dependencies = [
  "toml_edit 0.24.1+spec-1.1.0",
  "ts-rs",
  "walkdir",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
  "yaml_serde",
  "zip 9.1.1",
 ]
