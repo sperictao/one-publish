@@ -1,9 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const invokeMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: invokeMock,
+}));
 
 import {
+  applyFix,
   createEnvironmentCheckSnapshot,
   getEnvironmentCheckSnapshotResult,
   matchesEnvironmentCheckSnapshot,
+  runEnvironmentCheck,
   scopeEnvironmentCheckSnapshot,
 } from "@/features/environment/environment";
 import type {
@@ -96,6 +104,17 @@ describe("matchesEnvironmentCheckSnapshot", () => {
 });
 
 describe("getEnvironmentCheckSnapshotResult", () => {
+  it("returns the stored result unfiltered when ids normalize to empty", () => {
+    const snapshot = createEnvironmentCheckSnapshot(result(), [
+      "cargo",
+      "dotnet",
+    ]);
+
+    expect(getEnvironmentCheckSnapshotResult(snapshot, [" ", ""])).toBe(
+      snapshot.result
+    );
+  });
+
   it("returns the stored result unfiltered when no ids are given", () => {
     const snapshot = createEnvironmentCheckSnapshot(result(), ["dotnet"]);
 
@@ -145,5 +164,45 @@ describe("scopeEnvironmentCheckSnapshot", () => {
     ]);
 
     expect(scopeEnvironmentCheckSnapshot(snapshot, ["rust"])).toBeNull();
+  });
+});
+
+describe("invoke wrappers", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("runs the environment check for the full scope by default", async () => {
+    const full = result();
+    invokeMock.mockResolvedValueOnce(full);
+
+    await expect(runEnvironmentCheck()).resolves.toBe(full);
+    expect(invokeMock).toHaveBeenCalledWith("run_environment_check", {});
+  });
+
+  it("passes the requested provider scope through to the backend", async () => {
+    invokeMock.mockResolvedValueOnce(result());
+
+    await runEnvironmentCheck(["cargo"]);
+    expect(invokeMock).toHaveBeenCalledWith("run_environment_check", {
+      providerIds: ["cargo"],
+    });
+  });
+
+  it("applies a fix action through the backend contract", async () => {
+    const action = {
+      action_type: "open_url" as const,
+      label: "Install",
+      command: null,
+      url: "https://example.com",
+    };
+    const fixResult = {
+      result: "OpenedUrl" as const,
+      data: "https://example.com",
+    };
+    invokeMock.mockResolvedValueOnce(fixResult);
+
+    await expect(applyFix(action)).resolves.toBe(fixResult);
+    expect(invokeMock).toHaveBeenCalledWith("apply_fix", { action });
   });
 });
