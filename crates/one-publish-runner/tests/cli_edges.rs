@@ -35,6 +35,24 @@ fn cli_rejects_missing_and_unsupported_commands() {
 }
 
 #[test]
+fn help_prints_full_usage_and_exits_successfully() {
+    // --help / -h / help 均须以 0 退出并在 stdout 给出完整用法——
+    // 独立分发的二进制不能要求使用者读源码才能发现子命令形状。
+    for flag in ["--help", "-h", "help"] {
+        let output = run(&[flag]);
+        assert!(
+            output.status.success(),
+            "{flag} must exit successfully: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for needle in ["verify", "prepare-from-projection", "execute", "128+"] {
+            assert!(stdout.contains(needle), "{flag} output missing {needle:?}");
+        }
+    }
+}
+
+#[test]
 fn verify_rejects_extra_arguments_and_unreadable_projections() {
     assert_rejected(
         &["verify", "projection.json", "extra"],
