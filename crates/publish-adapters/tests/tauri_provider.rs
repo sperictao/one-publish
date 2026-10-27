@@ -5,7 +5,8 @@ use std::sync::Arc;
 use publish_adapters::tauri::ENABLED_TARGETS_SETTING;
 use publish_adapters::{
     AdapterConformanceFixture, AdapterContract, AdapterRegistry, ProjectProvider, TauriBuildDriver,
-    TauriProjectProvider, TauriVersionSourceKind, VersionMirrorKind, TAURI_PROVIDER_ID,
+    TauriProjectProvider, TauriRuntimeProvider, TauriVersionSourceKind, VersionMirrorKind,
+    TAURI_PROVIDER_ID,
 };
 use publish_domain::{
     AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings, DeliveryRoute,
@@ -485,4 +486,190 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
             ))],
         },
     }
+}
+
+fn inspection_code(error: &publish_domain::PublishError) -> &str {
+    match error {
+        publish_domain::PublishError::ProjectInspection { code, .. } => code.as_str(),
+        other => panic!("expected a project inspection failure, got {other}"),
+    }
+}
+
+#[test]
+fn inspect_rejects_non_portable_config_paths() {
+    let repository = single_app_repository();
+    let error = TauriProjectProvider::new()
+        .inspect(repository.path(), "../outside/tauri.conf.json")
+        .expect_err("relative paths cannot escape the repository");
+    assert_eq!(inspection_code(&error), "tauri_config_path_invalid");
+}
+
+#[test]
+fn inspect_rejects_unknown_package_managers() {
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join("src-tauri/tauri.conf.json"),
+        r#"{"productName":"Demo","version":"1.2.3"}"#,
+    );
+    write_file(
+        &repository.path().join("package.json"),
+        r#"{"packageManager":"deno@2.0.0","version":"1.2.3"}"#,
+    );
+    write_file(
+        &repository.path().join("src-tauri/Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"1.2.3\"\n",
+    );
+
+    let error = TauriProjectProvider::new()
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("deno is not a supported Tauri package manager");
+    assert_eq!(inspection_code(&error), "tauri_package_manager_unsupported");
+}
+
+fn runtime(repository: &tempfile::TempDir) -> TauriRuntimeProvider {
+    TauriRuntimeProvider::new(
+        "src-tauri/tauri.conf.json".to_string(),
+        "pnpm".to_string(),
+        repository.path().to_path_buf(),
+        None,
+    )
+}
+
+fn action_node(action: &str, settings: AdapterSettings) -> publish_domain::PlanNode {
+    publish_domain::PlanNode {
+        id: format!("project.{action}"),
+        stage: PlanStage::InspectSource,
+        adapter: AdapterIdentity::new(AdapterKind::ProjectProvider, TAURI_PROVIDER_ID, 1),
+        binding_id: "project".to_string(),
+        settings,
+        operation: PlanOperation::AdapterAction {
+            action: action.to_string(),
+            inputs: BTreeMap::new(),
+        },
+        depends_on: Vec::new(),
+        artifact_inputs: Vec::new(),
+        artifact_outputs: Vec::new(),
+        side_effects: Vec::new(),
+        cancellable: true,
+        cleanup_owned_staging: false,
+        irreversible: false,
+        platform: publish_domain::PlanNodePlatform::Any,
+    }
+}
+
+fn inspect_settings(driver: &str) -> AdapterSettings {
+    AdapterSettings::new(1)
+        .with_value(
+            "config_path",
+            Value::String("src-tauri/tauri.conf.json".to_string()),
+        )
+        .with_value("build_driver", Value::String(driver.to_string()))
+}
+
+fn execute(
+    provider: &TauriRuntimeProvider,
+    node: &publish_domain::PlanNode,
+) -> Result<publish_adapters::AdapterExecutionOutput, publish_domain::PublishError> {
+    let credentials = BTreeMap::new();
+    let context = publish_adapters::AdapterExecutionContext {
+        attempt_id: "attempt-tauri",
+        plan_digest: "plan-digest",
+        snapshot_digest: "snapshot-digest",
+        artifacts: &[],
+        manifest: None,
+        envelopes: &[],
+        receipts: &[],
+        credentials: &credentials,
+        cancellation: publish_adapters::CancellationSignal::new(),
+    };
+    provider.execute_node(node, &context)
+}
+
+#[test]
+fn inspect_action_fails_when_the_build_driver_drifts() {
+    // 密封驱动与仓库实况不一致：计划过期，必须重新 prepare（防陈旧计划执行）。
+    let repository = single_app_repository();
+    let provider = runtime(&repository);
+    let node = action_node(
+        publish_adapters::TAURI_INSPECT_ACTION,
+        inspect_settings("npm"),
+    );
+
+    let error = execute(&provider, &node).expect_err("npm sealed but the repository resolves pnpm");
+    assert!(matches!(error, publish_domain::PublishError::Execution(_)));
+    assert!(error.to_string().contains("drifted from npm to pnpm"));
+}
+
+#[test]
+fn release_gate_rejects_un_sealed_or_empty_programs() {
+    let repository = single_app_repository();
+    let provider = runtime(&repository);
+
+    // inputs 非 SealedReleaseGate 形状：计划污染是 InvalidPlan 而非执行失败。
+    let mut malformed = action_node(
+        publish_adapters::tauri::TAURI_RELEASE_GATE_ACTION,
+        inspect_settings("pnpm"),
+    );
+    malformed.operation = PlanOperation::AdapterAction {
+        action: publish_adapters::tauri::TAURI_RELEASE_GATE_ACTION.to_string(),
+        inputs: BTreeMap::from([("bogus".to_string(), Value::Bool(true))]),
+    };
+    let error =
+        execute(&provider, &malformed).expect_err("gate inputs must decode into SealedReleaseGate");
+    assert!(matches!(
+        error,
+        publish_domain::PublishError::InvalidPlan(_)
+    ));
+
+    let mut empty_program = malformed.clone();
+    empty_program.operation = PlanOperation::AdapterAction {
+        action: publish_adapters::tauri::TAURI_RELEASE_GATE_ACTION.to_string(),
+        inputs: BTreeMap::from([("program".to_string(), Value::String("   ".to_string()))]),
+    };
+    let error = execute(&provider, &empty_program).expect_err("an empty gate program cannot run");
+    assert!(matches!(
+        error,
+        publish_domain::PublishError::InvalidPlan(_)
+    ));
+}
+
+#[test]
+fn release_gate_runs_the_sealed_program_and_reports_failures() {
+    let repository = single_app_repository();
+    let provider = runtime(&repository);
+    let node = |program: &str| {
+        let mut node = action_node(
+            publish_adapters::tauri::TAURI_RELEASE_GATE_ACTION,
+            inspect_settings("pnpm"),
+        );
+        node.operation = PlanOperation::AdapterAction {
+            action: publish_adapters::tauri::TAURI_RELEASE_GATE_ACTION.to_string(),
+            inputs: BTreeMap::from([("program".to_string(), Value::String(program.to_string()))]),
+        };
+        node
+    };
+
+    execute(&provider, &node("true")).expect("a passing gate returns cleanly");
+    let error = execute(&provider, &node("definitely-not-a-real-program"))
+        .expect_err("a missing gate program fails at spawn");
+    assert!(matches!(error, publish_domain::PublishError::Execution(_)));
+
+    let error =
+        execute(&provider, &node("false")).expect_err("a failing gate surfaces its exit status");
+    assert!(error.to_string().contains("release gate failed"));
+}
+
+#[test]
+fn execute_rejects_operations_that_are_not_tauri_actions() {
+    let repository = single_app_repository();
+    let provider = runtime(&repository);
+    let mut node = action_node("unrelated_action", inspect_settings("pnpm"));
+    node.operation = PlanOperation::AdapterAction {
+        action: "unrelated_action".to_string(),
+        inputs: BTreeMap::new(),
+    };
+
+    let error = execute(&provider, &node)
+        .expect_err("foreign actions cannot execute on the tauri provider");
+    assert!(matches!(error, publish_domain::PublishError::Execution(_)));
 }
