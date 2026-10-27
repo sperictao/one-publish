@@ -46,7 +46,7 @@ json5 = "0.4"
 regex = "1.11"
 semver = "1.0"
 toml_edit = "0.24"
-ts-rs = { version = "9.0.1", features = ["chrono-impl", "serde-json-impl"] }
+ts-rs = { version = "12.0.1", features = ["chrono-impl", "serde-json-impl"] }
 publish-adapters = { path = "../crates/publish-adapters" }
 publish-domain = { path = "../crates/publish-domain" }
 publish-runner-core = { path = "../crates/publish-runner-core" }
