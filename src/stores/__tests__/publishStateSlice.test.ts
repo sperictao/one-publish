@@ -174,6 +174,64 @@ describe("recent config mutations", () => {
     ]);
     expect(store.getState().recentRepoIds).toEqual([]);
   });
+
+  it("still runs a queued mutation after the previous one rejected", async () => {
+    apiMocks.pushRecentPublishConfig
+      .mockRejectedValueOnce(new Error("disk full"))
+      .mockResolvedValue({
+        recentRepoIds: ["repo-1"],
+        recentConfigKeysByRepo: { "repo-1": ["second"] },
+      });
+    apiMocks.getAppState.mockResolvedValue({
+      recentRepoIds: [],
+      recentConfigKeysByRepo: {},
+      repositories: [],
+      executionHistory: [],
+    });
+    const store = createTestStore();
+
+    store.getState().pushRecentPublishConfig("first");
+    store.getState().pushRecentPublishConfig("second");
+
+    await vi.waitFor(() =>
+      expect(apiMocks.pushRecentPublishConfig).toHaveBeenCalledTimes(2)
+    );
+    await flushQueue();
+    expect(store.getState().recentConfigKeysByRepo["repo-1"]).toEqual([
+      "second",
+    ]);
+  });
+
+  it("replaces a recent config key through the queue", async () => {
+    apiMocks.replaceRecentPublishConfigKey.mockResolvedValue({
+      recentRepoIds: ["repo-1"],
+      recentConfigKeysByRepo: { "repo-1": ["preset:b"] },
+    });
+    const store = createTestStore();
+
+    store.getState().replaceRecentPublishConfigKey("preset:a", "preset:b");
+
+    await vi.waitFor(() =>
+      expect(store.getState().recentConfigKeysByRepo["repo-1"]).toEqual([
+        "preset:b",
+      ])
+    );
+    expect(apiMocks.replaceRecentPublishConfigKey).toHaveBeenCalledWith({
+      repoId: "repo-1",
+      previousKey: "preset:a",
+      nextKey: "preset:b",
+    });
+  });
+
+  it("no-ops replace when either key is blank", async () => {
+    const store = createTestStore();
+
+    store.getState().replaceRecentPublishConfigKey(" ", "b");
+    store.getState().replaceRecentPublishConfigKey("a", " ");
+    await flushQueue();
+
+    expect(apiMocks.replaceRecentPublishConfigKey).not.toHaveBeenCalled();
+  });
 });
 
 describe("updatePublishEditState", () => {
@@ -217,6 +275,43 @@ describe("updatePublishEditState", () => {
     await flushQueue();
 
     expect(apiMocks.updatePublishEditState).not.toHaveBeenCalled();
+  });
+
+  it("keeps the local publishConfig when the response omits the repo", async () => {
+    apiMocks.updatePublishEditState.mockResolvedValue({
+      repositories: [repo("repo-2", "other")],
+      recentRepoIds: [],
+      recentConfigKeysByRepo: {},
+    });
+    const store = createTestStore({
+      repositories: [repo("repo-1", "local-config")],
+    });
+
+    store.getState().updatePublishEditState({
+      draft: { providerId: "dotnet", parameters: {} },
+    });
+    await flushQueue();
+
+    expect(
+      store.getState().repositories.find((r) => r.id === "repo-1")
+        ?.publishConfig
+    ).toBe("local-config");
+  });
+
+  it("surfaces a toast when the edit-state save rejects", async () => {
+    apiMocks.updatePublishEditState.mockRejectedValue(new Error("io"));
+    apiMocks.getAppState.mockResolvedValue({
+      recentRepoIds: [],
+      recentConfigKeysByRepo: {},
+      repositories: [],
+      executionHistory: [],
+    });
+    const store = createTestStore();
+
+    store.getState().updatePublishEditState({
+      draft: { providerId: "dotnet", parameters: {} },
+    });
+    await vi.waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
   });
 });
 
