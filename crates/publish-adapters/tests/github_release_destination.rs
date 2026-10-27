@@ -1682,3 +1682,32 @@ fn publishing_revalidates_sealed_artifact_bytes_before_upload() {
         .expect_err("tampered sealed artifacts must not upload");
     assert!(matches!(error, PublishError::ArtifactDigestMismatch { .. }));
 }
+
+#[test]
+fn publishing_requires_a_well_formed_asset_selection() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // 缺 assets 键。
+    let mut missing = staged.envelopes[0].clone();
+    missing.content.remove("assets");
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[missing], &[])
+        .expect_err("envelopes without an asset selection cannot publish");
+    assert!(error.to_string().contains("no asset selection"));
+
+    // 畸形的 assets 值。
+    let mut malformed = staged.envelopes[0].clone();
+    malformed.content.insert(
+        "assets".to_string(),
+        Value::String("not-an-array".to_string()),
+    );
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[malformed], &[])
+        .expect_err("malformed asset selections cannot publish");
+    assert!(error.to_string().contains("invalid asset selection"));
+}

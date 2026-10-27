@@ -1348,3 +1348,66 @@ fn registered_backends_execute_plans_through_the_registry() {
         PublishError::CredentialNotDeclared { .. }
     ));
 }
+
+#[test]
+fn artifact_stores_register_and_reject_duplicates() {
+    use publish_adapters::TemporaryArtifactStore;
+
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let root = TempDir::new().expect("store root");
+    let store = Arc::new(TemporaryArtifactStore::new(root.path()));
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_artifact_store(store.clone(), &fixture)
+        .expect("register artifact store");
+
+    assert!(matches!(
+        registry
+            .register_artifact_store(store, &fixture)
+            .expect_err("the same adapter cannot register twice"),
+        PublishError::DuplicateAdapter {
+            kind: AdapterKind::ArtifactStore,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn settings_validation_rejects_foreign_schema_versions() {
+    let adapter = BareAdapter::new();
+    assert!(matches!(
+        adapter
+            .validate_settings(&AdapterSettings::new(99))
+            .expect_err("foreign schema versions cannot validate"),
+        PublishError::UnsupportedSchemaVersion {
+            actual: 99,
+            current: 1,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn binding_resolution_requires_a_registered_adapter() {
+    use publish_adapters::{FakeRemoteBackend, StaticCredentialSource};
+
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let mut registry = AdapterRegistry::new();
+    let backend = FakeRemoteBackend::new(Arc::new(StaticCredentialSource::new()));
+    let backend_id = backend.descriptor().identity();
+    registry
+        .register_execution_backend(Arc::new(backend), &fixture)
+        .expect("register backend");
+
+    let ghost = AdapterBinding::new(
+        "ghost",
+        AdapterIdentity::new(AdapterKind::ProjectProvider, "unregistered", 1),
+        AdapterSettings::new(1),
+    );
+    assert!(matches!(
+        registry
+            .resolve_binding_credentials(&backend_id, &ghost)
+            .expect_err("unregistered adapters cannot resolve credentials"),
+        PublishError::AdapterNotRegistered { .. }
+    ));
+}
