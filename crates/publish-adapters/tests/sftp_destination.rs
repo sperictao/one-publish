@@ -11,8 +11,8 @@ use publish_adapters::{
 use publish_domain::{
     sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
     ArtifactManifest, ArtifactManifestEntry, CredentialKind, CredentialValue, DeliveryEnvelope,
-    DeliveryIdempotencyIdentity, DeliveryReceipt, DeliveryStatus, PlanNode, PlanStage,
-    PlanningInputSnapshot, PublishError, PublishFailureCategory, ReleaseIdentity,
+    DeliveryIdempotencyIdentity, DeliveryReceipt, DeliveryStatus, PlanNode, PlanOperation,
+    PlanStage, PlanningInputSnapshot, PublishError, PublishFailureCategory, ReleaseIdentity,
     ResolvedCredential, SourceSnapshot, LEGACY_ARTIFACT_MANIFEST_VERSION,
     PLANNING_INPUT_SNAPSHOT_VERSION,
 };
@@ -1827,4 +1827,151 @@ fn synchronized_envelopes_are_revalidated_against_sealed_settings() {
         .validate_staged_envelope(&nodes[0], &context, &staged.envelopes[0])
         .expect_err("revalidation requires the sealed manifest");
     assert!(matches!(error, PublishError::MissingArtifactManifest));
+}
+
+#[test]
+fn staged_files_declared_as_records_require_the_envelope_record() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // 封装声明一个 record 来源文件，但抽掉 delivery_record 内容 → 明确失败。
+    let mut tampered = staged.envelopes[0].clone();
+    let files = tampered
+        .content
+        .get_mut("files")
+        .and_then(Value::as_array_mut)
+        .expect("staged file list");
+    files.clear();
+    files.push(serde_json::json!({
+        "name": SFTP_DELIVERY_RECORD_NAME,
+        "digest": "0".repeat(64),
+        "size": 0,
+        "source": "record",
+    }));
+    tampered.content.remove("delivery_record");
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[tampered], &[])
+        .expect_err("a record-sourced file needs the envelope record");
+    assert!(error.to_string().contains("has no envelope content"));
+}
+
+#[test]
+fn publish_nodes_must_carry_the_sealed_adapter_action() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // RunProgram 节点没有密封 inputs——publish 必须在读入前显式拒绝。
+    let mut foreign = nodes[1].clone();
+    foreign.operation = PlanOperation::RunProgram {
+        program: "other:program".to_string(),
+        args: vec![],
+        working_directory: None,
+        environment_references: BTreeMap::new(),
+    };
+    let error = fixture
+        .execute(&foreign, &manifest, &staged.envelopes, &[])
+        .expect_err("non-action nodes cannot publish");
+    assert!(error.to_string().contains("not an adapter action"));
+}
+
+#[test]
+fn staged_files_recheck_their_declared_digests_before_upload() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // record 来源文件保留 delivery_record 但声明了错误摘要——上传前必须
+    // 以 ArtifactDigestMismatch 拒绝，而不是把漂移字节推上远端。
+    let mut tampered = staged.envelopes[0].clone();
+    let files = tampered
+        .content
+        .get_mut("files")
+        .and_then(Value::as_array_mut)
+        .expect("staged file list");
+    files.clear();
+    files.push(serde_json::json!({
+        "name": SFTP_DELIVERY_RECORD_NAME,
+        "digest": "0".repeat(64),
+        "size": 1,
+        "source": "record",
+    }));
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[tampered], &[])
+        .expect_err("digest drift must fail before upload");
+    assert!(matches!(error, PublishError::ArtifactDigestMismatch { .. }));
+}
+
+#[test]
+fn the_fake_server_enforces_filesystem_invariants() {
+    use publish_adapters::{SftpEndpoint, SftpTransport, SftpTransportFailure};
+
+    let server = FakeSftpServer::new();
+    let key = CredentialValue::new(KEY_VALUE);
+    let endpoint = SftpEndpoint {
+        host: "files.example.com".to_string(),
+        port: 2022,
+        username: "deploy".to_string(),
+    };
+
+    // 缺失路径读取与写入缺失父目录都以 Protocol 拒绝。
+    assert!(matches!(
+        server.read(&key, &endpoint, "/srv/missing"),
+        Err(SftpTransportFailure::Protocol { .. })
+    ));
+    assert!(matches!(
+        server.write(&key, &endpoint, "/nowhere/file", b"bytes", 0o644),
+        Err(SftpTransportFailure::Protocol { .. })
+    ));
+
+    // rename 不得覆盖既有目标；源缺失同样显式失败。
+    server
+        .create_directories(&key, &endpoint, "/srv/releases")
+        .expect("directories");
+    server.seed_file("/srv/releases/existing", b"old");
+    server.seed_file("/srv/releases/source", b"payload");
+    assert!(matches!(
+        server.rename(
+            &key,
+            &endpoint,
+            "/srv/releases/source",
+            "/srv/releases/existing"
+        ),
+        Err(SftpTransportFailure::Protocol { .. })
+    ));
+    assert!(matches!(
+        server.rename(&key, &endpoint, "/srv/releases/ghost", "/srv/releases/dest"),
+        Err(SftpTransportFailure::Protocol { .. })
+    ));
+
+    // rename 成功时搬运字节与权限位。
+    server
+        .write(&key, &endpoint, "/srv/releases/source2", b"payload", 0o755)
+        .expect("seed with mode");
+    server
+        .rename(
+            &key,
+            &endpoint,
+            "/srv/releases/source2",
+            "/srv/releases/final",
+        )
+        .expect("rename");
+    assert_eq!(
+        server.file("/srv/releases/final").as_deref(),
+        Some(b"payload".as_ref())
+    );
+    assert_eq!(server.mode("/srv/releases/final"), Some(0o755));
+    assert!(server.file("/srv/releases/source2").is_none());
 }

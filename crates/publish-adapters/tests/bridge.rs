@@ -552,3 +552,19 @@ fn output_paths_inside_the_root_are_accepted() {
     assert_eq!(result.artifacts.len(), 1);
     assert_eq!(result.artifacts[0].file_name, "nested/app.jar");
 }
+
+#[test]
+fn plan_fragment_emits_the_sealed_build_template_for_a_valid_spec() {
+    let provider = SelectedProjectProvider::with_execution(SPEC.to_string(), None);
+    let fragment = provider
+        .plan_fragment(&fixture_snapshot(), &provider.default_settings())
+        .expect("the sealed spec satisfies the schema");
+    assert_eq!(fragment.len(), 1);
+    assert_eq!(fragment[0].stage, PlanStage::Build);
+    match &fragment[0].operation {
+        PlanOperation::RunProgram { program, .. } => {
+            assert_eq!(program, SELECTED_PROVIDER_PROGRAM)
+        }
+        other => panic!("expected the sealed run-program template, got {other:?}"),
+    }
+}

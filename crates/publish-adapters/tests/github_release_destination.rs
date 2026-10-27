@@ -1281,3 +1281,618 @@ fn observe_rejects_releases_missing_expected_assets() {
     );
     assert_eq!(classified_code(&error), "release_asset_missing");
 }
+
+#[test]
+fn default_settings_declare_the_route_contract_shape() {
+    let fixture = Fixture::new();
+    let settings = fixture.destination.default_settings();
+    assert_eq!(
+        settings.values.get("repository"),
+        Some(&Value::String(String::new()))
+    );
+    assert_eq!(
+        settings.values.get("tag_prefix"),
+        Some(&Value::String("v".to_string()))
+    );
+    assert_eq!(
+        settings.values.get("updater_enabled"),
+        Some(&Value::Bool(false))
+    );
+}
+
+#[test]
+fn execution_requires_the_sealed_manifest_and_known_actions() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+
+    let context = AdapterExecutionContext {
+        attempt_id: "attempt-github",
+        plan_digest: "plan-digest",
+        snapshot_digest: "snapshot-digest",
+        artifacts: &[],
+        manifest: None,
+        envelopes: &[],
+        receipts: &[],
+        credentials: &fixture.credentials,
+        cancellation: publish_adapters::CancellationSignal::new(),
+    };
+    let error = fixture
+        .destination
+        .execute_node(&nodes[0], &context)
+        .expect_err("execution requires the sealed manifest");
+    assert!(matches!(error, PublishError::MissingArtifactManifest));
+
+    let mut foreign = nodes[0].clone();
+    foreign.operation = publish_domain::PlanOperation::AdapterAction {
+        action: "not-a-github-action".to_string(),
+        inputs: BTreeMap::new(),
+    };
+    let error = fixture
+        .execute(&foreign, &manifest, &[], &[])
+        .expect_err("foreign actions cannot execute on the github destination");
+    assert!(error
+        .to_string()
+        .contains("is not a github release operation"));
+}
+
+#[test]
+fn staging_requires_the_sealed_release_inputs() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let mut node = fixture.nodes(&settings()).remove(0);
+    if let publish_domain::PlanOperation::AdapterAction { inputs, .. } = &mut node.operation {
+        inputs.remove("version");
+    }
+
+    let error = fixture
+        .execute(&node, &manifest, &[], &[])
+        .expect_err("stage nodes need the sealed release version");
+    assert!(matches!(error, PublishError::InvalidPlan(_)));
+    assert!(error.to_string().contains("sealed release input"));
+}
+
+#[test]
+fn staging_rejects_routes_without_a_repository() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let settings = settings().with_value("repository", Value::String("  ".to_string()));
+    let nodes = fixture.nodes(&settings);
+
+    let error = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect_err("staging requires a repository");
+    assert_eq!(classified_code(&error), "repository_missing");
+}
+
+#[test]
+fn staging_rejects_manifests_with_no_matching_release_assets() {
+    let fixture = Fixture::new();
+    // 平台矩阵要求的 installer 不在允许资产角色内 → 资产选择为空。
+    let settings = settings().with_value(
+        "allowed_asset_roles",
+        Value::Array(vec![Value::String("updater-archive".to_string())]),
+    );
+    let nodes = fixture.nodes(&settings);
+    let support_only = manifest_with(
+        fixture.root.path(),
+        &[("installer", "Demo.dmg", "macos", "aarch64", b"dmg-bytes")],
+    );
+
+    let error = fixture
+        .execute(&nodes[0], &support_only, &[], &[])
+        .expect_err("a manifest without release assets cannot stage");
+    assert_eq!(classified_code(&error), "release_assets_empty");
+}
+
+#[test]
+fn updater_releases_require_a_well_formed_platform_matrix() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+
+    let empty = updater_settings().with_value("enabled_platforms", Value::Array(vec![]));
+    let nodes = fixture.nodes(&empty);
+    let error = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect_err("updater releases need a non-empty platform set");
+    assert_eq!(classified_code(&error), "enabled_platforms_empty");
+
+    let malformed = updater_settings().with_value(
+        "enabled_platforms",
+        Value::Array(vec![Value::String("macos".to_string())]),
+    );
+    let nodes = fixture.nodes(&malformed);
+    let error = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect_err("platform keys must be <platform>-<architecture>");
+    assert_eq!(classified_code(&error), "enabled_platform_invalid");
+}
+
+#[test]
+fn updater_signatures_must_be_utf8_text() {
+    let fixture = Fixture::new();
+    let nodes = fixture.nodes(&updater_settings());
+    let invalid_signature = manifest_with(
+        fixture.root.path(),
+        &[
+            ("installer", "Demo.dmg", "macos", "aarch64", b"dmg-bytes"),
+            (
+                "updater-archive",
+                "Demo.app.tar.gz",
+                "macos",
+                "aarch64",
+                b"updater-bytes",
+            ),
+            (
+                "updater-signature",
+                "Demo.app.tar.gz.sig",
+                "macos",
+                "aarch64",
+                &[0xff, 0xfe, 0x00],
+            ),
+        ],
+    );
+
+    let error = fixture
+        .execute(&nodes[0], &invalid_signature, &[], &[])
+        .expect_err("binary signatures cannot enter latest.json");
+    assert_eq!(classified_code(&error), "updater_signature_invalid");
+}
+
+#[test]
+fn publishing_requires_a_staged_envelope_and_a_resolved_token() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[], &[])
+        .expect_err("publishing requires the staged envelope");
+    assert!(error
+        .to_string()
+        .contains("has no staged github release envelope"));
+
+    let mut unauthenticated = Fixture::new();
+    unauthenticated.credentials.clear();
+    let manifest = desktop_manifest(unauthenticated.root.path());
+    let staged = unauthenticated
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+    let error = unauthenticated
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect_err("publishing requires a resolved github token");
+    assert!(error.to_string().contains("github_token"));
+}
+
+#[test]
+fn staged_envelope_payloads_must_be_well_formed() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    let mut missing_repository = staged.envelopes[0].clone();
+    missing_repository.content.remove("repository");
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[missing_repository], &[])
+        .expect_err("envelopes missing the repository cannot publish");
+    assert!(error.to_string().contains("missing repository"));
+
+    let mut missing_assets = staged.envelopes[0].clone();
+    missing_assets.content.remove("assets");
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[missing_assets], &[])
+        .expect_err("envelopes missing the asset selection cannot publish");
+    assert!(error.to_string().contains("has no asset selection"));
+}
+
+#[test]
+fn synchronized_envelopes_are_validated_against_the_sealed_manifest() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // 缺少 manifest 的校验上下文 fail-closed。
+    let credentials = fixture.credentials.clone();
+    let context = AdapterExecutionContext {
+        attempt_id: "attempt-github",
+        plan_digest: "plan-digest",
+        snapshot_digest: "snapshot",
+        artifacts: &[],
+        manifest: None,
+        envelopes: &[],
+        receipts: &[],
+        credentials: &credentials,
+        cancellation: publish_adapters::CancellationSignal::new(),
+    };
+    assert!(matches!(
+        fixture
+            .destination
+            .validate_staged_envelope(&nodes[0], &context, &staged.envelopes[0])
+            .expect_err("envelopes cannot be validated without the sealed manifest"),
+        PublishError::MissingArtifactManifest
+    ));
+
+    // 与重放的 stage 输出一致的 envelope 通过校验。
+    let context = AdapterExecutionContext {
+        manifest: Some(&manifest),
+        ..context
+    };
+    fixture
+        .destination
+        .validate_staged_envelope(&nodes[0], &context, &staged.envelopes[0])
+        .expect("the staged envelope validates against its settings");
+
+    // 篡改的 envelope 必须显式拒绝，不得容忍漂移。
+    let mut tampered = staged.envelopes[0].clone();
+    tampered
+        .content
+        .insert("tag".to_string(), Value::String("v9.9.9".to_string()));
+    let error = fixture
+        .destination
+        .validate_staged_envelope(&nodes[0], &context, &tampered)
+        .expect_err("drifted envelopes must be rejected");
+    assert!(error.to_string().contains("does not match"));
+}
+
+#[test]
+fn empty_tokens_fail_as_unauthorized_before_any_api_call() {
+    let api = Arc::new(FakeGitHubReleaseApi::new());
+    let fixture = Fixture {
+        api: api.clone(),
+        destination: GitHubReleaseDestination::new(api),
+        root: tempfile::tempdir().expect("fixture root"),
+        credentials: BTreeMap::from([(
+            "github_token".to_string(),
+            ResolvedCredential {
+                kind: CredentialKind::Token,
+                value: CredentialValue::new("   "),
+            },
+        )]),
+    };
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect_err("blank tokens cannot authenticate");
+    assert!(matches!(
+        classified_category(&error),
+        PublishFailureCategory::Authentication
+    ));
+}
+
+#[test]
+fn the_fake_api_rejects_duplicate_tags_and_blank_tokens() {
+    use publish_adapters::{GitHubReleaseApi, NewGitHubRelease};
+
+    let api = FakeGitHubReleaseApi::new();
+    let token = CredentialValue::new(TOKEN);
+    let draft = NewGitHubRelease {
+        tag: "v1.2.3".to_string(),
+        name: "Demo 1.2.3".to_string(),
+        body: "notes".to_string(),
+        prerelease: false,
+    };
+
+    let created = api
+        .create_draft_release(&token, "acme/demo", &draft)
+        .expect("first draft");
+    assert!(created.draft);
+
+    assert!(matches!(
+        api.create_draft_release(&token, "acme/demo", &draft),
+        Err(GitHubApiFailure::Http { status: 422, .. })
+    ));
+
+    assert!(matches!(
+        api.create_draft_release(
+            &CredentialValue::new("   "),
+            "acme/demo",
+            &NewGitHubRelease {
+                tag: "v9.9.9".to_string(),
+                name: "x".to_string(),
+                body: String::new(),
+                prerelease: false,
+            }
+        ),
+        Err(GitHubApiFailure::Http { status: 401, .. })
+    ));
+}
+
+#[test]
+fn the_fake_api_enforces_release_and_asset_invariants() {
+    use publish_adapters::{GitHubReleaseApi, NewGitHubRelease};
+
+    let api = FakeGitHubReleaseApi::new();
+    let token = CredentialValue::new(TOKEN);
+    let release = api
+        .create_draft_release(
+            &token,
+            "acme/demo",
+            &NewGitHubRelease {
+                tag: "v1.2.3".to_string(),
+                name: "Demo".to_string(),
+                body: String::new(),
+                prerelease: false,
+            },
+        )
+        .expect("draft");
+
+    // 同名资产禁止二次上传；不存在的 release/asset 一律 404。
+    api.upload_asset(&token, "acme/demo", release.id, "Demo.dmg", b"bytes")
+        .expect("first upload");
+    assert!(matches!(
+        api.upload_asset(&token, "acme/demo", release.id, "Demo.dmg", b"other"),
+        Err(GitHubApiFailure::Http { status: 422, .. })
+    ));
+    assert!(matches!(
+        api.upload_asset(&token, "acme/demo", 999_999, "x", b"y"),
+        Err(GitHubApiFailure::Http { status: 404, .. })
+    ));
+    assert!(matches!(
+        api.delete_asset(&token, "acme/demo", 999_999),
+        Err(GitHubApiFailure::Http { status: 404, .. })
+    ));
+    assert!(matches!(
+        api.publish_release(&token, "acme/demo", 999_999),
+        Err(GitHubApiFailure::Http { status: 404, .. })
+    ));
+}
+
+#[test]
+fn publishing_rejects_assets_missing_from_the_sealed_manifest() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // 篡改资产选择：Manifest 来源但未被封存清单声明。
+    let mut tampered = staged.envelopes[0].clone();
+    let assets = tampered
+        .content
+        .get_mut("assets")
+        .and_then(Value::as_array_mut)
+        .expect("staged asset selection");
+    assets.clear();
+    assets.push(serde_json::json!({
+        "name": "ghost.dmg",
+        "digest": "0".repeat(64),
+        "size": 1,
+        "url": "https://example.com/ghost.dmg",
+        "source": "manifest",
+    }));
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[tampered], &[])
+        .expect_err("assets outside the sealed manifest cannot publish");
+    assert!(error
+        .to_string()
+        .contains("not declared by the sealed manifest"));
+}
+
+#[test]
+fn publishing_rejects_envelope_assets_without_envelope_content() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&updater_settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage updater envelope");
+
+    // Envelope 派生资产（latest.json）依赖 updater_manifest 内容键。
+    let mut tampered = staged.envelopes[0].clone();
+    tampered.content.remove("updater_manifest");
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[tampered], &[])
+        .expect_err("envelope-sourced assets need the envelope content");
+    assert!(error.to_string().contains("has no envelope content"));
+}
+
+#[test]
+fn publishing_revalidates_sealed_artifact_bytes_before_upload() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // 封存后改动产物文件 → 上传前的摘要重验拒绝。
+    let artifact = manifest
+        .artifacts
+        .iter()
+        .find(|entry| entry.file_name.ends_with(".dmg"))
+        .expect("installer entry");
+    std::fs::write(&artifact.locator, b"tampered-bytes").expect("corrupt sealed artifact");
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect_err("tampered sealed artifacts must not upload");
+    assert!(matches!(error, PublishError::ArtifactDigestMismatch { .. }));
+}
+
+#[test]
+fn publishing_requires_a_well_formed_asset_selection() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // 缺 assets 键。
+    let mut missing = staged.envelopes[0].clone();
+    missing.content.remove("assets");
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[missing], &[])
+        .expect_err("envelopes without an asset selection cannot publish");
+    assert!(error.to_string().contains("no asset selection"));
+
+    // 畸形的 assets 值。
+    let mut malformed = staged.envelopes[0].clone();
+    malformed.content.insert(
+        "assets".to_string(),
+        Value::String("not-an-array".to_string()),
+    );
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[malformed], &[])
+        .expect_err("malformed asset selections cannot publish");
+    assert!(error.to_string().contains("invalid asset selection"));
+}
+
+#[test]
+fn malformed_platform_keys_are_rejected_before_staging() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let malformed = settings().with_value(
+        "enabled_platforms",
+        Value::Array(vec![Value::String("windows".to_string())]),
+    );
+    let nodes = fixture.nodes(&malformed);
+    let error = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect_err("platform keys without an architecture cannot stage");
+    assert!(error
+        .to_string()
+        .contains("not a <platform>-<architecture> key"));
+}
+
+#[test]
+fn staging_rejects_duplicate_release_asset_names() {
+    let fixture = Fixture::new();
+    // Manifest 封存本身拒绝重名条目；构造裸结构以验证目的地侧仍 fail-closed，
+    // 不信任任何上游不变量（ADR-0055 防线在 stage 边界再收一次）。
+    let entry = |bytes: &[u8]| {
+        let path = fixture
+            .root
+            .path()
+            .join(format!("Demo-{}", sha256_hex(bytes)));
+        std::fs::write(&path, bytes).expect("write fixture artifact");
+        ArtifactManifestEntry {
+            role: "installer".to_string(),
+            file_name: "Demo.dmg".to_string(),
+            media_type: "application/octet-stream".to_string(),
+            platform: "macos".to_string(),
+            architecture: "aarch64".to_string(),
+            size: bytes.len() as u64,
+            digest: sha256_hex(bytes),
+            locator: path.to_string_lossy().to_string(),
+            retention: "604800s".to_string(),
+            executable: Some(false),
+        }
+    };
+    let manifest = ArtifactManifest {
+        version: publish_domain::ARTIFACT_MANIFEST_VERSION,
+        planning_snapshot_digest: sha256_hex(b"snapshot"),
+        artifacts: vec![entry(b"one"), entry(b"two")],
+        digest: sha256_hex(b"manifest"),
+    };
+    let nodes = fixture.nodes(&settings());
+    let error = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect_err("duplicate asset names cannot stage");
+    assert_eq!(classified_code(&error), "release_asset_name_conflict");
+}
+
+#[test]
+fn publish_requires_a_staged_envelope() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[], &[])
+        .expect_err("publishing without a staged envelope must fail");
+    assert!(error
+        .to_string()
+        .contains("has no staged github release envelope"));
+}
+
+#[test]
+fn observation_fails_closed_when_a_receipt_exhausts_its_revision_range() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage");
+    let published = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish");
+    let receipt = published
+        .receipts
+        .iter()
+        .find(|receipt| receipt.route_id == ROUTE_ID)
+        .cloned()
+        .expect("publish receipt");
+    // 已提交 receipt 修订封顶 → 递增失败必须是显式执行错误。
+    let maxed = DeliveryReceipt {
+        revision: u32::MAX,
+        ..receipt
+    };
+    let error = fixture
+        .execute(&nodes[2], &manifest, &staged.envelopes, &[maxed])
+        .expect_err("revision overflow cannot mint a receipt");
+    assert!(error.to_string().contains("exhausted its revision range"));
+}
+
+#[test]
+fn published_releases_must_match_the_sealed_asset_set() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage");
+
+    // 我方 Published release 缺资产 → release_asset_missing。
+    fixture.api.seed_release(seeded_release(
+        7,
+        "v1.2.3",
+        format!("notes\n\n{}", marker(&manifest)),
+        false,
+        vec![],
+    ));
+    let error = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect_err("a published release missing assets conflicts");
+    assert_eq!(classified_code(&error), "release_asset_missing");
+
+    // 同名资产摘要漂移 → release_asset_digest_conflict。
+    let fixture = Fixture::new();
+    fixture.api.seed_release(seeded_release(
+        7,
+        "v1.2.3",
+        format!("notes\n\n{}", marker(&manifest)),
+        false,
+        vec![
+            RemoteGitHubAsset {
+                id: 71,
+                name: "Demo.dmg".to_string(),
+                digest: "0".repeat(64),
+                size: 1,
+            },
+            RemoteGitHubAsset {
+                id: 72,
+                name: "Demo.app.tar.gz".to_string(),
+                digest: sha256_hex(b"tar-bytes"),
+                size: 9,
+            },
+        ],
+    ));
+    let error = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect_err("published assets with foreign digests conflict");
+    assert_eq!(classified_code(&error), "release_asset_digest_conflict");
+}

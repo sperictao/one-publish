@@ -849,4 +849,269 @@ mod tests {
             .expect_err("duplicate binding identity must be rejected");
         assert!(error.to_string().contains("duplicate binding identity"));
     }
+
+    #[test]
+    fn backend_contract_defaults_are_closed_and_plan_execution_delegates() {
+        let backend = GitHubActionsBackend::new(Arc::new(crate::StaticCredentialSource::new()));
+
+        assert_eq!(backend.default_settings().values.len(), 0);
+        let binding_settings = AdapterSettings::new(1);
+        let snapshot = PlanningInputSnapshot {
+            version: publish_domain::PLANNING_INPUT_SNAPSHOT_VERSION,
+            configuration_revision: "revision-1".to_string(),
+            runtime_revision: "runtime-1".to_string(),
+            release_input: BTreeMap::new(),
+            source: publish_domain::SourceSnapshot {
+                revision: "0123456789abcdef".to_string(),
+                workspace_digest: None,
+                dirty: false,
+                captured_at: "2026-07-24T10:00:00Z".to_string(),
+                reproducible: true,
+            },
+            external_preconditions: BTreeMap::new(),
+            promoted_manifest_digest: None,
+            adapters: publish_domain::AdapterSelection {
+                project_provider: publish_domain::AdapterBinding::new(
+                    "project",
+                    AdapterIdentity::new(AdapterKind::ProjectProvider, "provider", 1),
+                    binding_settings.clone(),
+                ),
+                artifact_processors: vec![],
+                execution_backend: publish_domain::AdapterBinding::new(
+                    "backend",
+                    backend.descriptor().identity(),
+                    binding_settings.clone(),
+                ),
+                artifact_store: publish_domain::AdapterBinding::new(
+                    "store",
+                    AdapterIdentity::new(AdapterKind::ArtifactStore, "store", 1),
+                    binding_settings.clone(),
+                ),
+                delivery_routes: vec![],
+            },
+        };
+        assert!(backend
+            .plan_fragment(&snapshot, &AdapterSettings::new(1))
+            .expect("the actions backend contributes no plan nodes")
+            .is_empty());
+
+        // execute_plan 委托 execute_plan_in_order：节点按顺序访问、错误传播。
+        struct Counter {
+            visited: usize,
+        }
+        impl PlanNodeExecutor for Counter {
+            fn execute_node(
+                &mut self,
+                _node: &publish_domain::PlanNode,
+            ) -> Result<(), PublishError> {
+                self.visited += 1;
+                Err(PublishError::Execution("stop".to_string()))
+            }
+        }
+        let plan = publish_domain::PublishPlan {
+            version: publish_domain::PUBLISH_PLAN_VERSION,
+            snapshot_digest: "snapshot".to_string(),
+            adapters: vec![],
+            execution_backend: backend.descriptor().identity(),
+            routes: vec![],
+            nodes: vec![publish_domain::PlanNode {
+                id: "node".to_string(),
+                stage: publish_domain::PlanStage::InspectSource,
+                adapter: backend.descriptor().identity(),
+                binding_id: "binding".to_string(),
+                settings: AdapterSettings::new(1),
+                operation: publish_domain::PlanOperation::AdapterAction {
+                    action: "noop".to_string(),
+                    inputs: BTreeMap::new(),
+                },
+                depends_on: Vec::new(),
+                artifact_inputs: Vec::new(),
+                artifact_outputs: Vec::new(),
+                side_effects: Vec::new(),
+                cancellable: true,
+                cleanup_owned_staging: false,
+                irreversible: false,
+                platform: publish_domain::PlanNodePlatform::Any,
+            }],
+            digest: "plan".to_string(),
+        };
+        let mut executor = Counter { visited: 0 };
+        let error = backend
+            .execute_plan(&plan, &mut executor)
+            .expect_err("executor failures propagate through delegation");
+        assert!(error.to_string().contains("stop"));
+        assert_eq!(executor.visited, 1);
+    }
+
+    #[test]
+    fn thin_shell_rendering_requires_complete_distribution_and_toolchain() {
+        let backend = GitHubActionsBackend::new(Arc::new(crate::StaticCredentialSource::new()));
+
+        let mut missing_repository = binding("stable", "v", "revision-stable");
+        missing_distribution(&mut missing_repository, "repository");
+        let error = backend
+            .render_automation_bundle(&[missing_repository])
+            .expect_err("distribution repository is required");
+        assert!(error.to_string().contains("repository"), "{error}");
+
+        let mut missing_tag = binding("stable", "v", "revision-stable");
+        missing_distribution(&mut missing_tag, "releaseTag");
+        let error = backend
+            .render_automation_bundle(&[missing_tag])
+            .expect_err("distribution release tag is required");
+        assert!(error.to_string().contains("releaseTag"), "{error}");
+
+        let mut invalid_platforms = binding("stable", "v", "revision-stable");
+        invalid_platforms
+            .projection
+            .public_settings
+            .insert("shardPlatforms".to_string(), serde_json::json!(["freebsd"]));
+        let error = backend
+            .render_automation_bundle(&[invalid_platforms])
+            .expect_err("unsupported shard platforms cannot render");
+        assert!(error.to_string().contains("shard platforms"), "{error}");
+
+        let mut missing_toolchain = binding("stable", "v", "revision-stable");
+        missing_toolchain.projection.public_settings.insert(
+            "shardToolchain".to_string(),
+            serde_json::json!({"rustTargets": {}}),
+        );
+        let error = backend
+            .render_automation_bundle(&[missing_toolchain])
+            .expect_err("the build driver toolchain is required");
+        assert!(error.to_string().contains("toolchain"), "{error}");
+
+        let mut missing_targets = binding("stable", "v", "revision-stable");
+        missing_targets.projection.public_settings.insert(
+            "shardToolchain".to_string(),
+            serde_json::json!({"driver": "pnpm", "rustTargets": {}}),
+        );
+        let error = backend
+            .render_automation_bundle(&[missing_targets])
+            .expect_err("every shard needs pinned rust targets");
+        assert!(error.to_string().contains("rust targets"), "{error}");
+    }
+
+    fn missing_distribution(binding: &mut AutomationBindingProjection, key: &str) {
+        let distribution = binding
+            .projection
+            .public_settings
+            .get_mut("runnerDistribution")
+            .and_then(Value::as_object_mut)
+            .expect("distribution settings");
+        distribution.remove(key);
+    }
+
+    #[test]
+    fn thin_shell_toolchain_renders_each_supported_driver() {
+        let backend = GitHubActionsBackend::new(Arc::new(crate::StaticCredentialSource::new()));
+        let render = |driver: &str| {
+            let mut binding = binding("stable", "v", "revision-stable");
+            binding
+                .projection
+                .public_settings
+                .get_mut("shardToolchain")
+                .and_then(Value::as_object_mut)
+                .expect("toolchain settings")
+                .insert("driver".to_string(), Value::String(driver.to_string()));
+            backend.render_automation_bundle(&[binding]).map(|bundle| {
+                bundle
+                    .files
+                    .get(".github/workflows/one-publish-stable-release.yml")
+                    .expect("workflow")
+                    .content
+                    .clone()
+            })
+        };
+
+        assert!(render("npm").expect("npm toolchain").contains("npm ci"));
+        assert!(render("yarn")
+            .expect("yarn toolchain")
+            .contains("corepack enable yarn"));
+        assert!(render("bun")
+            .expect("bun toolchain")
+            .contains("bun install --frozen-lockfile"));
+        // cargo 驱动无 JS 工具链安装步骤。
+        assert!(!render("cargo")
+            .expect("cargo toolchain")
+            .contains("Setup Node"));
+        let error = render("deno").expect_err("unknown drivers cannot render");
+        assert!(error.to_string().contains("toolchain"), "{error}");
+
+        // cargoTools 按数据注入安装步骤。
+        let mut with_tools = binding("stable", "v", "revision-stable");
+        with_tools
+            .projection
+            .public_settings
+            .get_mut("shardToolchain")
+            .and_then(Value::as_object_mut)
+            .expect("toolchain settings")
+            .insert("cargoTools".to_string(), serde_json::json!(["tauri-cli"]));
+        let bundle = backend
+            .render_automation_bundle(&[with_tools])
+            .expect("cargo tools render");
+        assert!(bundle
+            .files
+            .get(".github/workflows/one-publish-stable-release.yml")
+            .expect("workflow")
+            .content
+            .contains("cargo install tauri-cli --locked"));
+    }
+
+    #[test]
+    fn render_rejects_shard_platforms_missing_a_pinned_digest() {
+        let backend = GitHubActionsBackend::new(Arc::new(crate::StaticCredentialSource::new()));
+        // 只为 Linux/macOS 钉 digest，shardPlatforms 仍要求 Windows——渲染
+        // 必须在缺 pin 的三元组上 fail-closed，不得静默跳过分片。
+        let mut binding = binding("stable", "v", "revision-stable");
+        binding.runtime_revision = AutomationRuntimeRevision::seal(
+            RuntimeComponentRevision::new("0.1.0", publish_domain::sha256_hex(b"runner"))
+                .with_binary_digests(BTreeMap::from([
+                    ("x86_64-unknown-linux-gnu".to_string(), "a".repeat(64)),
+                    ("aarch64-apple-darwin".to_string(), "b".repeat(64)),
+                ])),
+            RuntimeComponentRevision::new("1", publish_domain::sha256_hex(b"plan")),
+            vec![RuntimeAdapterRevision::new(
+                AdapterIdentity::new(AdapterKind::ExecutionBackend, GITHUB_ACTIONS_BACKEND_ID, 1),
+                publish_domain::sha256_hex(b"adapters"),
+            )],
+        )
+        .expect("partial digests still seal");
+
+        let error = backend
+            .render_automation_bundle(&[binding])
+            .expect_err("a shard without a pinned digest cannot render");
+        assert!(
+            error
+                .to_string()
+                .contains("x86_64-pc-windows-msvc is not pinned"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn backend_requires_at_least_one_binding_and_delegates_credentials() {
+        let backend =
+            GitHubActionsBackend::new(Arc::new(crate::StaticCredentialSource::new().with_secret(
+                "vault://token",
+                publish_domain::CredentialKind::Token,
+                "secret-value",
+            )));
+
+        let error = backend
+            .render_automation_bundle(&[])
+            .expect_err("empty bindings cannot render a bundle");
+        assert!(error.to_string().contains("at least one binding"));
+
+        let resolved = backend
+            .resolve_credential("vault://token")
+            .expect("credential source delegates");
+        assert_eq!(resolved.kind, publish_domain::CredentialKind::Token);
+        assert!(matches!(
+            backend
+                .resolve_credential("vault://missing")
+                .expect_err("missing credentials stay classified"),
+            CredentialResolveFailure::Missing
+        ));
+    }
 }

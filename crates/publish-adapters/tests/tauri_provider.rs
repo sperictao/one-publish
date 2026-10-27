@@ -965,3 +965,310 @@ fn release_gate_snapshots_must_decode_and_gates_need_programs() {
         .expect_err("an empty gate program is rejected");
     assert!(error.to_string().contains("cannot be empty"), "{error}");
 }
+
+// ── TauriRuntimeProvider 经注入执行端口的密封构建（无真实 tauri 调用）──
+
+struct SealedBuildPort {
+    files: &'static [(&'static str, &'static [u8])],
+    outcome_error: Option<String>,
+    cancelled: bool,
+    fail: Option<String>,
+    observed: std::sync::Mutex<Vec<publish_adapters::SealedBuildCommand>>,
+}
+
+impl publish_adapters::ProviderExecutionPort for SealedBuildPort {
+    fn execute_spec(
+        &self,
+        _spec_json: &str,
+        _cancellation: &publish_adapters::CancellationSignal,
+    ) -> Result<publish_adapters::ProviderExecutionOutcome, publish_domain::PublishError> {
+        unreachable!("the structured tauri path never issues spec builds")
+    }
+
+    fn execute_build(
+        &self,
+        request: publish_adapters::SealedBuildCommand,
+        _cancellation: &publish_adapters::CancellationSignal,
+    ) -> Result<publish_adapters::ProviderExecutionOutcome, publish_domain::PublishError> {
+        self.observed
+            .lock()
+            .expect("observed commands")
+            .push(request.clone());
+        if let Some(error) = &self.fail {
+            return Err(publish_domain::PublishError::Execution(error.clone()));
+        }
+        std::fs::create_dir_all(&request.output_directory).expect("create output dir");
+        for (name, bytes) in self.files {
+            std::fs::write(request.output_directory.join(name), bytes).expect("write artifact");
+        }
+        Ok(publish_adapters::ProviderExecutionOutcome {
+            success: self.outcome_error.is_none(),
+            cancelled: self.cancelled,
+            error: self.outcome_error.clone(),
+            output_dir: request.output_directory.to_string_lossy().to_string(),
+        })
+    }
+}
+
+fn runtime_with_port(
+    repository: &tempfile::TempDir,
+    output_directory: &std::path::Path,
+    port: SealedBuildPort,
+) -> (TauriRuntimeProvider, Arc<SealedBuildPort>) {
+    let port = Arc::new(port);
+    let provider = TauriRuntimeProvider::new(
+        "src-tauri/tauri.conf.json".to_string(),
+        "pnpm".to_string(),
+        repository.path().to_path_buf(),
+        Some(publish_adapters::ProviderExecution {
+            port: port.clone(),
+            output_directory: output_directory.to_path_buf(),
+            artifact_filter: None,
+            clear_stale_artifacts: false,
+            source_guard: Arc::new(publish_adapters::CleanCheckoutGuard),
+        }),
+    );
+    (provider, port)
+}
+
+fn sealed_build_node(args: Vec<String>) -> publish_domain::PlanNode {
+    publish_domain::PlanNode {
+        operation: PlanOperation::RunProgram {
+            program: TauriBuildDriver::Pnpm.program_id(),
+            args,
+            working_directory: None,
+            environment_references: BTreeMap::new(),
+        },
+        ..action_node("build", inspect_settings("pnpm"))
+    }
+}
+
+#[test]
+fn sealed_builds_collect_classified_artifacts_through_the_port() {
+    let repository = single_app_repository();
+    let output = tempfile::tempdir().expect("output dir");
+    let (provider, port) = runtime_with_port(
+        &repository,
+        output.path(),
+        SealedBuildPort {
+            files: &[
+                ("Demo.dmg", b"dmg"),
+                ("Demo.dmg.sig", b"sig"),
+                ("notes.txt", b"notes"),
+            ],
+            outcome_error: None,
+            cancelled: false,
+            fail: None,
+            observed: std::sync::Mutex::new(Vec::new()),
+        },
+    );
+
+    let node =
+        sealed_build_node(TauriBuildDriver::Pnpm.build_command_args("src-tauri/tauri.conf.json"));
+    let result = execute(&provider, &node).expect("sealed builds collect artifacts");
+    let roles: BTreeMap<_, _> = result
+        .artifacts
+        .iter()
+        .map(|artifact| (artifact.file_name.as_str(), artifact.role.as_str()))
+        .collect();
+    assert_eq!(roles.get("Demo.dmg"), Some(&"installer"));
+    assert_eq!(roles.get("Demo.dmg.sig"), Some(&"updater-signature"));
+    assert_eq!(roles.get("notes.txt"), Some(&"build-support"));
+
+    let requests = port.observed.lock().expect("observed commands");
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].program, "pnpm");
+    assert!(requests[0]
+        .args
+        .iter()
+        .any(|arg| arg.ends_with("src-tauri/tauri.conf.json")));
+}
+
+#[test]
+fn sealed_builds_surface_port_failures_cancellation_and_failed_outcomes() {
+    let repository = single_app_repository();
+    let output = tempfile::tempdir().expect("output dir");
+    let node =
+        sealed_build_node(TauriBuildDriver::Pnpm.build_command_args("src-tauri/tauri.conf.json"));
+
+    let (provider, _port) = runtime_with_port(
+        &repository,
+        output.path(),
+        SealedBuildPort {
+            files: &[],
+            outcome_error: None,
+            cancelled: false,
+            fail: Some("spawn failed".to_string()),
+            observed: std::sync::Mutex::new(Vec::new()),
+        },
+    );
+    let error = execute(&provider, &node).expect_err("port failures surface");
+    assert!(error.to_string().contains("spawn failed"));
+
+    let (provider, _port) = runtime_with_port(
+        &repository,
+        output.path(),
+        SealedBuildPort {
+            files: &[],
+            outcome_error: Some("linker exploded".to_string()),
+            cancelled: false,
+            fail: None,
+            observed: std::sync::Mutex::new(Vec::new()),
+        },
+    );
+    let error = execute(&provider, &node).expect_err("failed outcomes surface");
+    assert!(error.to_string().contains("linker exploded"));
+
+    let (provider, _port) = runtime_with_port(
+        &repository,
+        output.path(),
+        SealedBuildPort {
+            files: &[],
+            outcome_error: Some("user aborted".to_string()),
+            cancelled: true,
+            fail: None,
+            observed: std::sync::Mutex::new(Vec::new()),
+        },
+    );
+    let error = execute(&provider, &node).expect_err("cancelled outcomes report Cancelled");
+    assert!(matches!(error, publish_domain::PublishError::Cancelled(_)));
+}
+
+#[test]
+fn targeted_builds_materialize_the_platform_bundle_into_staging() {
+    let repository = tempfile::tempdir().expect("temp repository");
+    // app_root = 仓库根（tauri.conf.json 不在 src-tauri 内时）。
+    write_file(
+        &repository.path().join("src-tauri/tauri.conf.json"),
+        r#"{"productName":"Demo","version":"1.2.3"}"#,
+    );
+    // materialize_target_bundle 从 <app_root>/src-tauri/target/<triple>/release/bundle 收集。
+    let bundle = repository
+        .path()
+        .join("src-tauri/target/aarch64-apple-darwin/release/bundle/dmg");
+    std::fs::create_dir_all(&bundle).expect("create bundle");
+    std::fs::write(bundle.join("Demo.dmg"), b"dmg").expect("write dmg");
+    write_file(&repository.path().join("pnpm-lock.yaml"), "");
+
+    let output = tempfile::tempdir().expect("output dir");
+    let (provider, _port) = runtime_with_port(
+        &repository,
+        output.path(),
+        SealedBuildPort {
+            files: &[],
+            outcome_error: None,
+            cancelled: false,
+            fail: None,
+            observed: std::sync::Mutex::new(Vec::new()),
+        },
+    );
+
+    let mut args = TauriBuildDriver::Pnpm.build_command_args("src-tauri/tauri.conf.json");
+    args.push("--target".to_string());
+    args.push("aarch64-apple-darwin".to_string());
+    let node = sealed_build_node(args);
+    let result = execute(&provider, &node).expect("targeted builds materialize bundles");
+    assert!(result
+        .artifacts
+        .iter()
+        .any(|artifact| artifact.file_name.ends_with("Demo.dmg") && artifact.role == "installer"));
+}
+
+#[cfg(unix)]
+#[test]
+fn inspection_rejects_app_roots_escaping_the_repository_via_symlink() {
+    let outside = tempfile::tempdir().expect("outside dir");
+    write_file(
+        &outside.path().join("tauri.conf.json"),
+        r#"{"productName":"Escaped","version":"1.2.3"}"#,
+    );
+    write_file(
+        &outside.path().join("package.json"),
+        r#"{"packageManager":"pnpm@10.0.0","version":"1.2.3"}"#,
+    );
+    write_file(&outside.path().join("pnpm-lock.yaml"), "");
+
+    let repository = tempfile::tempdir().expect("temp repository");
+    std::fs::create_dir_all(repository.path().join("apps")).expect("apps dir");
+    std::os::unix::fs::symlink(outside.path(), repository.path().join("apps/desktop"))
+        .expect("symlink app root");
+
+    let error = TauriProjectProvider::new()
+        .inspect(repository.path(), "apps/desktop/tauri.conf.json")
+        .expect_err("an app root resolving outside the repository must be rejected");
+    assert!(error.to_string().contains("tauri_app_outside_repository"));
+}
+
+#[cfg(unix)]
+#[test]
+fn mirrors_resolving_outside_the_repository_are_skipped_not_reported() {
+    let outside = tempfile::tempdir().expect("outside dir");
+    write_file(
+        &outside.path().join("package.json"),
+        r#"{"packageManager":"pnpm@10.0.0","version":"9.9.9"}"#,
+    );
+
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join("src-tauri/tauri.conf.json"),
+        r#"{"productName":"Demo","version":"1.2.3"}"#,
+    );
+    write_file(
+        &repository.path().join("src-tauri/Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"1.2.3\"\n",
+    );
+    write_file(&repository.path().join("pnpm-lock.yaml"), "");
+    std::os::unix::fs::symlink(
+        outside.path().join("package.json"),
+        repository.path().join("package.json"),
+    )
+    .expect("symlink package.json");
+
+    let inspection = TauriProjectProvider::new()
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect("inspection succeeds while the escaping mirror is skipped");
+
+    assert!(inspection
+        .suggested_version_mirrors
+        .iter()
+        .all(|mirror| mirror.path != "package.json"));
+    assert!(inspection
+        .suggested_version_mirrors
+        .iter()
+        .any(|mirror| mirror.path == "src-tauri/Cargo.toml"));
+}
+
+#[test]
+fn root_level_configs_resolve_the_repository_as_the_app_root() {
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join("tauri.conf.json"),
+        r#"{"productName":"Rooted","version":"1.0.0"}"#,
+    );
+    write_file(
+        &repository.path().join("package.json"),
+        r#"{"packageManager":"pnpm@10.0.0"}"#,
+    );
+    write_file(&repository.path().join("pnpm-lock.yaml"), "");
+
+    let inspection = TauriProjectProvider::new()
+        .inspect(repository.path(), "tauri.conf.json")
+        .expect("root-level config inspects");
+    assert_eq!(inspection.app_root, ".");
+}
+
+#[test]
+fn inspection_surfaces_conflicting_build_driver_markers() {
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join("src-tauri/tauri.conf.json"),
+        r#"{"productName":"Demo","version":"1.2.3"}"#,
+    );
+    write_file(&repository.path().join("package-lock.json"), "{}");
+    write_file(&repository.path().join("pnpm-lock.yaml"), "");
+
+    let error = TauriProjectProvider::new()
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect_err("conflicting lockfiles must not pick a driver");
+    assert!(error.to_string().contains("lockfile") || error.to_string().contains("driver"));
+}

@@ -289,3 +289,148 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
         },
     }
 }
+
+// ── execute_node：inspect/build/外来操作三分支 ──
+
+fn execution_node(
+    provider: &FixtureAppProvider,
+    operation: PlanOperation,
+) -> publish_domain::PlanNode {
+    publish_domain::PlanNode {
+        id: "fixture.node".to_string(),
+        stage: PlanStage::InspectSource,
+        adapter: provider.descriptor().identity(),
+        binding_id: "fixture".to_string(),
+        settings: provider.default_settings(),
+        operation,
+        depends_on: Vec::new(),
+        artifact_inputs: Vec::new(),
+        artifact_outputs: Vec::new(),
+        side_effects: Vec::new(),
+        cancellable: true,
+        cleanup_owned_staging: false,
+        irreversible: false,
+        platform: publish_domain::PlanNodePlatform::Any,
+    }
+}
+
+fn run_node(
+    provider: &FixtureAppProvider,
+    node: &publish_domain::PlanNode,
+) -> Result<publish_adapters::AdapterExecutionOutput, PublishError> {
+    let credentials = BTreeMap::new();
+    let context = publish_adapters::AdapterExecutionContext {
+        attempt_id: "attempt-fixture",
+        plan_digest: "plan-digest",
+        snapshot_digest: "snapshot-digest",
+        artifacts: &[],
+        manifest: None,
+        envelopes: &[],
+        receipts: &[],
+        credentials: &credentials,
+        cancellation: publish_adapters::CancellationSignal::new(),
+    };
+    provider.execute_node(node, &context)
+}
+
+#[test]
+fn execute_node_inspects_seals_and_foreign_operations() {
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join(FIXTURE_MANIFEST_FILE_NAME),
+        &fixture_manifest("demo", "1.2.3"),
+    );
+    let provider = FixtureAppProvider::new(repository.path());
+
+    // Inspect 动作要求密封的 manifest_path 输入。
+    let sealed = execution_node(
+        &provider,
+        PlanOperation::AdapterAction {
+            action: FIXTURE_INSPECT_ACTION.to_string(),
+            inputs: BTreeMap::from([(
+                "manifest_path".to_string(),
+                Value::String(FIXTURE_MANIFEST_FILE_NAME.to_string()),
+            )]),
+        },
+    );
+    run_node(&provider, &sealed).expect("sealed inspect actions execute");
+
+    let unsealed = execution_node(
+        &provider,
+        PlanOperation::AdapterAction {
+            action: FIXTURE_INSPECT_ACTION.to_string(),
+            inputs: BTreeMap::new(),
+        },
+    );
+    let error =
+        run_node(&provider, &unsealed).expect_err("inspect actions must seal the manifest path");
+    assert!(error
+        .to_string()
+        .contains("does not seal the fixture manifest path"));
+
+    // 外来操作一律拒绝。
+    let foreign = execution_node(
+        &provider,
+        PlanOperation::AdapterAction {
+            action: "unrelated".to_string(),
+            inputs: BTreeMap::new(),
+        },
+    );
+    let error = run_node(&provider, &foreign).expect_err("foreign operations cannot execute");
+    assert!(error
+        .to_string()
+        .contains("is not a fixture provider operation"));
+}
+
+#[test]
+fn execute_node_builds_the_fixture_bundle_from_the_manifest() {
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join(FIXTURE_MANIFEST_FILE_NAME),
+        &fixture_manifest("demo", "1.2.3"),
+    );
+    let provider = FixtureAppProvider::new(repository.path());
+
+    let build = execution_node(
+        &provider,
+        PlanOperation::RunProgram {
+            program: FIXTURE_BUILD_PROGRAM.to_string(),
+            args: vec![FIXTURE_MANIFEST_FILE_NAME.to_string()],
+            working_directory: None,
+            environment_references: BTreeMap::new(),
+        },
+    );
+    let output = run_node(&provider, &build).expect("fixture builds produce a bundle");
+    assert_eq!(output.artifacts.len(), 1);
+    let bundle = &output.artifacts[0];
+    assert_eq!(bundle.role, FIXTURE_BUNDLE_ROLE);
+    assert_eq!(bundle.file_name, "demo_1.2.3.fixture-bundle.json");
+    assert_eq!(bundle.media_type, "application/json");
+}
+
+#[test]
+fn inspection_rejects_traversal_manifest_paths_and_missing_roots() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    write_file(
+        &dir.path().join(FIXTURE_MANIFEST_FILE_NAME),
+        &fixture_manifest("demo-app", "1.0.0"),
+    );
+    let provider = FixtureAppProvider::new(dir.path());
+
+    // 便携路径守卫在读取文件之前拒绝遍历。
+    let error = provider
+        .inspect("../outside/fixture-app.json")
+        .expect_err("traversal manifest paths are rejected");
+    assert!(error
+        .to_string()
+        .contains("fixture_app_manifest_path_invalid"));
+
+    // 仓库根必须先 canonicalize，不存在的根显式失败。
+    let missing = FixtureAppProvider::new(dir.path().join("missing-repo"));
+    let error = missing
+        .inspect(FIXTURE_MANIFEST_FILE_NAME)
+        .expect_err("missing repositories cannot be inspected");
+    assert!(error
+        .to_string()
+        .contains("fixture_app_repository_path_invalid"));
+}
