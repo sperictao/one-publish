@@ -52,4 +52,58 @@ describe("useProfileOrdering", () => {
     );
     expect(onReorderFailed).toHaveBeenCalledOnce();
   });
+  it("无选中仓库时跳过持久化", async () => {
+    const reorderProfilesFn = vi.fn();
+    const { result } = renderHook(() =>
+      useProfileOrdering({
+        selectedRepoId: null,
+        onOptimisticUpdate: vi.fn(),
+        onReorderFailed: vi.fn(),
+        reorderProfilesFn,
+        profileT: en.profiles,
+      })
+    );
+
+    act(() => {
+      result.current.reorderVisibleProfiles([
+        { id: "p-1", profileGroup: "g" } as unknown as ConfigProfile,
+      ]);
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reorderProfilesFn).not.toHaveBeenCalled();
+  });
+
+  it("前一次排序失败后队列自动恢复", async () => {
+    const reorderProfilesFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("first boom"))
+      .mockResolvedValueOnce(undefined);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const onReorderFailed = vi.fn().mockResolvedValue(undefined);
+
+    const { result } = renderHook(() =>
+      useProfileOrdering({
+        selectedRepoId: "repo-1",
+        onOptimisticUpdate: vi.fn(),
+        onReorderFailed,
+        reorderProfilesFn,
+        profileT: en.profiles,
+      })
+    );
+
+    act(() => {
+      result.current.reorderVisibleProfiles([
+        { id: "p-1", profileGroup: null } as unknown as ConfigProfile,
+      ]);
+    });
+    await waitFor(() => expect(onReorderFailed).toHaveBeenCalledOnce());
+
+    act(() => {
+      result.current.reorderVisibleProfiles([
+        { id: "p-1", profileGroup: "g" } as unknown as ConfigProfile,
+      ]);
+    });
+    await waitFor(() => expect(reorderProfilesFn).toHaveBeenCalledTimes(2));
+  });
 });
