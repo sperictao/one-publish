@@ -16,13 +16,20 @@ async function openSettings(page: Page) {
 }
 
 function appState(page: Page) {
-  return page.evaluate(
-    () =>
-      window.__TAURI_INTERNALS__.invoke("get_app_state") as Promise<{
-        theme?: string;
-        language?: string;
-      }>
-  );
+  return page.evaluate(async () => {
+    const win = window as unknown as {
+      __TAURI_INTERNALS__?: {
+        invoke: (c: string, a?: Record<string, unknown>) => Promise<unknown>;
+      };
+    };
+    if (!win.__TAURI_INTERNALS__?.invoke) {
+      throw new Error("Mock Tauri not installed");
+    }
+    return win.__TAURI_INTERNALS__.invoke("get_app_state") as Promise<{
+      theme?: string;
+      language?: string;
+    }>;
+  });
 }
 
 test.describe("Settings dialog", () => {
