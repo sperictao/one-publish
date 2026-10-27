@@ -7,7 +7,7 @@
 //! synchronize / cancel）的身份与证据绑定同样必须拒绝漂移。
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
@@ -101,10 +101,19 @@ impl ProjectProvider for EdgeProvider {}
 
 struct EdgeProcessor {
     descriptor: AdapterDescriptor,
+    fails: bool,
 }
 
 impl EdgeProcessor {
     fn new() -> Self {
+        Self::with_failure(false)
+    }
+
+    fn failing() -> Self {
+        Self::with_failure(true)
+    }
+
+    fn with_failure(fails: bool) -> Self {
         Self {
             descriptor: AdapterDescriptor::new(
                 AdapterKind::ArtifactProcessor,
@@ -116,6 +125,7 @@ impl EdgeProcessor {
                     requires: vec![CapabilityRequirement::exact("artifact-candidate", 1)],
                 },
             ),
+            fails,
         }
     }
 }
@@ -151,6 +161,11 @@ impl AdapterContract for EdgeProcessor {
         _node: &PlanNode,
         _context: &AdapterExecutionContext<'_>,
     ) -> Result<AdapterExecutionOutput, PublishError> {
+        if self.fails {
+            return Err(PublishError::Execution(
+                "simulated processor outage".to_string(),
+            ));
+        }
         Ok(AdapterExecutionOutput::default())
     }
 }
@@ -160,7 +175,7 @@ impl ArtifactProcessor for EdgeProcessor {}
 // ─── 夹具 ───
 
 struct EdgeFixture {
-    runtime: PublishRuntime,
+    runtime: Arc<PublishRuntime>,
     snapshot: PlanningInputSnapshot,
     _store_dir: tempfile::TempDir,
     _delivery_dir: tempfile::TempDir,
@@ -249,7 +264,7 @@ fn fixture() -> EdgeFixture {
         .expect("register local destination");
 
     EdgeFixture {
-        runtime: PublishRuntime::new(registry),
+        runtime: Arc::new(PublishRuntime::new(registry)),
         snapshot,
         _store_dir: store_dir,
         _delivery_dir: delivery_dir,
@@ -876,6 +891,16 @@ fn cancel_rejects_a_stale_prepared_plan_before_touching_remote_state() {
 /// 定制证据，运行时必须在合并边界逐条拒绝漂移（ADR-0039/0056）。
 struct ScriptedDestination {
     descriptor: AdapterDescriptor,
+    /// 在 publish 节点内重入一次 runtime 入口：同一 attempt 的并发 resume
+    /// 必须先被 ResumeSlot 拒绝，再继续本次执行。
+    reenter: Mutex<Option<ReenterTarget>>,
+    reenter_outcome: Mutex<Option<Result<String, String>>>,
+}
+
+struct ReenterTarget {
+    runtime: Arc<PublishRuntime>,
+    prepared: PreparedPublishPlan,
+    view: publish_domain::PublishAttemptView,
 }
 
 impl ScriptedDestination {
@@ -883,6 +908,8 @@ impl ScriptedDestination {
 
     fn new() -> Self {
         Self {
+            reenter: Mutex::new(None),
+            reenter_outcome: Mutex::new(None),
             descriptor: AdapterDescriptor::new(
                 AdapterKind::DeliveryDestination,
                 Self::ID,
@@ -960,17 +987,54 @@ impl AdapterContract for ScriptedDestination {
         // ObserveRoutes：submitted-conflict 以分类失败留下 Submitted+error 证据，
         // 供 resume 走「可重试失败 + 幂等探测」分支。
         if node.stage == PlanStage::ObserveRoutes {
-            if mode == "submitted-conflict" {
-                return Err(PublishError::Classified {
-                    failure: publish_domain::PublishFailure {
-                        version: publish_domain::PUBLISH_FAILURE_VERSION,
-                        category: publish_domain::PublishFailureCategory::Transient,
-                        native_code: "transient-observe".to_string(),
-                        message: "simulated transient observe failure".to_string(),
-                        retry_safe: false,
-                        retry_after_seconds: None,
-                    },
-                });
+            let observed =
+                |revision: u32, status, reference: &str| publish_domain::DeliveryReceipt {
+                    revision,
+                    status,
+                    ..publish_domain::DeliveryReceipt::published(
+                        "receipt-scripted",
+                        node.binding_id.clone(),
+                        manifest.digest.clone(),
+                        reference,
+                    )
+                };
+            match mode.as_str() {
+                // Transient 分类失败：resume 走「可重试失败 + 幂等探测」分支。
+                "submitted-conflict" | "submitted-reuse" => {
+                    return Err(PublishError::Classified {
+                        failure: publish_domain::PublishFailure {
+                            version: publish_domain::PUBLISH_FAILURE_VERSION,
+                            category: publish_domain::PublishFailureCategory::Transient,
+                            native_code: "transient-observe".to_string(),
+                            message: "simulated transient observe failure".to_string(),
+                            retry_safe: false,
+                            retry_after_seconds: None,
+                        },
+                    });
+                }
+                // 把已推进到修订 2 的 Receipt 历史倒退为修订 1。
+                "submitted-then-backwards" => {
+                    return Ok(AdapterExecutionOutput {
+                        receipts: vec![observed(
+                            1,
+                            publish_domain::DeliveryStatus::Submitted,
+                            "local://a",
+                        )],
+                        ..AdapterExecutionOutput::default()
+                    });
+                }
+                // Submitted → Staged 是非法生命周期回退。
+                "submitted-then-regress" => {
+                    return Ok(AdapterExecutionOutput {
+                        receipts: vec![observed(
+                            2,
+                            publish_domain::DeliveryStatus::Staged,
+                            "local://a",
+                        )],
+                        ..AdapterExecutionOutput::default()
+                    });
+                }
+                _ => {}
             }
             return Ok(AdapterExecutionOutput::default());
         }
@@ -983,6 +1047,20 @@ impl AdapterContract for ScriptedDestination {
                 reference,
             )
         };
+        if !staged {
+            if let Some(target) = self.reenter.lock().expect("reenter lock").take() {
+                let outcome = target
+                    .runtime
+                    .resume_attempt(
+                        &target.prepared,
+                        &target.view,
+                        &AttemptExecutionContext::at(0),
+                    )
+                    .map(|view| format!("{:?}", view.status))
+                    .map_err(|error| error.to_string());
+                *self.reenter_outcome.lock().expect("reenter outcome lock") = Some(outcome);
+            }
+        }
         let output = match (staged, mode.as_str()) {
             (true, "envelope-route-drift") => AdapterExecutionOutput {
                 envelopes: vec![valid_envelope().pipe(|mut envelope| {
@@ -1021,6 +1099,12 @@ impl AdapterContract for ScriptedDestination {
                     envelopes: vec![valid_envelope()],
                     ..AdapterExecutionOutput::default()
                 }
+            }
+            (true, "cancel-error-in-stage") => {
+                context.cancellation.request();
+                return Err(PublishError::Cancelled(
+                    "destination interrupted by the cancellation signal".to_string(),
+                ));
             }
             (true, _) => AdapterExecutionOutput {
                 envelopes: vec![valid_envelope()],
@@ -1079,6 +1163,65 @@ impl AdapterContract for ScriptedDestination {
                     node.binding_id
                 )));
             }
+            // publish 交出空输出：路线没有 Receipt，收尾必须按缺失证据失败。
+            (false, "no-receipt") => AdapterExecutionOutput::default(),
+            (false, "receipt-failed") => AdapterExecutionOutput {
+                receipts: vec![publish_domain::DeliveryReceipt {
+                    status: publish_domain::DeliveryStatus::Failed,
+                    ..receipt(1, "local://rejected")
+                }],
+                ..AdapterExecutionOutput::default()
+            },
+            (false, "receipt-rejected") => AdapterExecutionOutput {
+                receipts: vec![publish_domain::DeliveryReceipt {
+                    status: publish_domain::DeliveryStatus::Rejected,
+                    ..receipt(1, "local://rejected")
+                }],
+                ..AdapterExecutionOutput::default()
+            },
+            (false, "submitted-then-backwards") => AdapterExecutionOutput {
+                receipts: vec![
+                    publish_domain::DeliveryReceipt {
+                        status: publish_domain::DeliveryStatus::Submitted,
+                        ..receipt(1, "local://a")
+                    },
+                    publish_domain::DeliveryReceipt {
+                        status: publish_domain::DeliveryStatus::Submitted,
+                        ..receipt(2, "local://a")
+                    },
+                ],
+                ..AdapterExecutionOutput::default()
+            },
+            (false, "submitted-then-regress") => AdapterExecutionOutput {
+                receipts: vec![publish_domain::DeliveryReceipt {
+                    status: publish_domain::DeliveryStatus::Submitted,
+                    ..receipt(1, "local://a")
+                }],
+                ..AdapterExecutionOutput::default()
+            },
+            // 同一修订链上改变外部引用：证据身份不可中途改写。
+            (false, "receipt-identity-drift") => AdapterExecutionOutput {
+                receipts: vec![
+                    publish_domain::DeliveryReceipt {
+                        status: publish_domain::DeliveryStatus::Submitted,
+                        ..receipt(1, "local://a")
+                    },
+                    publish_domain::DeliveryReceipt {
+                        status: publish_domain::DeliveryStatus::Submitted,
+                        ..receipt(2, "local://b")
+                    },
+                ],
+                ..AdapterExecutionOutput::default()
+            },
+            // Submitted + Transient observe + 探测回同一份远端引用 →
+            // resume 复用交付并签发修订 2 的 Published Receipt。
+            (false, "submitted-reuse") => AdapterExecutionOutput {
+                receipts: vec![publish_domain::DeliveryReceipt {
+                    status: publish_domain::DeliveryStatus::Submitted,
+                    ..receipt(1, "local://delivered-a")
+                }],
+                ..AdapterExecutionOutput::default()
+            },
             (false, _) => AdapterExecutionOutput {
                 receipts: vec![receipt(1, "local://delivered")],
                 ..AdapterExecutionOutput::default()
@@ -1111,6 +1254,11 @@ impl publish_adapters::DeliveryDestination for ScriptedDestination {
                 external_reference: "local://delivered-b".to_string(),
             });
         }
+        if settings.string("mode", "scripted-destination").ok() == Some("submitted-reuse") {
+            return Ok(publish_adapters::DeliveryProbe::Matching {
+                external_reference: "local://delivered-a".to_string(),
+            });
+        }
         Ok(publish_adapters::DeliveryProbe::Unprobeable {
             reason: "scripted destination is not remotely probeable".to_string(),
         })
@@ -1135,6 +1283,21 @@ impl<T> Pipe for T {}
 
 /// `routes` 形状：(binding_id, mode, required)；路线即计划交付绑定。
 fn scripted_fixture(routes: &[(&str, &str, bool)]) -> (EdgeFixture, PreparedPublishPlan) {
+    let (fixture, prepared, _) = scripted_fixture_parts(
+        routes,
+        Arc::new(EdgeProcessor::new()),
+        Arc::new(ScriptedDestination::new()),
+    );
+    (fixture, prepared)
+}
+
+/// 可注入 processor/destination 的完整夹具：返回 destination 句柄以便
+/// 测试预置重入或探测行为。
+fn scripted_fixture_parts(
+    routes: &[(&str, &str, bool)],
+    processor: Arc<EdgeProcessor>,
+    destination: Arc<ScriptedDestination>,
+) -> (EdgeFixture, PreparedPublishPlan, Arc<ScriptedDestination>) {
     let mut fixture = fixture();
     fixture.snapshot.adapters.delivery_routes = routes
         .iter()
@@ -1158,7 +1321,7 @@ fn scripted_fixture(routes: &[(&str, &str, bool)]) -> (EdgeFixture, PreparedPubl
         .register_project_provider(Arc::new(EdgeProvider::new()), &conformance)
         .expect("register provider");
     registry
-        .register_artifact_processor(Arc::new(EdgeProcessor::new()), &conformance)
+        .register_artifact_processor(processor, &conformance)
         .expect("register processor");
     registry
         .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &conformance)
@@ -1176,14 +1339,14 @@ fn scripted_fixture(routes: &[(&str, &str, bool)]) -> (EdgeFixture, PreparedPubl
         )
         .expect("register local destination");
     registry
-        .register_delivery_destination(Arc::new(ScriptedDestination::new()), &conformance)
+        .register_delivery_destination(destination.clone(), &conformance)
         .expect("register scripted destination");
-    fixture.runtime = PublishRuntime::new(registry);
+    fixture.runtime = Arc::new(PublishRuntime::new(registry));
     let prepared = fixture
         .runtime
         .prepare_attempt(&fixture.snapshot)
         .expect("prepare scripted attempt");
-    (fixture, prepared)
+    (fixture, prepared, destination)
 }
 
 fn scripted_route_error(view: &publish_domain::PublishAttemptView) -> String {
@@ -1358,6 +1521,23 @@ impl AdapterContract for RogueBackend {
                 executor.execute_node(&plan.nodes[0])?;
                 executor.execute_node(&plan.nodes[0])
             }
+            // 静默跳过一个节点：依赖它的后续节点必须拒绝执行；
+            // 无依赖者遗留到收尾校验报不完整执行。
+            "skip-persist" => {
+                for node in &plan.nodes {
+                    if node.id == "store.persist" {
+                        continue;
+                    }
+                    executor.execute_node(node)?;
+                }
+                Ok(())
+            }
+            "skip-last" => {
+                for node in &plan.nodes[..plan.nodes.len() - 1] {
+                    executor.execute_node(node)?;
+                }
+                Ok(())
+            }
             _ => publish_adapters::execute_plan_in_order(plan, executor),
         }
     }
@@ -1395,7 +1575,7 @@ fn rogue_fixture(mode: &str) -> (EdgeFixture, PublishPlan) {
             &conformance,
         )
         .expect("register local destination");
-    fixture.runtime = PublishRuntime::new(registry);
+    fixture.runtime = Arc::new(PublishRuntime::new(registry));
     let plan = fixture
         .runtime
         .prepare(&fixture.snapshot)
@@ -1692,6 +1872,481 @@ fn resume_rejects_reused_deliveries_bound_to_other_remote_references() {
         error
             .to_string()
             .contains("cannot reuse remote delivery local://delivered-b"),
+        "unexpected error: {error}"
+    );
+}
+
+// ─── 完成校验、槽位互斥与续传阻断原因 ───
+
+#[test]
+fn start_rejects_an_empty_attempt_id() {
+    let fixture = fixture();
+    let plan = fixture
+        .runtime
+        .prepare(&fixture.snapshot)
+        .expect("prepare plan");
+    let error = fixture
+        .runtime
+        .start(&plan, "   ")
+        .expect_err("blank attempt ids fail closed before any side effect");
+    assert!(
+        error.to_string().contains("cannot be empty"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn preflight_rejects_nodes_referencing_unknown_bindings() {
+    let fixture = fixture();
+    let mut plan = fixture
+        .runtime
+        .prepare(&fixture.snapshot)
+        .expect("prepare plan");
+    plan.nodes.last_mut().expect("route node").binding_id = "ghost".to_string();
+    reseal(&mut plan);
+    let error = fixture
+        .runtime
+        .start(&plan, "attempt-ghost-binding")
+        .expect_err("nodes must resolve their sealed bindings");
+    assert!(
+        error
+            .to_string()
+            .contains("references unknown binding ghost"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_restarted_attempt_id_is_rejected_before_any_side_effect() {
+    // 完成的尝试保留其身份：同一 attempt_id 不得再次进入副作用边界。
+    let (fixture, prepared) = scripted_fixture(&[("scripted", "ok", true)]);
+    fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            start_request("attempt-once", &fixture.snapshot.source),
+            &AttemptExecutionContext::at(0),
+        )
+        .expect("first attempt completes");
+    let error = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            start_request("attempt-once", &fixture.snapshot.source),
+            &AttemptExecutionContext::at(0),
+        )
+        .expect_err("a completed attempt id cannot be restarted");
+    assert!(
+        matches!(error, PublishError::AttemptAlreadyStarted { .. }),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_backend_that_silently_skips_sealed_nodes_cannot_complete() {
+    // 跳过最后节点的计划不能报完成：收尾校验按缺失节点失败关闭。
+    let (fixture, plan) = rogue_fixture("skip-last");
+    let error = fixture
+        .runtime
+        .start(&plan, "attempt-skip-last")
+        .expect_err("silently skipped nodes must fail completion");
+    assert!(
+        matches!(error, PublishError::IncompletePlanExecution { .. }),
+        "unexpected error: {error}"
+    );
+
+    // 跳过依赖节点但继续提交后继：依赖守卫在执行前拒绝。
+    let (fixture, plan) = rogue_fixture("skip-persist");
+    let error = fixture
+        .runtime
+        .start(&plan, "attempt-skip-persist")
+        .expect_err("dependents of skipped nodes must refuse to run");
+    assert!(
+        error
+            .to_string()
+            .contains("executed before dependency store.persist"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_route_that_emits_no_receipt_fails_completion() {
+    // 节点全部执行但路线既未失败也没有 Receipt：证据不完整，按缺失收据失败。
+    let (fixture, prepared) = scripted_fixture(&[("scripted", "no-receipt", true)]);
+    let view = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            start_request("attempt-no-receipt", &fixture.snapshot.source),
+            &AttemptExecutionContext::at(0),
+        )
+        .expect("the attempt still settles into a failed view");
+    assert_eq!(view.status, publish_domain::PublishAttemptStatus::Failed);
+    assert!(
+        view.error
+            .as_deref()
+            .is_some_and(|error| error.contains("did not produce a delivery receipt")),
+        "unexpected view: {view:?}"
+    );
+}
+
+#[test]
+fn failed_delivery_status_receipts_fail_their_routes() {
+    // 终态失败状态的 Receipt 是目的地自报失败：保留证据并把路线记为失败。
+    for (mode, expected) in [
+        ("receipt-failed", "is failed"),
+        ("receipt-rejected", "is rejected"),
+    ] {
+        let (fixture, prepared) = scripted_fixture(&[("scripted", mode, true)]);
+        let view = fixture
+            .runtime
+            .start_attempt(
+                &prepared,
+                start_request(&format!("attempt-{mode}"), &fixture.snapshot.source),
+                &AttemptExecutionContext::at(0),
+            )
+            .expect("failed-status receipts settle as route failures");
+        assert_eq!(view.status, publish_domain::PublishAttemptStatus::Failed);
+        let route = view
+            .routes
+            .iter()
+            .find(|route| route.route_id == "scripted")
+            .expect("scripted route present");
+        assert!(
+            route
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains(expected)),
+            "route must carry the failed receipt verdict: {route:?}"
+        );
+    }
+}
+
+#[test]
+fn receipt_histories_cannot_rewind_or_change_identity() {
+    // 修订倒退：历史已到修订 2 时退回修订 1。
+    let error = scripted_rejection("submitted-then-backwards", "attempt-backwards");
+    assert!(
+        error.contains("revision moved backwards"),
+        "unexpected error: {error}"
+    );
+
+    // 同一修订链上外部引用改变：Receipt 证据身份不可改写。
+    let error = scripted_rejection("receipt-identity-drift", "attempt-identity-drift");
+    assert!(
+        error.contains("changed its stable identity"),
+        "unexpected error: {error}"
+    );
+
+    // Submitted → Staged 是生命周期回退：方向只允许前进。
+    let error = scripted_rejection("submitted-then-regress", "attempt-regress");
+    assert!(
+        error.contains("invalid lifecycle transition submitted -> staged"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn resume_reports_why_each_route_cannot_be_retried() {
+    // 已 Published 的尝试没有可续传路线。
+    let (fixture, prepared, view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-nothing-resumable");
+    let error = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect_err("a completed attempt has nothing to resume");
+    assert!(
+        error.to_string().contains("no resumable delivery route"),
+        "unexpected error: {error}"
+    );
+
+    // 未分类失败（无结构化类别）不可自动重试：原因必须进入阻断清单。
+    let (fixture, prepared, view) = completed_view(
+        &[("scripted", "publish-fails", true)],
+        "attempt-not-eligible",
+    );
+    let error = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect_err("unclassified failures are not automatically retryable");
+    assert!(
+        error
+            .to_string()
+            .contains("not eligible for automatic retry"),
+        "unexpected error: {error}"
+    );
+
+    // Stage 节点已开始但没有完成证据：adapter-owned staging 状态未知，
+    // 唯一安全出路是先取消清理（ADR-0041）。
+    let (fixture, prepared, mut view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-uncertain-stage");
+    view.events.retain(|event| {
+        !event.plan_node_id.starts_with("scripted.publish")
+            && !event.plan_node_id.starts_with("scripted.observe")
+            && !(event.plan_node_id == "scripted.stage" && event.kind == "plan_node_completed")
+    });
+    for (index, event) in view.events.iter_mut().enumerate() {
+        event.sequence = index as u64 + 1;
+    }
+    view.receipts.clear();
+    view.receipt_history.clear();
+    let error = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect_err("uncertain staging blocks resume until cleanup");
+    assert!(
+        error
+            .to_string()
+            .contains("staging started without durable completion evidence"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn resume_retries_pending_routes_under_cancellation_and_propagates_uncertain_failures() {
+    // Pending 路线在取消信号下仍进入重试决策，执行随即按取消收尾。
+    let (fixture, prepared, mut view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-cancel-resume");
+    view.events.retain(|event| {
+        !event.plan_node_id.starts_with("scripted.publish")
+            && !event.plan_node_id.starts_with("scripted.observe")
+    });
+    view.receipts.clear();
+    view.receipt_history.clear();
+    let signal = publish_runner_core::CancellationSignal::default();
+    signal.request();
+    let resumed = fixture
+        .runtime
+        .resume_attempt(
+            &prepared,
+            &view,
+            &AttemptExecutionContext::at(0).with_cancellation(signal),
+        )
+        .expect("a cancelled resume still settles deterministically");
+    assert_eq!(
+        resumed.status,
+        publish_domain::PublishAttemptStatus::Cancelled,
+        "unexpected view: {resumed:?}"
+    );
+
+    // 续传中的租约维护失败同样不可伪装成普通失败。
+    let (fixture, prepared, mut view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-resume-uncertain");
+    view.events.retain(|event| {
+        !event.plan_node_id.starts_with("scripted.publish")
+            && !event.plan_node_id.starts_with("scripted.observe")
+    });
+    view.receipts.clear();
+    view.receipt_history.clear();
+    let port = Arc::new(RecordingLeasePort {
+        maintained: Mutex::new(Vec::new()),
+        fail_at: Some(1),
+    });
+    let error = fixture
+        .runtime
+        .resume_attempt(
+            &prepared,
+            &view,
+            &AttemptExecutionContext::at(0).with_lease_maintenance(port),
+        )
+        .expect_err("uncertain resume failures must propagate, not downgrade");
+    assert!(
+        matches!(error, PublishError::AttemptStateUncertain { .. }),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_reentrant_resume_is_rejected_while_the_attempt_is_resuming() {
+    // 同一 attempt 的并发续传会重复外部副作用：ResumeSlot 在 acquire 处
+    // 明确拒绝第二次进入（ADR-0040）。
+    let destination = Arc::new(ScriptedDestination::new());
+    let (fixture, prepared, destination) = scripted_fixture_parts(
+        &[("scripted", "ok", true)],
+        Arc::new(EdgeProcessor::new()),
+        destination,
+    );
+    let mut view = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            start_request("attempt-reenter", &fixture.snapshot.source),
+            &AttemptExecutionContext::at(0),
+        )
+        .expect("seed attempt completes");
+    view.events.retain(|event| {
+        !event.plan_node_id.starts_with("scripted.publish")
+            && !event.plan_node_id.starts_with("scripted.observe")
+    });
+    view.receipts.clear();
+    view.receipt_history.clear();
+    *destination.reenter.lock().expect("reenter lock") = Some(ReenterTarget {
+        runtime: fixture.runtime.clone(),
+        prepared: prepared.clone(),
+        view: view.clone(),
+    });
+
+    let resumed = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect("the outer resume still completes");
+    assert_eq!(
+        resumed.status,
+        publish_domain::PublishAttemptStatus::Published,
+        "unexpected view: {resumed:?}"
+    );
+    let outcome = destination
+        .reenter_outcome
+        .lock()
+        .expect("reenter outcome lock")
+        .take()
+        .expect("reentrant call was attempted");
+    let error = outcome.expect_err("reentrant resume must be rejected");
+    assert!(
+        error.contains("is already being resumed"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn cancel_requires_the_sealed_manifest_when_progress_evidence_exists() {
+    // 尝试身份携带 manifest 绑定但视图拿不出 Manifest：证据矛盾，拒绝取消。
+    let (fixture, prepared, mut view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-cancel-nomanifest");
+    view.manifest = None;
+    let error = fixture
+        .runtime
+        .cancel_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect_err("manifest evidence is mandatory once progress exists");
+    assert!(
+        matches!(error, PublishError::MissingArtifactManifest),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn resume_rejects_staging_evidence_for_foreign_routes() {
+    // 恢复出的 Envelope 必须映射回密封计划的 stage 节点：外来路线拒绝。
+    let (fixture, prepared, mut view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-foreign-envelope");
+    view.events.retain(|event| {
+        !event.plan_node_id.starts_with("scripted.publish")
+            && !event.plan_node_id.starts_with("scripted.observe")
+    });
+    view.receipts.clear();
+    view.receipt_history.clear();
+    for event in view.events.iter_mut() {
+        if event.plan_node_id == "scripted.stage" && event.kind == "plan_node_completed" {
+            if let Some(envelopes) = event
+                .payload
+                .get_mut("delivery_envelopes")
+                .and_then(Value::as_array_mut)
+            {
+                if let Some(envelope) = envelopes.first_mut().and_then(Value::as_object_mut) {
+                    envelope.insert("route_id".to_string(), Value::String("ghost".to_string()));
+                }
+            }
+        }
+    }
+    let error = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect_err("foreign staging evidence must fail closed");
+    assert!(
+        error
+            .to_string()
+            .contains("outside its sealed route or manifest"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn reused_deliveries_extend_their_receipt_history() {
+    // 幂等探测确认远端交付属于自己：resume 不重新执行，只为既有交付
+    // 签发修订 2 的 Published Receipt（ADR-0051）。
+    let (fixture, prepared) = scripted_fixture(&[("scripted", "submitted-reuse", true)]);
+    let view = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            start_request("attempt-reuse", &fixture.snapshot.source),
+            &AttemptExecutionContext::at(0),
+        )
+        .expect("the seeded attempt fails transiently during observation");
+    assert_eq!(view.status, publish_domain::PublishAttemptStatus::Failed);
+
+    let resumed = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect("a matching remote delivery is reused without reexecution");
+    assert_eq!(
+        resumed.status,
+        publish_domain::PublishAttemptStatus::Published,
+        "unexpected view: {resumed:?}"
+    );
+    assert!(resumed.receipts.iter().any(|receipt| {
+        receipt.route_id == "scripted"
+            && receipt.revision == 2
+            && receipt.status == publish_domain::DeliveryStatus::Published
+            && receipt.external_reference == "local://delivered-a"
+    }));
+}
+
+#[test]
+fn non_route_node_failures_fail_the_attempt() {
+    // 共享处理器（非路线节点）失败不属于任何路线：升级为尝试级失败。
+    let (fixture, prepared, _) = scripted_fixture_parts(
+        &[("scripted", "ok", true)],
+        Arc::new(EdgeProcessor::failing()),
+        Arc::new(ScriptedDestination::new()),
+    );
+    let view = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            start_request("attempt-processor-fails", &fixture.snapshot.source),
+            &AttemptExecutionContext::at(0),
+        )
+        .expect("non-route failures still settle into a failed view");
+    assert_eq!(view.status, publish_domain::PublishAttemptStatus::Failed);
+    assert!(
+        view.error
+            .as_deref()
+            .is_some_and(|error| error.contains("simulated processor outage")),
+        "unexpected view: {view:?}"
+    );
+}
+
+#[test]
+fn a_cancellation_during_execution_surfaces_as_cancelled() {
+    // Adapter 响应取消中断执行：尝试以 Cancelled 报告而不是不完整计划。
+    let (fixture, prepared) = scripted_fixture(&[("scripted", "cancel-error-in-stage", true)]);
+    let error = fixture
+        .runtime
+        .start_prepared(&prepared, "attempt-cancelled-execution")
+        .expect_err("interrupted execution reports cancellation");
+    assert!(
+        matches!(error, PublishError::Cancelled(_)),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn resume_rejects_a_prepared_plan_that_no_longer_matches_its_snapshot() {
+    let (fixture, mut prepared, view) =
+        completed_view(&[("scripted", "ok", true)], "attempt-resume-drift");
+    prepared
+        .snapshot
+        .release_input
+        .insert("version".to_string(), Value::String("9.9.9".to_string()));
+    let error = fixture
+        .runtime
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
+        .expect_err("resume must re-derive and match the sealed plan");
+    assert!(
+        error
+            .to_string()
+            .contains("no longer matches its planning input snapshot"),
         "unexpected error: {error}"
     );
 }
