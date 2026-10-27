@@ -24,6 +24,14 @@ vi.mock("@/hooks/useI18n", () => ({
   useI18n: () => ({ translations: {}, t: (k: string) => k }),
 }));
 
+const snippetMocks = vi.hoisted(() => ({
+  buildGitLabCISnippet: vi.fn(),
+}));
+vi.mock("@/lib/handoffSnippet", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  buildGitLabCISnippet: snippetMocks.buildGitLabCISnippet,
+}));
+
 const setSnapshotPathMock = vi.hoisted(() => vi.fn());
 vi.mock("@/stores/appStore", () => ({
   useAppStore: (selector: (s: unknown) => unknown) =>
@@ -77,6 +85,7 @@ beforeEach(() => {
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
     configurable: true,
   });
+  snippetMocks.buildGitLabCISnippet.mockReturnValue("stages:\n  - publish\n");
 });
 
 describe("copyHandoffSnippet", () => {
@@ -107,6 +116,84 @@ describe("copyHandoffSnippet", () => {
     );
     expect(toastMocks.success).toHaveBeenCalledWith(
       expect.stringContaining("已复制")
+    );
+  });
+
+  it("builds the gitlab-ci snippet and copies it with its own label", async () => {
+    const { actions } = setup();
+
+    await actions.copyHandoffSnippet(record(), "gitlab-ci");
+
+    expect(snippetMocks.buildGitLabCISnippet).toHaveBeenCalledWith({
+      spec: SPEC,
+      commandLine: "dotnet publish",
+    });
+    // copyText 先 trim 再写剪贴板——尾部换行不进入剪贴板。
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      "stages:\n  - publish"
+    );
+    expect(toastMocks.success).toHaveBeenCalledWith("GitLab CI 交接片段已复制");
+  });
+
+  it("rejects copying when the built snippet is blank", async () => {
+    snippetMocks.buildGitLabCISnippet.mockReturnValue("   ");
+    const { actions } = setup();
+
+    await actions.copyHandoffSnippet(record(), "gitlab-ci");
+
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "缺少可复制的GitLab CI 交接片段"
+    );
+  });
+
+  it("falls back to execCommand when the clipboard api is unavailable", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: undefined,
+      configurable: true,
+    });
+    const execCommand = vi.fn().mockReturnValue(true);
+    document.execCommand = execCommand;
+    const { actions } = setup();
+
+    await actions.copyHandoffSnippet(record(), "shell");
+
+    expect(execCommand).toHaveBeenCalledWith("copy");
+    expect(toastMocks.success).toHaveBeenCalledWith(
+      expect.stringContaining("已复制")
+    );
+    // 临时 textarea 必须回收，不留 DOM 垃圾。
+    expect(document.querySelector("textarea")).toBeNull();
+  });
+
+  it("surfaces a failure toast when execCommand reports failure", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: undefined,
+      configurable: true,
+    });
+    document.execCommand = vi.fn().mockReturnValue(false);
+    const { actions } = setup();
+
+    await actions.copyHandoffSnippet(record(), "shell");
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "复制Shell 交接片段失败",
+      expect.objectContaining({ description: expect.any(String) })
+    );
+  });
+
+  it("surfaces a failure toast when the clipboard write rejects", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+      configurable: true,
+    });
+    const { actions } = setup();
+
+    await actions.copyHandoffSnippet(record(), "shell");
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "复制Shell 交接片段失败",
+      expect.objectContaining({ description: "Error: denied" })
     );
   });
 
