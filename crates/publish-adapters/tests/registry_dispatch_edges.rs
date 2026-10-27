@@ -409,3 +409,329 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
         },
     }
 }
+
+// ── 能力协商（ADR-0035）：requires 必须被 registry 内某 Adapter 的 provides 满足 ──
+
+fn capability_adapter(
+    kind: AdapterKind,
+    id: &str,
+    provides: Vec<publish_domain::Capability>,
+    requires: Vec<publish_domain::CapabilityRequirement>,
+) -> BareAdapter {
+    BareAdapter {
+        descriptor: AdapterDescriptor::new(
+            kind,
+            id,
+            1,
+            AdapterSchema::new(1),
+            PublishingCapability { provides, requires },
+        ),
+    }
+}
+
+#[test]
+fn capability_negotiation_accepts_satisfied_requirements_only() {
+    use publish_domain::{Capability, CapabilityRequirement};
+
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let provider = capability_adapter(
+        AdapterKind::ExecutionBackend,
+        "provider",
+        vec![Capability::new("evidence-store", 2)],
+        vec![],
+    );
+    let consumer = capability_adapter(
+        AdapterKind::DeliveryDestination,
+        "consumer",
+        vec![],
+        vec![CapabilityRequirement {
+            id: "evidence-store".to_string(),
+            minimum_version: 1,
+            maximum_version: 3,
+        }],
+    );
+
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_execution_backend(Arc::new(provider), &fixture)
+        .expect("register provider");
+    registry
+        .register_delivery_destination(Arc::new(consumer), &fixture)
+        .expect("register consumer");
+
+    let provider_id = AdapterIdentity::new(AdapterKind::ExecutionBackend, "provider", 1);
+    let consumer_id = AdapterIdentity::new(AdapterKind::DeliveryDestination, "consumer", 1);
+    registry
+        .validate_capabilities([&provider_id, &consumer_id])
+        .expect("a satisfied requirement negotiates cleanly");
+
+    // 需求没有提供方 → MissingCapability。
+    let mut registry = AdapterRegistry::new();
+    let needy = capability_adapter(
+        AdapterKind::DeliveryDestination,
+        "needy",
+        vec![],
+        vec![CapabilityRequirement::exact("ghost", 1)],
+    );
+    registry
+        .register_delivery_destination(Arc::new(needy), &fixture)
+        .expect("register needy");
+    let needy_id = AdapterIdentity::new(AdapterKind::DeliveryDestination, "needy", 1);
+    let error = registry
+        .validate_capabilities([&needy_id])
+        .expect_err("requirements without a provider cannot negotiate");
+    assert!(matches!(
+        error,
+        PublishError::MissingCapability { ref capability, .. } if capability == "ghost"
+    ));
+
+    // 提供方版本落在接受区间外 → IncompatibleCapability。
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_execution_backend(
+            Arc::new(capability_adapter(
+                AdapterKind::ExecutionBackend,
+                "provider",
+                vec![Capability::new("evidence-store", 1)],
+                vec![],
+            )),
+            &fixture,
+        )
+        .expect("register provider");
+    registry
+        .register_delivery_destination(
+            Arc::new(capability_adapter(
+                AdapterKind::DeliveryDestination,
+                "consumer",
+                vec![],
+                vec![CapabilityRequirement {
+                    id: "evidence-store".to_string(),
+                    minimum_version: 5,
+                    maximum_version: 9,
+                }],
+            )),
+            &fixture,
+        )
+        .expect("register consumer");
+    let error = registry
+        .validate_capabilities([&provider_id, &consumer_id])
+        .expect_err("out-of-range versions cannot negotiate");
+    assert!(matches!(
+        error,
+        PublishError::IncompatibleCapability { ref capability, .. }
+            if capability == "evidence-store"
+    ));
+}
+
+#[test]
+fn execute_plan_in_order_visits_nodes_and_propagates_failures() {
+    use publish_adapters::execute_plan_in_order;
+
+    let nodes = vec![
+        node_with_adapter(AdapterIdentity::new(
+            AdapterKind::DeliveryDestination,
+            "a",
+            1,
+        )),
+        node_with_adapter(AdapterIdentity::new(
+            AdapterKind::DeliveryDestination,
+            "b",
+            1,
+        )),
+    ];
+    let plan = publish_domain::PublishPlan {
+        version: publish_domain::PUBLISH_PLAN_VERSION,
+        snapshot_digest: "snapshot".to_string(),
+        adapters: vec![],
+        execution_backend: AdapterIdentity::new(AdapterKind::ExecutionBackend, "backend", 1),
+        routes: vec![],
+        nodes,
+        digest: "plan".to_string(),
+    };
+
+    struct RecordingExecutor {
+        visited: Vec<String>,
+        fail_on: String,
+    }
+    impl PlanNodeExecutor for RecordingExecutor {
+        fn execute_node(&mut self, node: &PlanNode) -> Result<(), PublishError> {
+            if node.id == self.fail_on {
+                return Err(PublishError::Execution(format!("{} failed", node.id)));
+            }
+            self.visited.push(node.id.clone());
+            Ok(())
+        }
+    }
+
+    let mut executor = RecordingExecutor {
+        visited: Vec::new(),
+        fail_on: "node".to_string(),
+    };
+    let error = execute_plan_in_order(&plan, &mut executor)
+        .expect_err("executor failures propagate to the plan");
+    assert!(error.to_string().contains("failed"));
+
+    // 同 id 节点：第一个失败，无成功访问记录但顺序语义被遵守。
+    executor.fail_on = String::new();
+    let error = execute_plan_in_order(&plan, &mut executor);
+    assert!(error.is_ok(), "identical nodes execute in order");
+}
+
+#[test]
+fn builtin_delivery_namespaces_combine_adapter_and_locator() {
+    use publish_adapters::builtin_delivery_namespace;
+
+    // GitHub Release：locator 就是仓库 slug。
+    assert_eq!(
+        builtin_delivery_namespace("github-release", &Value::Null, "acme/demo").as_deref(),
+        Some("github-release:acme/demo")
+    );
+    // SFTP：locator 是 host:remote_path。
+    assert_eq!(
+        builtin_delivery_namespace(
+            "sftp",
+            &serde_json::json!({"host": "files.example.com", "remote_path": "/srv/releases"}),
+            "ignored",
+        )
+        .as_deref(),
+        Some("sftp:files.example.com:/srv/releases")
+    );
+    // Local：locator 是目标目录。
+    assert_eq!(
+        builtin_delivery_namespace(
+            "local-directory",
+            &serde_json::json!({"directory": "/opt/releases"}),
+            "ignored",
+        )
+        .as_deref(),
+        Some("local-directory:/opt/releases")
+    );
+    // 未知 Adapter 与空 locator 都返回 None。
+    assert!(builtin_delivery_namespace("unknown-adapter", &Value::Null, "x").is_none());
+    assert!(builtin_delivery_namespace("github-release", &Value::Null, "").is_none());
+    assert!(builtin_delivery_namespace("sftp", &serde_json::json!({}), "x").is_none());
+}
+
+#[test]
+fn binding_credentials_resolve_through_the_execution_backend() {
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let backend = BareAdapter::new();
+    let backend_id = backend.descriptor().identity();
+
+    // Destination schema 声明一个凭据要求；binding 未绑定它 → CredentialNotBound。
+    let mut schema = AdapterSchema::new(1);
+    schema.credentials.insert(
+        "github_token".to_string(),
+        publish_domain::CredentialRequirement {
+            kind: publish_domain::CredentialKind::Token,
+            purpose: "release upload".to_string(),
+        },
+    );
+    let destination = BareAdapter {
+        descriptor: AdapterDescriptor::new(
+            AdapterKind::DeliveryDestination,
+            "dest",
+            1,
+            schema,
+            PublishingCapability {
+                provides: vec![],
+                requires: vec![],
+            },
+        ),
+    };
+    let destination_id = destination.descriptor().identity();
+
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_execution_backend(Arc::new(backend), &fixture)
+        .expect("register backend");
+    registry
+        .register_delivery_destination(Arc::new(destination), &fixture)
+        .expect("register destination");
+
+    let binding = AdapterBinding::new("route", destination_id.clone(), AdapterSettings::new(1));
+    let error = registry
+        .resolve_binding_credentials(&backend_id, &binding)
+        .expect_err("unbound requirements cannot resolve");
+    assert!(matches!(
+        error,
+        PublishError::CredentialNotBound { ref requirement, .. }
+            if requirement == "github_token"
+    ));
+
+    // 绑定存在但后端缺该引用 → CredentialReferenceMissing（默认实现是 Missing）。
+    let mut bound = binding.clone();
+    bound
+        .credentials
+        .insert("github_token".to_string(), "release-token".to_string());
+    let error = registry
+        .resolve_binding_credentials(&backend_id, &bound)
+        .expect_err("missing references surface at the boundary");
+    assert!(matches!(
+        error,
+        PublishError::CredentialReferenceMissing { ref requirement, .. }
+            if requirement == "github_token"
+    ));
+}
+
+#[test]
+fn validate_plan_node_dispatches_operation_validation() {
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let destination = capability_adapter(AdapterKind::DeliveryDestination, "dest", vec![], vec![]);
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_delivery_destination(Arc::new(destination), &fixture)
+        .expect("register destination");
+
+    let node = node_with_adapter(AdapterIdentity::new(
+        AdapterKind::DeliveryDestination,
+        "dest",
+        1,
+    ));
+    registry
+        .validate_plan_node(&node)
+        .expect("a valid adapter action validates");
+
+    // RunProgram 不是 Destination 的可执行操作 → 校验拒绝。
+    let mut foreign = node.clone();
+    foreign.operation = PlanOperation::RunProgram {
+        program: "opaque".to_string(),
+        args: vec![],
+        working_directory: None,
+        environment_references: BTreeMap::new(),
+    };
+    assert!(registry.validate_plan_node(&foreign).is_err());
+}
+
+#[test]
+fn registry_execute_node_dispatches_to_the_registered_adapter() {
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let destination = capability_adapter(AdapterKind::DeliveryDestination, "dest", vec![], vec![]);
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_delivery_destination(Arc::new(destination), &fixture)
+        .expect("register destination");
+
+    let node = node_with_adapter(AdapterIdentity::new(
+        AdapterKind::DeliveryDestination,
+        "dest",
+        1,
+    ));
+    let credentials = BTreeMap::new();
+    let context = AdapterExecutionContext {
+        attempt_id: "attempt",
+        plan_digest: "plan",
+        snapshot_digest: "snapshot",
+        artifacts: &[],
+        manifest: None,
+        envelopes: &[],
+        receipts: &[],
+        credentials: &credentials,
+        cancellation: CancellationSignal::new(),
+    };
+    // BareAdapter 未实现 execute_node → 默认 fail-closed 错误经分发传回。
+    let error = registry
+        .execute_node(&node, &context)
+        .expect_err("dispatched execution reaches the adapter");
+    assert!(error.to_string().contains("does not execute plan nodes"));
+}
