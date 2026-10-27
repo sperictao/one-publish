@@ -1711,3 +1711,98 @@ fn publishing_requires_a_well_formed_asset_selection() {
         .expect_err("malformed asset selections cannot publish");
     assert!(error.to_string().contains("invalid asset selection"));
 }
+
+#[test]
+fn malformed_platform_keys_are_rejected_before_staging() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let malformed = settings().with_value(
+        "enabled_platforms",
+        Value::Array(vec![Value::String("windows".to_string())]),
+    );
+    let nodes = fixture.nodes(&malformed);
+    let error = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect_err("platform keys without an architecture cannot stage");
+    assert!(error
+        .to_string()
+        .contains("not a <platform>-<architecture> key"));
+}
+
+#[test]
+fn staging_rejects_duplicate_release_asset_names() {
+    let fixture = Fixture::new();
+    // Manifest 封存本身拒绝重名条目；构造裸结构以验证目的地侧仍 fail-closed，
+    // 不信任任何上游不变量（ADR-0055 防线在 stage 边界再收一次）。
+    let entry = |bytes: &[u8]| {
+        let path = fixture
+            .root
+            .path()
+            .join(format!("Demo-{}", sha256_hex(bytes)));
+        std::fs::write(&path, bytes).expect("write fixture artifact");
+        ArtifactManifestEntry {
+            role: "installer".to_string(),
+            file_name: "Demo.dmg".to_string(),
+            media_type: "application/octet-stream".to_string(),
+            platform: "macos".to_string(),
+            architecture: "aarch64".to_string(),
+            size: bytes.len() as u64,
+            digest: sha256_hex(bytes),
+            locator: path.to_string_lossy().to_string(),
+            retention: "604800s".to_string(),
+            executable: Some(false),
+        }
+    };
+    let manifest = ArtifactManifest {
+        version: publish_domain::ARTIFACT_MANIFEST_VERSION,
+        planning_snapshot_digest: sha256_hex(b"snapshot"),
+        artifacts: vec![entry(b"one"), entry(b"two")],
+        digest: sha256_hex(b"manifest"),
+    };
+    let nodes = fixture.nodes(&settings());
+    let error = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect_err("duplicate asset names cannot stage");
+    assert_eq!(classified_code(&error), "release_asset_name_conflict");
+}
+
+#[test]
+fn publish_requires_a_staged_envelope() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[], &[])
+        .expect_err("publishing without a staged envelope must fail");
+    assert!(error
+        .to_string()
+        .contains("has no staged github release envelope"));
+}
+
+#[test]
+fn observation_fails_closed_when_a_receipt_exhausts_its_revision_range() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage");
+    let published = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish");
+    let receipt = published
+        .receipts
+        .iter()
+        .find(|receipt| receipt.route_id == ROUTE_ID)
+        .cloned()
+        .expect("publish receipt");
+    // 已提交 receipt 修订封顶 → 递增失败必须是显式执行错误。
+    let maxed = DeliveryReceipt {
+        revision: u32::MAX,
+        ..receipt
+    };
+    let error = fixture
+        .execute(&nodes[2], &manifest, &staged.envelopes, &[maxed])
+        .expect_err("revision overflow cannot mint a receipt");
+    assert!(error.to_string().contains("exhausted its revision range"));
+}
