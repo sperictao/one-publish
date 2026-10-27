@@ -26,6 +26,11 @@ updates:
     ignore:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # @types/node majors track the runtime major; CI pins Node 24, so
+      # newer type majors would declare APIs the runtime lacks. Revisit
+      # when CI moves to Node 26.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # Rust workspace crates (publish-domain/-adapters/-planner/
   # -runner-core, one-publish-runner).
