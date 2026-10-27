@@ -16,6 +16,9 @@ on:
       - "src/components/layout/editRepositoryProjectBinding.ts"
       - "src/features/repository/**"
 
+permissions:
+  contents: read
+
 jobs:
   capture:
     runs-on: ubuntu-latest
