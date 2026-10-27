@@ -134,4 +134,100 @@ describe("editRepositoryProjectBinding", () => {
       })
     ).toBe(false);
   });
+
+  it("路径经 trim 后为空时不阻止保存", () => {
+    expect(
+      repositoryProjectBindingPending({
+        requiresProjectBinding: true,
+        path: "   ",
+        scanResolvedPath: null,
+        isScanning: false,
+      })
+    ).toBe(false);
+  });
+
+  it("不要求项目绑定时直接放行", () => {
+    expect(
+      repositoryRequiresProjectBinding({
+        requiresProjectBinding: false,
+        candidates: null,
+        projectFile: "",
+      })
+    ).toBe(false);
+  });
+
+  it("候选为空或单候选时不构成绑定要求", () => {
+    expect(
+      repositoryRequiresProjectBinding({
+        requiresProjectBinding: true,
+        candidates: null,
+        projectFile: "/repo/src/App.csproj",
+      })
+    ).toBe(false);
+    expect(
+      repositoryRequiresProjectBinding({
+        requiresProjectBinding: true,
+        candidates: createCandidates(["/repo/src/App.csproj"]),
+        projectFile: "/repo/other/Other.csproj",
+      })
+    ).toBe(false);
+  });
+
+  it("多候选下已绑定有效项目文件时放行", () => {
+    const candidates = createCandidates([
+      "/repo/src/App.csproj",
+      "/repo/tools/Tool.csproj",
+    ]);
+
+    expect(
+      repositoryRequiresProjectBinding({
+        requiresProjectBinding: true,
+        candidates,
+        projectFile: "/repo/src/App.csproj",
+      })
+    ).toBe(false);
+  });
+
+  it("不要求项目绑定时待保存检查直接放行", () => {
+    expect(
+      repositoryProjectBindingPending({
+        requiresProjectBinding: false,
+        path: "/repo",
+        scanResolvedPath: null,
+        isScanning: true,
+      })
+    ).toBe(false);
+  });
+
+  it("无候选且当前文件为空时回落到手动输入", () => {
+    expect(reconcileProjectBinding("", null)).toEqual({
+      nextProjectFile: "",
+      isManualInput: true,
+      requiresExplicitBinding: false,
+    });
+    expect(
+      reconcileProjectBinding("  ", createCandidates(["/repo/src/App.csproj"]))
+        .isManualInput
+    ).toBe(true);
+  });
+
+  it("推荐文件缺失或非候选时不作为绑定结果", () => {
+    const resolution = reconcileProjectBinding(
+      "/repo/missing/Old.csproj",
+      createCandidates(
+        ["/repo/src/App.csproj"],
+        "/repo/not-listed/Phantom.csproj"
+      )
+    );
+
+    expect(resolution.nextProjectFile).toBe("");
+    expect(resolution.isManualInput).toBe(true);
+    expect(resolution.requiresExplicitBinding).toBe(false);
+  });
+
+  it("无候选时任何项目文件都不构成有效绑定", () => {
+    expect(hasValidProjectFileBinding("/repo/src/App.csproj", null)).toBe(
+      false
+    );
+  });
 });
