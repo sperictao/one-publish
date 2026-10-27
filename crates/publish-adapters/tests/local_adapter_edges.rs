@@ -416,3 +416,248 @@ fn local_execution_backend_default_constructs_a_usable_backend() {
         AdapterIdentity::new(AdapterKind::ExecutionBackend, "local-execution", 1)
     );
 }
+
+// ── 本地后端/存储的剩余分发臂 ──
+
+fn minimal_snapshot(promoted: Option<&str>) -> publish_domain::PlanningInputSnapshot {
+    let empty = AdapterSettings::new(1);
+    publish_domain::PlanningInputSnapshot {
+        version: publish_domain::PLANNING_INPUT_SNAPSHOT_VERSION,
+        configuration_revision: "revision-1".to_string(),
+        runtime_revision: "runtime-1".to_string(),
+        release_input: BTreeMap::new(),
+        source: SourceSnapshot {
+            revision: "0123456789abcdef".to_string(),
+            workspace_digest: None,
+            dirty: false,
+            captured_at: "2026-10-27T10:00:00Z".to_string(),
+            reproducible: true,
+        },
+        external_preconditions: BTreeMap::new(),
+        promoted_manifest_digest: promoted.map(str::to_string),
+        adapters: publish_domain::AdapterSelection {
+            project_provider: publish_domain::AdapterBinding::new(
+                "project",
+                AdapterIdentity::new(AdapterKind::ProjectProvider, "provider", 1),
+                empty.clone(),
+            ),
+            artifact_processors: vec![],
+            execution_backend: publish_domain::AdapterBinding::new(
+                "backend",
+                AdapterIdentity::new(AdapterKind::ExecutionBackend, "backend", 1),
+                empty.clone(),
+            ),
+            artifact_store: publish_domain::AdapterBinding::new(
+                "store",
+                AdapterIdentity::new(AdapterKind::ArtifactStore, "store", 1),
+                empty.clone(),
+            ),
+            delivery_routes: vec![],
+        },
+    }
+}
+
+#[test]
+fn plan_fragment_binds_promoted_manifests_instead_of_resealing() {
+    let temp = TempDir::new().expect("temp dir");
+    let store = TemporaryArtifactStore::new(temp.path());
+
+    let promoted = store
+        .plan_fragment(
+            &minimal_snapshot(Some(&"f".repeat(64))),
+            &AdapterSettings::new(1),
+        )
+        .expect("promoted snapshots bind the existing set");
+    assert_eq!(promoted.len(), 1);
+    match &promoted[0].operation {
+        PlanOperation::AdapterAction { action, inputs } => {
+            assert_eq!(action, "bind_promoted_manifest");
+            assert_eq!(
+                inputs.get("manifest_digest").and_then(Value::as_str),
+                Some("f".repeat(64).as_str())
+            );
+        }
+        other => panic!("expected a bind action, got {other:?}"),
+    }
+
+    let fresh = store
+        .plan_fragment(&minimal_snapshot(None), &AdapterSettings::new(1))
+        .expect("fresh snapshots persist new artifacts");
+    match &fresh[0].operation {
+        PlanOperation::AdapterAction { action, .. } => {
+            assert_eq!(action, "persist_manifest");
+        }
+        other => panic!("expected a persist action, got {other:?}"),
+    }
+}
+
+#[test]
+fn local_backend_executes_plans_in_order() {
+    let backend = LocalExecutionBackend::new();
+    let store = TemporaryArtifactStore::new(TempDir::new().expect("temp dir").path());
+    let nodes = vec![
+        plan_node(
+            &store,
+            PlanStage::PersistManifest,
+            AdapterSettings::new(1),
+            action("first"),
+        ),
+        plan_node(
+            &store,
+            PlanStage::PersistManifest,
+            AdapterSettings::new(1),
+            action("second"),
+        ),
+    ];
+    let plan = publish_domain::PublishPlan {
+        version: publish_domain::PUBLISH_PLAN_VERSION,
+        snapshot_digest: "snapshot".to_string(),
+        adapters: vec![],
+        execution_backend: backend.descriptor().identity(),
+        routes: vec![],
+        nodes,
+        digest: "plan".to_string(),
+    };
+
+    struct Ordered;
+    impl publish_adapters::PlanNodeExecutor for Ordered {
+        fn execute_node(&mut self, _node: &PlanNode) -> Result<(), PublishError> {
+            Ok(())
+        }
+    }
+    let mut executor = Ordered;
+    backend
+        .execute_plan(&plan, &mut executor)
+        .expect("the local backend executes nodes in order");
+}
+
+#[test]
+fn persist_nodes_require_the_persist_action_and_a_root_directory() {
+    let temp = TempDir::new().expect("temp dir");
+    let store = TemporaryArtifactStore::new(temp.path());
+    let candidate = artifact("demo.txt", b"demo");
+
+    // 非 AdapterAction 节点（RunProgram）→ "is not an adapter action"。
+    let foreign = plan_node(
+        &store,
+        PlanStage::PersistManifest,
+        store.default_settings(),
+        PlanOperation::RunProgram {
+            program: "opaque".to_string(),
+            args: vec![],
+            working_directory: None,
+            environment_references: BTreeMap::new(),
+        },
+    );
+    let error = store
+        .execute_node(
+            &foreign,
+            &context(std::slice::from_ref(&candidate), None, &[]),
+        )
+        .expect_err("program nodes cannot execute on the artifact store");
+    assert!(error.to_string().contains("is not an adapter action"));
+
+    // 错误的 action 名 → "expected action persist_manifest"。
+    let wrong = plan_node(
+        &store,
+        PlanStage::PersistManifest,
+        store.default_settings(),
+        action("not_persist"),
+    );
+    let error = store
+        .execute_node(
+            &wrong,
+            &context(std::slice::from_ref(&candidate), None, &[]),
+        )
+        .expect_err("foreign actions are rejected");
+    assert!(error.to_string().contains("persist_manifest"));
+
+    // 缺 root_directory 设置 → InvalidAdapterSettings。
+    let bare = plan_node(
+        &store,
+        PlanStage::PersistManifest,
+        AdapterSettings::new(1),
+        action("persist_manifest"),
+    );
+    let error = store
+        .execute_node(&bare, &context(&[candidate], None, &[]))
+        .expect_err("persist nodes need a root directory");
+    assert!(matches!(error, PublishError::InvalidAdapterSettings { .. }));
+}
+
+#[test]
+fn persisted_artifacts_verify_existing_content_instead_of_rewriting() {
+    let temp = TempDir::new().expect("temp dir");
+    let store = TemporaryArtifactStore::new(temp.path());
+    let candidate = artifact("demo.txt", b"demo bytes");
+
+    let manifest = persist(&store, std::slice::from_ref(&candidate));
+    let entry = manifest
+        .artifacts
+        .iter()
+        .find(|entry| entry.file_name == "demo.txt")
+        .expect("stored entry");
+    let stored = std::path::PathBuf::from(&entry.locator);
+
+    // 同内容重复 persist：命中 verify_file 臂而不是重写。
+    persist(&store, std::slice::from_ref(&candidate));
+
+    // 存储字节被篡改：重放 manifest 持久化报摘要错而不是静默覆写。
+    fs::write(&stored, b"tampered").expect("corrupt the stored artifact");
+    let node = plan_node(
+        &store,
+        PlanStage::PersistManifest,
+        store.default_settings(),
+        action("persist_manifest"),
+    );
+    let error = store
+        .execute_node(&node, &context(&[candidate], None, &[]))
+        .expect_err("tampered storage cannot pass verification");
+    assert!(matches!(error, PublishError::ArtifactDigestMismatch { .. }));
+}
+
+#[test]
+fn synchronized_envelopes_are_revalidated_against_local_settings() {
+    let temp = TempDir::new().expect("temp dir");
+    let deliveries = temp.path().join("deliveries");
+    let destination = LocalDirectoryDestination::new(&deliveries);
+    let candidate = artifact("demo.txt", b"demo");
+    let store = TemporaryArtifactStore::new(temp.path().join("store"));
+    let manifest = persist(&store, &[candidate]);
+
+    // stage 一个封装，再拿篡改过的封装走 validate_staged_envelope。
+    let stage_node = plan_node(
+        &destination,
+        PlanStage::StageRoutes,
+        destination.default_settings(),
+        action("stage_local_directory"),
+    );
+    let staged = destination
+        .execute_node(&stage_node, &context(&[], Some(&manifest), &[]))
+        .expect("stage the local envelope");
+    assert_eq!(staged.envelopes.len(), 1);
+
+    destination
+        .validate_staged_envelope(
+            &stage_node,
+            &context(&[], Some(&manifest), &[]),
+            &staged.envelopes[0],
+        )
+        .expect("the staged envelope validates");
+
+    let mut foreign = staged.envelopes[0].clone();
+    foreign
+        .content
+        .insert("marker".to_string(), Value::String("tampered".to_string()));
+    let error = destination
+        .validate_staged_envelope(&stage_node, &context(&[], Some(&manifest), &[]), &foreign)
+        .expect_err("foreign envelopes cannot pass revalidation");
+    assert!(error
+        .to_string()
+        .contains("sealed local-directory settings"));
+
+    let error = destination
+        .validate_staged_envelope(&stage_node, &context(&[], None, &[]), &staged.envelopes[0])
+        .expect_err("revalidation requires the sealed manifest");
+    assert!(matches!(error, PublishError::MissingArtifactManifest));
+}
