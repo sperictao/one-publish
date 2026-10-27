@@ -1163,7 +1163,13 @@ impl AttemptPersistencePort for AttemptJournalPersistence {
 
 #[cfg(test)]
 mod tests {
-    use super::AttemptJournalRepository;
+    use super::{
+        missing_parent_directories, reject_sensitive_envelope_keys, sanitize_event,
+        AttemptJournalRepository,
+    };
+    use publish_domain::PublishEvent;
+    use std::collections::BTreeMap;
+    use std::path::Path;
 
     #[test]
     fn discovery_ignores_a_crash_leftover_without_a_published_header() {
@@ -1180,5 +1186,125 @@ mod tests {
                 .expect("ignore unpublished header"),
             None
         );
+    }
+
+    fn event(payload: BTreeMap<String, serde_json::Value>) -> PublishEvent {
+        PublishEvent {
+            version: publish_domain::PUBLISH_EVENT_VERSION,
+            event_id: "event-1".to_string(),
+            attempt_id: "attempt-1".to_string(),
+            backend_run_id: "run-1".to_string(),
+            sequence: 1,
+            plan_digest: "digest".to_string(),
+            plan_node_id: "node-1".to_string(),
+            kind: "delivery".to_string(),
+            payload,
+        }
+    }
+
+    #[test]
+    fn sensitive_envelope_keys_are_rejected_at_any_depth() {
+        for key in [
+            "token",
+            "Authorization",
+            "x-cookie",
+            "session_id",
+            "bearer-credential",
+        ] {
+            let value = serde_json::json!({ "meta": { key: "abc" } });
+            let error =
+                reject_sensitive_envelope_keys(&value).expect_err("sensitive key must be rejected");
+            assert!(
+                error.to_string().contains(key),
+                "rejection should name the offending key"
+            );
+        }
+
+        // 数组内的嵌套对象同样扫描
+        let nested = serde_json::json!({ "items": [ { "safe": 1 }, { "secret": "x" } ] });
+        reject_sensitive_envelope_keys(&nested).expect_err("nested secret must be rejected");
+
+        // 纯路径/普通键放行
+        let safe = serde_json::json!({
+            "directory": "/opt/releases",
+            "files": ["app.zip"],
+            "revision": 2
+        });
+        reject_sensitive_envelope_keys(&safe).expect("safe envelope passes");
+    }
+
+    #[test]
+    fn sanitize_event_keeps_envelope_verbatim_and_masks_payload_secrets() {
+        // 包络是恢复证据：结构校验密钥、内容原样往返
+        let envelope = serde_json::json!({
+            "destination": "sftp://host/opt/releases",
+            "files": [{"path": "/opt/releases/app.zip", "digest": "sha256:aa"}]
+        });
+        let mut payload = BTreeMap::new();
+        payload.insert("delivery_envelopes".to_string(), envelope.clone());
+        payload.insert("api_token".to_string(), serde_json::json!("supersecret"));
+        payload.insert("output_dir".to_string(), serde_json::json!("/repo/out"));
+
+        let sanitized = sanitize_event(event(payload)).expect("sanitize");
+
+        assert_eq!(
+            sanitized.payload.get("delivery_envelopes"),
+            Some(&envelope),
+            "envelope evidence must round-trip exactly"
+        );
+        assert_eq!(
+            sanitized.payload.get("api_token"),
+            Some(&serde_json::Value::String(
+                crate::security::REDACTED_VALUE.to_string()
+            )),
+            "payload secrets are masked for journal storage"
+        );
+        // 本地 journal 保留真实路径（续跑诊断依赖）
+        assert_eq!(
+            sanitized.payload.get("output_dir"),
+            Some(&serde_json::json!("/repo/out"))
+        );
+    }
+
+    #[test]
+    fn sanitize_event_rejects_secret_bearing_envelopes_structurally() {
+        let mut payload = BTreeMap::new();
+        payload.insert(
+            "delivery_envelopes".to_string(),
+            serde_json::json!({ "auth": "Bearer xyz" }),
+        );
+        sanitize_event(event(payload)).expect_err("credential envelope must be rejected");
+    }
+
+    #[test]
+    fn attempt_dir_rejects_empty_ids_and_hashes_stable_paths() {
+        let repository = AttemptJournalRepository::new(Path::new("/journals").to_path_buf());
+        repository
+            .attempt_dir("   ")
+            .expect_err("empty attempt id must be rejected");
+
+        let dir_a = repository.attempt_dir("attempt-a").expect("hashed dir");
+        let dir_a_again = repository.attempt_dir("attempt-a").expect("stable hash");
+        let dir_b = repository.attempt_dir("attempt-b").expect("hashed dir");
+        assert_eq!(dir_a, dir_a_again);
+        assert_ne!(dir_a, dir_b);
+        assert_eq!(dir_a.parent(), Some(Path::new("/journals")));
+    }
+
+    #[test]
+    fn missing_parent_directories_lists_the_gap_in_order() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let deep = dir.path().join("a").join("b").join("c.json");
+
+        let missing = missing_parent_directories(&deep).expect("missing dirs");
+        assert_eq!(
+            missing,
+            vec![dir.path().join("a"), dir.path().join("a").join("b")]
+        );
+
+        std::fs::create_dir_all(deep.parent().expect("parent")).expect("create");
+        assert!(missing_parent_directories(&deep)
+            .expect("no missing")
+            .is_empty());
     }
 }
