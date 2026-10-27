@@ -735,3 +735,127 @@ fn registry_execute_node_dispatches_to_the_registered_adapter() {
         .expect_err("dispatched execution reaches the adapter");
     assert!(error.to_string().contains("does not execute plan nodes"));
 }
+
+#[test]
+fn destination_dispatch_enforces_kind_and_registration() {
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let destination = capability_adapter(AdapterKind::DeliveryDestination, "dest", vec![], vec![]);
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_delivery_destination(Arc::new(destination), &fixture)
+        .expect("register destination");
+
+    let destination_id = AdapterIdentity::new(AdapterKind::DeliveryDestination, "dest", 1);
+    let wrong_kind = node_with_adapter(AdapterIdentity::new(
+        AdapterKind::ExecutionBackend,
+        "backend",
+        1,
+    ));
+    let unknown = node_with_adapter(AdapterIdentity::new(
+        AdapterKind::DeliveryDestination,
+        "ghost",
+        1,
+    ));
+    let node = node_with_adapter(destination_id.clone());
+
+    let credentials = BTreeMap::new();
+    let context = AdapterExecutionContext {
+        attempt_id: "attempt",
+        plan_digest: "plan",
+        snapshot_digest: "snapshot",
+        artifacts: &[],
+        manifest: None,
+        envelopes: &[],
+        receipts: &[],
+        credentials: &credentials,
+        cancellation: CancellationSignal::new(),
+    };
+    let envelope = DeliveryEnvelope::new("route", "digest");
+
+    // cleanup_owned_staging：kind 检查先于查找。
+    assert!(matches!(
+        registry
+            .cleanup_owned_staging(&wrong_kind, &context)
+            .expect_err("cleanup dispatch enforces the destination kind"),
+        PublishError::AdapterKindMismatch {
+            expected: AdapterKind::DeliveryDestination,
+            actual: AdapterKind::ExecutionBackend,
+            ..
+        }
+    ));
+    // 未注册 destination → unresolved，而不是默认实现。
+    assert!(registry.cleanup_owned_staging(&unknown, &context).is_err());
+    // 已注册但未实现 cleanup → 默认 false，不伪装成回滚。
+    assert!(!registry
+        .cleanup_owned_staging(&node, &context)
+        .expect("the default cleanup reports not-owned"));
+
+    // validate_staged_envelope：kind 检查 + 未注册分发。
+    assert!(matches!(
+        registry
+            .validate_staged_envelope(&wrong_kind, &context, &envelope)
+            .expect_err("envelope validation enforces the destination kind"),
+        PublishError::AdapterKindMismatch { .. }
+    ));
+    assert!(registry
+        .validate_staged_envelope(&unknown, &context, &envelope)
+        .is_err());
+
+    // probe_delivery 分发：未注册 → unresolved；已注册默认 → Unprobeable。
+    let identity = DeliveryIdempotencyIdentity {
+        attempt_id: "attempt".to_string(),
+        plan_node_id: "node".to_string(),
+        release_identity: ReleaseIdentity::new(
+            "project",
+            SourceSnapshot {
+                revision: "0123456789abcdef".to_string(),
+                workspace_digest: None,
+                dirty: false,
+                captured_at: "2026-10-27T10:00:00Z".to_string(),
+                reproducible: true,
+            },
+            "1.0.0",
+            "stable",
+            None,
+        ),
+        manifest_digest: "digest".to_string(),
+        route_id: "route".to_string(),
+    };
+    let credentials = BTreeMap::new();
+    let ghost_id = AdapterIdentity::new(AdapterKind::DeliveryDestination, "ghost", 1);
+    assert!(matches!(
+        registry
+            .probe_delivery(&ghost_id, &AdapterSettings::new(1), &identity, &credentials)
+            .expect_err("unregistered destinations cannot be probed"),
+        PublishError::AdapterNotRegistered { .. }
+    ));
+    // 未实现 probe 的 destination → 默认 Unprobeable。
+    assert!(matches!(
+        registry
+            .probe_delivery(
+                &destination_id,
+                &AdapterSettings::new(1),
+                &identity,
+                &credentials
+            )
+            .expect("the default probe reports unprobeable"),
+        publish_adapters::DeliveryProbe::Unprobeable { .. }
+    ));
+
+    // kind 检查先于注册查找。
+    assert!(matches!(
+        registry
+            .probe_delivery(
+                &AdapterIdentity::new(AdapterKind::ExecutionBackend, "backend", 1),
+                &AdapterSettings::new(1),
+                &identity,
+                &credentials,
+            )
+            .expect_err("probe dispatch enforces the destination kind"),
+        PublishError::AdapterKindMismatch {
+            expected: AdapterKind::DeliveryDestination,
+            actual: AdapterKind::ExecutionBackend,
+            ..
+        }
+    ));
+}

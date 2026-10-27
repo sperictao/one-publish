@@ -1828,3 +1828,34 @@ fn synchronized_envelopes_are_revalidated_against_sealed_settings() {
         .expect_err("revalidation requires the sealed manifest");
     assert!(matches!(error, PublishError::MissingArtifactManifest));
 }
+
+#[test]
+fn staged_files_declared_as_records_require_the_envelope_record() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // 封装声明一个 record 来源文件，但抽掉 delivery_record 内容 → 明确失败。
+    let mut tampered = staged.envelopes[0].clone();
+    let files = tampered
+        .content
+        .get_mut("files")
+        .and_then(Value::as_array_mut)
+        .expect("staged file list");
+    files.clear();
+    files.push(serde_json::json!({
+        "name": SFTP_DELIVERY_RECORD_NAME,
+        "digest": "0".repeat(64),
+        "size": 0,
+        "source": "record",
+    }));
+    tampered.content.remove("delivery_record");
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[tampered], &[])
+        .expect_err("a record-sourced file needs the envelope record");
+    assert!(error.to_string().contains("has no envelope content"));
+}
