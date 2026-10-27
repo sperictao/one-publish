@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { AppErrorBoundary } from "./components/ErrorBoundary";
 import "non.geist";
 import "non.geist/mono";
 import "./index.css";
@@ -18,7 +19,9 @@ try {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
-    <Toaster />
+    <AppErrorBoundary>
+      <App />
+      <Toaster />
+    </AppErrorBoundary>
   </React.StrictMode>
 );
