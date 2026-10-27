@@ -67,6 +67,15 @@ jobs:
           # install 需拉取 ~200MB 依赖；Dir::Cache 重定向到上面的缓存目录，
           # 命中时跳过下载。慢镜像下单次尝试可能接近 8 分钟。
           APT_OPTS="-o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=2"
+          swap_mirror() {
+            # azure 镜像整体挂死时切回官方 archive（Ubuntu 24.04 为
+            # deb822 的 *.sources，旧版为 *.list/sources.list，一并兜底）。
+            echo "switching apt sources to archive.ubuntu.com"
+            for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+              [ -f "$f" ] || continue
+              sudo sed -i -E 's|https?://[a-z0-9.-]*archive\.ubuntu\.com|http://archive.ubuntu.com|g' "$f" || true
+            done
+          }
           for attempt in 1 2 3; do
             if timeout 180 sudo apt-get $APT_OPTS update; then
               break
@@ -76,6 +85,7 @@ jobs:
               exit 1
             fi
             echo "apt-get update timed out (attempt $attempt); retrying"
+            [ "$attempt" = "1" ] && swap_mirror
             sleep 10
           done
           # Dir::Cache 自定义目录要求 archives/partial 预存在（apt 不自建）。
@@ -97,6 +107,11 @@ jobs:
             fi
             echo "apt-get install timed out (attempt $attempt); retrying"
             sudo dpkg --configure -a || true
+            # update 通过但下载持续挂死说明镜像半死：换源并刷新索引再试。
+            if [ "$attempt" = "1" ]; then
+              swap_mirror
+              timeout 120 sudo apt-get $APT_OPTS update || true
+            fi
             sleep 10
           done
       - uses: dtolnay/rust-toolchain@stable
