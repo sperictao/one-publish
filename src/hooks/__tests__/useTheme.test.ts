@@ -66,8 +66,35 @@ describe("useTheme", () => {
     mql.dispatch(true);
     expect(document.documentElement.classList.contains("dark")).toBe(true);
 
-    unmount();
     mql.dispatch(false);
-    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.classList.contains("light")).toBe(true);
+
+    unmount();
+    mql.dispatch(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
+
+  it("旧版 media query 走 addListener/removeListener 兼容路径", () => {
+    const listeners = new Set<(e: { matches: boolean }) => void>();
+    const legacyMql = {
+      matches: false,
+      media: "(prefers-color-scheme: dark)",
+      addListener: vi.fn((listener: (e: { matches: boolean }) => void) =>
+        listeners.add(listener)
+      ),
+      removeListener: vi.fn((listener: (e: { matches: boolean }) => void) =>
+        listeners.delete(listener)
+      ),
+    };
+    Object.defineProperty(window, "matchMedia", {
+      value: vi.fn().mockReturnValue(legacyMql),
+      configurable: true,
+    });
+
+    const { unmount } = renderHook(() => useTheme("auto"));
+
+    expect(legacyMql.addListener).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(legacyMql.removeListener).toHaveBeenCalledTimes(1);
   });
 });
