@@ -8452,4 +8452,151 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+
+    fn completed_attempt_fixture(
+        attempt_id: &str,
+    ) -> (
+        tempfile::TempDir,
+        tempfile::TempDir,
+        tempfile::TempDir,
+        super::journal::AttemptJournalRepository,
+    ) {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared = prepare_test_runtime(repository.path(), &output_directory);
+        let journals =
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf());
+        let result = super::start_runtime_with_repository(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared.runtime_token().to_string(),
+            },
+            Arc::new(FakeProviderExecution {
+                output_directory,
+                output_is_file: false,
+                failure: None,
+                source_change: None,
+            }),
+            Arc::new(Mutex::new(None)),
+            AttemptIdentity {
+                attempt_id: attempt_id.to_string(),
+                backend_run_id: format!("backend-{attempt_id}"),
+            },
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+            journals.clone(),
+        )
+        .expect("start persisted attempt");
+        assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
+        (repository, delivery, journal_directory, journals)
+    }
+
+    #[test]
+    fn resume_rejects_blank_attempt_id_before_loading() {
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let error = super::resume_runtime_with_repository(
+            super::ResumePublishRuntimeRequest {
+                attempt_id: "   ".to_string(),
+            },
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf()),
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_attempt_missing")
+        );
+    }
+
+    #[test]
+    fn resume_reports_missing_attempt_from_an_empty_journal() {
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let error = super::resume_runtime_with_repository(
+            super::ResumePublishRuntimeRequest {
+                attempt_id: "attempt-that-never-existed".to_string(),
+            },
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf()),
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+        )
+        .unwrap_err();
+        assert!(
+            error.message.contains("read attempt header"),
+            "missing attempts must surface the journal read failure: {error:?}"
+        );
+    }
+
+    #[test]
+    fn resume_of_a_terminal_attempt_blocks_retry_but_retains_the_lease() {
+        let attempt_id = "attempt-resume-terminal";
+        let (_repo, _delivery, _journal_dir, journals) = completed_attempt_fixture(attempt_id);
+        let now = super::unix_now_seconds().expect("current time");
+        // 终态尝试的租约已被释放。
+        assert!(journals
+            .active_lease(attempt_id, now)
+            .expect("inspect lease")
+            .is_none());
+
+        let error = super::resume_runtime_with_repository(
+            super::ResumePublishRuntimeRequest {
+                attempt_id: attempt_id.to_string(),
+            },
+            journals.clone(),
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+        )
+        .expect_err("a fully published attempt has no resumable route");
+
+        assert!(
+            error.message.contains("no resumable delivery route"),
+            "resume must surface the blocked-retry reason: {error:?}"
+        );
+        // 错误路径保守保留租约，避免不确定状态下资源被并发尝试抢占。
+        assert!(journals
+            .active_lease(attempt_id, super::unix_now_seconds().expect("current time"))
+            .expect("inspect lease")
+            .is_some());
+    }
+
+    #[test]
+    fn resume_renews_a_persisted_active_lease_instead_of_reacquiring() {
+        let attempt_id = "attempt-resume-renewal";
+        let (_repo, _delivery, _journal_dir, journals) = completed_attempt_fixture(attempt_id);
+        let loaded = journals.load_attempt(attempt_id).expect("load attempt");
+        let now = super::unix_now_seconds().expect("current time");
+
+        // 人为植入一条有效持久化租约（仅写 journal）。resume 传入全新协调器：
+        // restore 将其回放入协调器，随后 active_lease 命中续约分支而非重复获取。
+        let planted = publish_runner_core::PublishLeaseCoordinator::new()
+            .acquire(
+                attempt_id,
+                super::publish_lease_resources(
+                    &loaded.prepared,
+                    &loaded.repository_path,
+                    &loaded.view.attempt.release_identity,
+                ),
+                now,
+                super::LOCAL_LEASE_TTL_SECONDS,
+            )
+            .expect("plant an active lease");
+        journals
+            .update_lease(attempt_id, &planted, now)
+            .expect("persist planted lease");
+
+        let error = super::resume_runtime_with_repository(
+            super::ResumePublishRuntimeRequest {
+                attempt_id: attempt_id.to_string(),
+            },
+            journals.clone(),
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+        )
+        .expect_err("terminal attempt still has no resumable route");
+
+        assert!(error.message.contains("no resumable delivery route"));
+        // 续约分支保持租约所有权与期限不回退，且在错误路径上依然有效。
+        let retained = journals
+            .active_lease(attempt_id, super::unix_now_seconds().expect("current time"))
+            .expect("inspect lease")
+            .expect("renewed lease must stay active");
+        assert_eq!(retained.owner_attempt_id, attempt_id);
+        assert!(retained.expires_at_seconds >= planted.expires_at_seconds);
+    }
 }
