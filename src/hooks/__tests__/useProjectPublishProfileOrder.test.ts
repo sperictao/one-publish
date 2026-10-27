@@ -135,4 +135,32 @@ describe("useProjectPublishProfileOrder", () => {
       "Release",
     ]);
   });
+
+  it("ignores non-object JSON payloads and non-array scope values", () => {
+    localStorage.setItem(ORDER_KEY, "42");
+
+    const { result } = renderHook(() =>
+      useProjectPublishProfileOrder(hookProps())
+    );
+    expect(result.current.orderedProjectPublishProfiles).toEqual([
+      "Release",
+      "Debug",
+      "Staging",
+    ]);
+
+    seed({
+      "repo-1::/repo/App.csproj": ["Staging"],
+      "repo-2::/repo/Other.csproj": "not-an-array",
+      "repo-3::/repo/Third.csproj": [42, null],
+    });
+
+    const { result: scoped } = renderHook(() =>
+      useProjectPublishProfileOrder(hookProps())
+    );
+    expect(scoped.current.orderedProjectPublishProfiles).toEqual([
+      "Staging",
+      "Release",
+      "Debug",
+    ]);
+  });
 });

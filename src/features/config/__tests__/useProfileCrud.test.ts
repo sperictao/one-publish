@@ -277,4 +277,44 @@ describe("handleCreateProfileFromProjectProfile", () => {
       result.current.handleCreateProfileFromProjectProfile("Release", {})
     ).rejects.toThrow("保存后未找到配置身份");
   });
+
+  describe("无选中仓库的守卫", () => {
+    it("deleteProfile/exportProfiles/applyImportedProfiles/项目建档均拒绝", async () => {
+      const p = params({ selectedRepoId: null });
+      const { result } = renderHook(() => useProfileCrud(p));
+      const profile = { name: "n" } as unknown as ConfigProfile;
+
+      await expect(result.current.deleteProfile(profile)).rejects.toThrow(
+        "删除配置文件失败"
+      );
+      await expect(
+        result.current.exportProfiles("/tmp/out.json")
+      ).rejects.toThrow("导出配置失败");
+      await expect(
+        result.current.applyImportedProfiles([profile], "skip")
+      ).rejects.toThrow("导入配置失败");
+      await expect(
+        result.current.handleCreateProfileFromProjectProfile("src", {})
+      ).rejects.toThrow("保存配置文件失败");
+      expect(p.deleteProfileFromStore).not.toHaveBeenCalled();
+      expect(p.exportConfigFn).not.toHaveBeenCalled();
+      expect(p.applyImportedConfigFn).not.toHaveBeenCalled();
+      expect(p.saveProfileToStore).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("handleLoadProfile", () => {
+    it("委托到 applyProfile", () => {
+      const p = params({ repositoryProviderId: "cargo" });
+      const { result } = renderHook(() => useProfileCrud(p));
+
+      expect(
+        result.current.handleLoadProfile({
+          id: "p1",
+          name: "release",
+          providerId: "dotnet",
+        })
+      ).toBe(false);
+    });
+  });
 });

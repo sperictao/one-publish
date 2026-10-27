@@ -74,4 +74,8 @@ describe("eventBus", () => {
       offHandler();
     }
   });
+
+  it("无订阅者的事件直接返回", () => {
+    expect(() => emit("test:no-listeners", { value: 1 })).not.toThrow();
+  });
 });
