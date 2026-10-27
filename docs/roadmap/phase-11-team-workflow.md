@@ -129,3 +129,25 @@ OnePublish 当前是一个**个人本地发布工具**（见 `docs/design-philos
 候选 A（团队配置包冲突三选一）已实现（PR #158；e2e 见
 `tests/e2e/specs/13-config-import-conflict.spec.ts`），其 Done 判定待
 maintainer 复核确认。
+
+## 状态记录（2026-10-28）
+
+**候选 A Done 证据复核**（提交 maintainer 签核）：
+
+- 「导出文件能在另一台机器一键导入」：`export_config`/`import_config`/
+  `apply_imported_config` 已实现；导出侧 `sanitize_for_export` 剥离机器相关
+  路径、导入侧 `validate_profiles_for_apply` 拒绝凭据字段（后端边界测试
+  `apply_boundary_rejects_credential_fields_before_storage`）；e2e 导出写路径
+  与失败 toast 见 `tests/e2e/specs/21-config-export.spec.ts`。
+- 「同名 profile 冲突三选一」：`ImportConflictStrategy`（跳过/覆盖/重命名）
+  三策略 e2e 全覆盖（spec 13 前三条用例：默认跳过禁用确认、覆盖按计数反馈、
+  重命名按派生名计数）。
+- 「导入产物可立即用于 dry-run 发布」：spec 13「导入流程结束后发布命令
+  （dry-run）仍可用」断言导入后 preflight 预览正常渲染；参数完整性由后端
+  `merge_imported_profiles` 测试矩阵（同名保留原值/嵌套 parameters 形状
+  保留）钉住。
+- 「导出 -> 在新环境导入 -> 跑通 preflight」：由 spec 13（导入+冲突+dry-run）
+  与 spec 21（导出写路径）分工覆盖。
+
+若 maintainer 接受以上证据，候选 A 达成 Done 判定，Phase 11 三个候选
+全部落地（README Phase 11 行已为 ✅ Done）。
