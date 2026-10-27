@@ -906,16 +906,22 @@ mod tests {
     #[test]
     fn unknown_and_future_adapter_compatibility_is_preserved_as_blocked() {
         for (composition, expected_reason) in [
-            ({
-                let mut composition = crate::store::PublishComposition::local_default();
-                composition.execution_backend.adapter_id = "future-execution".to_string();
-                composition
-            }, "composition_adapter_unavailable:execution_backend:future-execution"),
-            ({
-                let mut composition = crate::store::PublishComposition::local_default();
-                composition.execution_backend.settings_version = 999;
-                composition
-            }, "composition_settings_version_unsupported:execution_backend:local-execution:999"),
+            (
+                {
+                    let mut composition = crate::store::PublishComposition::local_default();
+                    composition.execution_backend.adapter_id = "future-execution".to_string();
+                    composition
+                },
+                "composition_adapter_unavailable:execution_backend:future-execution",
+            ),
+            (
+                {
+                    let mut composition = crate::store::PublishComposition::local_default();
+                    composition.execution_backend.settings_version = 999;
+                    composition
+                },
+                "composition_settings_version_unsupported:execution_backend:local-execution:999",
+            ),
         ] {
             let profile = ConfigProfile {
                 name: expected_reason.to_string(),

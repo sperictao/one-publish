@@ -1162,12 +1162,7 @@ fn observe_reports_release_not_observable_until_the_tag_exists() {
     };
 
     let error = fixture
-        .execute(
-            &nodes[2],
-            &manifest,
-            &staged.envelopes,
-            &[submitted],
-        )
+        .execute(&nodes[2], &manifest, &staged.envelopes, &[submitted])
         .expect_err("a release that does not exist yet is not observable");
     assert_eq!(
         classified_category(&error),
@@ -1194,12 +1189,7 @@ fn observe_waits_out_a_draft_release_as_transient() {
     fixture.api.seed_release(draft);
 
     let error = fixture
-        .execute(
-            &nodes[2],
-            &manifest,
-            &staged.envelopes,
-            &published.receipts,
-        )
+        .execute(&nodes[2], &manifest, &staged.envelopes, &published.receipts)
         .expect_err("a draft release is still transient");
     assert_eq!(
         classified_category(&error),
@@ -1226,12 +1216,7 @@ fn observe_refuses_releases_not_delivered_from_this_manifest() {
     fixture.api.seed_release(foreign);
 
     let error = fixture
-        .execute(
-            &nodes[2],
-            &manifest,
-            &staged.envelopes,
-            &published.receipts,
-        )
+        .execute(&nodes[2], &manifest, &staged.envelopes, &published.receipts)
         .expect_err("an unmanaged release must not be observed as ours");
     assert_eq!(
         classified_category(&error),
@@ -1253,10 +1238,7 @@ fn observe_detects_manifest_digest_conflicts_on_the_tag() {
         .execute(&nodes[1], &manifest, &staged.envelopes, &[])
         .expect("publish");
 
-    let mut conflicting = fixture
-        .api
-        .release("v1.2.3")
-        .expect("published release");
+    let mut conflicting = fixture.api.release("v1.2.3").expect("published release");
     conflicting.body = format!(
         "notes\n\n<!-- one-publish-manifest:{} -->",
         sha256_hex(b"another artifact set")
@@ -1264,12 +1246,7 @@ fn observe_detects_manifest_digest_conflicts_on_the_tag() {
     fixture.api.seed_release(conflicting);
 
     let error = fixture
-        .execute(
-            &nodes[2],
-            &manifest,
-            &staged.envelopes,
-            &published.receipts,
-        )
+        .execute(&nodes[2], &manifest, &staged.envelopes, &published.receipts)
         .expect_err("a different manifest digest is a conflict");
     assert_eq!(
         classified_category(&error),
@@ -1296,12 +1273,7 @@ fn observe_rejects_releases_missing_expected_assets() {
     fixture.api.seed_release(degraded);
 
     let error = fixture
-        .execute(
-            &nodes[2],
-            &manifest,
-            &staged.envelopes,
-            &published.receipts,
-        )
+        .execute(&nodes[2], &manifest, &staged.envelopes, &published.receipts)
         .expect_err("a release missing assets fails observation");
     assert_eq!(
         classified_category(&error),

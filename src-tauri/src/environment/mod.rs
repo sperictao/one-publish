@@ -105,7 +105,9 @@ async fn check_provider_runtime_environment(
             let (status, issues) = check_tauri().await;
             Ok(ProviderEnvironmentCheck { status, issues })
         }
-        _ => Err(Box::new(unsupported_environment_provider_issue(provider_id))),
+        _ => Err(Box::new(unsupported_environment_provider_issue(
+            provider_id,
+        ))),
     }
 }
 

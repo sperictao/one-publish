@@ -144,7 +144,10 @@ mod tests {
     use tempfile::TempDir;
 
     static DOTNET_FRAMEWORK_TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {
-        vec!["TargetFramework".to_string(), "TargetFrameworks".to_string()]
+        vec![
+            "TargetFramework".to_string(),
+            "TargetFrameworks".to_string(),
+        ]
     });
 
     #[test]

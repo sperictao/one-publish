@@ -117,10 +117,7 @@ pub async fn check_repository_branch_connectivity(
     #[cfg(windows)]
     {
         return RepositoryBranchConnectivityResult {
-            can_connect: local_git::branch_connectivity(
-                &repo_path,
-                current_branch.as_deref(),
-            ),
+            can_connect: local_git::branch_connectivity(&repo_path, current_branch.as_deref()),
         };
     }
 

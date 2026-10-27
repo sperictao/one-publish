@@ -17,15 +17,15 @@ use std::sync::Arc;
 use common::*;
 use publish_adapters::{
     ExecutionBackend, FakeGitHubReleaseApi, GitHubActionsBackend, GitHubApiFailure,
-    GitHubReleaseDestination, GITHUB_ACTIONS_BACKEND_ID, StaticCredentialSource,
-    TauriBuildDriver, TauriProjectProvider, TauriVersionSourceKind, CHECKSUM_MANIFEST_ROLE,
-    FAKE_OPERATION_UPLOAD,
+    GitHubReleaseDestination, StaticCredentialSource, TauriBuildDriver, TauriProjectProvider,
+    TauriVersionSourceKind, CHECKSUM_MANIFEST_ROLE, FAKE_OPERATION_UPLOAD,
+    GITHUB_ACTIONS_BACKEND_ID,
 };
 use publish_domain::{
-    AdapterBinding, AdapterIdentity, AdapterKind, AdapterSettings, AutomationBindingProjection,
-    AutomationProjection, AutomationRuntimeRevision, AutomationTriggerPolicy, CredentialKind,
-    DeliveryRoute, DeliveryStatus, PublishAttemptStatus, PublishAttemptView, ReleaseIdentity,
-    RuntimeAdapterRevision, RuntimeComponentRevision, sha256_hex,
+    sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind, AdapterSettings,
+    AutomationBindingProjection, AutomationProjection, AutomationRuntimeRevision,
+    AutomationTriggerPolicy, CredentialKind, DeliveryRoute, DeliveryStatus, PublishAttemptStatus,
+    PublishAttemptView, ReleaseIdentity, RuntimeAdapterRevision, RuntimeComponentRevision,
 };
 use publish_runner_core::{AttemptExecutionContext, PublishRuntime, StartPublishAttempt};
 use serde_json::Value;
@@ -40,17 +40,15 @@ const CONFIG_PATH: &str = "src-tauri/tauri.conf.json";
 /// 创建 Tauri provider（`pnpm tauri build`）。
 fn tauri_provider(args: Vec<String>, output_dir: PathBuf) -> Arc<RealBuildProvider> {
     let project = sample_path("tauri-mini-app");
-    Arc::new(
-        RealBuildProvider::new(
-            "real-tauri",
-            "pnpm:tauri-build",
-            "pnpm",
-            args,
-            project,
-            output_dir,
-            classify_tauri,
-        ),
-    )
+    Arc::new(RealBuildProvider::new(
+        "real-tauri",
+        "pnpm:tauri-build",
+        "pnpm",
+        args,
+        project,
+        output_dir,
+        classify_tauri,
+    ))
 }
 
 /// 尝试执行一次完整发布；构建失败时返回 None（优雅跳过）。
@@ -142,15 +140,15 @@ fn build_github_registry(
         .expect("register checksum");
     registry
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(
-                Arc::new(
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
                     StaticCredentialSource::new().with_secret(
                         GITHUB_TOKEN_REFERENCE,
                         CredentialKind::Token,
                         GITHUB_TOKEN_VALUE,
                     ),
-                ),
-            )),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
@@ -162,15 +160,14 @@ fn build_github_registry(
         .expect("register store");
     registry
         .register_delivery_destination(
-            Arc::new(publish_adapters::LocalDirectoryDestination::new(delivery_dir)),
+            Arc::new(publish_adapters::LocalDirectoryDestination::new(
+                delivery_dir,
+            )),
             &fixture,
         )
         .expect("register local");
     registry
-        .register_delivery_destination(
-            Arc::new(GitHubReleaseDestination::new(github)),
-            &fixture,
-        )
+        .register_delivery_destination(Arc::new(GitHubReleaseDestination::new(github)), &fixture)
         .expect("register github");
     registry
 }
@@ -200,15 +197,13 @@ fn tauri_01_build_to_local() {
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = tauri_provider(
-        vec!["tauri".to_string(), "build".to_string()],
-        output_dir,
-    );
+    let provider = tauri_provider(vec!["tauri".to_string(), "build".to_string()], output_dir);
     let snapshot = build_snapshot("real-tauri", store_dir.path(), delivery_dir.path(), "0.1.0");
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
-    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-01") {
+    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-01")
+    {
         Some(a) => a,
         None => return,
     };
@@ -241,15 +236,13 @@ fn tauri_02_build_with_checksum_to_local() {
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = tauri_provider(
-        vec!["tauri".to_string(), "build".to_string()],
-        output_dir,
-    );
+    let provider = tauri_provider(vec!["tauri".to_string(), "build".to_string()], output_dir);
     let snapshot = build_snapshot("real-tauri", store_dir.path(), delivery_dir.path(), "0.1.0");
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
-    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-02") {
+    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-02")
+    {
         Some(a) => a,
         None => return,
     };
@@ -291,20 +284,23 @@ fn tauri_03_build_to_github_release() {
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
     let github = Arc::new(FakeGitHubReleaseApi::new());
 
-    let provider = tauri_provider(
-        vec!["tauri".to_string(), "build".to_string()],
-        output_dir,
-    );
+    let provider = tauri_provider(vec!["tauri".to_string(), "build".to_string()], output_dir);
 
     let mut snapshot = build_snapshot("real-tauri", store_dir.path(), delivery_dir.path(), "0.1.0");
     // 替换交付路线为 GitHub Release（无 Updater）
     snapshot.adapters.delivery_routes = vec![github_route("github-route", "v", false)];
 
-    let registry =
-        build_github_registry(provider, store_dir.path(), delivery_dir.path(), github.clone(), &snapshot);
+    let registry = build_github_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        github.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
-    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-03") {
+    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-03")
+    {
         Some(a) => a,
         None => return,
     };
@@ -342,20 +338,23 @@ fn tauri_04_build_with_updater_to_github_release() {
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
     let github = Arc::new(FakeGitHubReleaseApi::new());
 
-    let provider = tauri_provider(
-        vec!["tauri".to_string(), "build".to_string()],
-        output_dir,
-    );
+    let provider = tauri_provider(vec!["tauri".to_string(), "build".to_string()], output_dir);
 
     let mut snapshot = build_snapshot("real-tauri", store_dir.path(), delivery_dir.path(), "0.1.0");
     // 替换交付路线为 GitHub Release（启用 Updater）
     snapshot.adapters.delivery_routes = vec![github_route("github-route", "v", true)];
 
-    let registry =
-        build_github_registry(provider, store_dir.path(), delivery_dir.path(), github.clone(), &snapshot);
+    let registry = build_github_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        github.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
-    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-04") {
+    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-04")
+    {
         Some(a) => a,
         None => return,
     };
@@ -392,10 +391,7 @@ fn tauri_05_dual_route_local_and_github() {
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
     let github = Arc::new(FakeGitHubReleaseApi::new());
 
-    let provider = tauri_provider(
-        vec!["tauri".to_string(), "build".to_string()],
-        output_dir,
-    );
+    let provider = tauri_provider(vec!["tauri".to_string(), "build".to_string()], output_dir);
 
     let mut snapshot = build_snapshot("real-tauri", store_dir.path(), delivery_dir.path(), "0.1.0");
     // Local (Required) + GitHub Release (Required)
@@ -411,11 +407,17 @@ fn tauri_05_dual_route_local_and_github() {
         github_route("github-route", "v", false),
     ];
 
-    let registry =
-        build_github_registry(provider, store_dir.path(), delivery_dir.path(), github.clone(), &snapshot);
+    let registry = build_github_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        github.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
-    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-05") {
+    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-05")
+    {
         Some(a) => a,
         None => return,
     };
@@ -470,10 +472,11 @@ fn tauri_06_artifact_promotion_local_to_github() {
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
-    let attempt1 = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-06-1") {
-        Some(a) => a,
-        None => return,
-    };
+    let attempt1 =
+        match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-06-1") {
+            Some(a) => a,
+            None => return,
+        };
     let manifest1 = assert_published(&attempt1);
     let original_digest = manifest1.digest.clone();
 
@@ -501,7 +504,13 @@ fn tauri_06_artifact_promotion_local_to_github() {
     );
     let runtime2 = PublishRuntime::new(registry2);
 
-    let attempt2 = run_publish(&runtime2, &snapshot2, "tauri-mini-app", "0.1.0", "tauri-06-2");
+    let attempt2 = run_publish(
+        &runtime2,
+        &snapshot2,
+        "tauri-mini-app",
+        "0.1.0",
+        "tauri-06-2",
+    );
     let manifest2 = attempt2.manifest.as_ref().expect("manifest");
     // 推广：digest 应与原 Manifest 一致
     assert_eq!(
@@ -546,10 +555,7 @@ fn tauri_07_partial_delivery_recovery() {
         },
     );
 
-    let provider = tauri_provider(
-        vec!["tauri".to_string(), "build".to_string()],
-        output_dir,
-    );
+    let provider = tauri_provider(vec!["tauri".to_string(), "build".to_string()], output_dir);
 
     let mut snapshot = build_snapshot("real-tauri", store_dir.path(), delivery_dir.path(), "0.1.0");
     // Local (Required) + GitHub Release (Required)
@@ -565,11 +571,17 @@ fn tauri_07_partial_delivery_recovery() {
         github_route("github-route", "v", false),
     ];
 
-    let registry =
-        build_github_registry(provider, store_dir.path(), delivery_dir.path(), github.clone(), &snapshot);
+    let registry = build_github_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        github.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
-    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-07") {
+    let attempt = match try_run_publish(&runtime, &snapshot, "tauri-mini-app", "0.1.0", "tauri-07")
+    {
         Some(a) => a,
         None => return,
     };
@@ -595,11 +607,7 @@ fn tauri_07_partial_delivery_recovery() {
         .prepare_attempt(&snapshot)
         .expect("prepare for resume");
     let resumed = runtime
-        .resume_attempt(
-            &prepared,
-            &attempt,
-            &AttemptExecutionContext::at(1),
-        )
+        .resume_attempt(&prepared, &attempt, &AttemptExecutionContext::at(1))
         .expect("resume attempt");
 
     // 重试后应该 Published
@@ -818,19 +826,16 @@ fn tauri_10_automation_projection_rendering() {
     let backend = GitHubActionsBackend::new(Arc::new(StaticCredentialSource::new()));
 
     // 构造最小 AutomationBindingProjection
-    let runner = RuntimeComponentRevision::new("0.1.0", sha256_hex(b"runner"))
-        .with_binary_digests(BTreeMap::from([
+    let runner = RuntimeComponentRevision::new("0.1.0", sha256_hex(b"runner")).with_binary_digests(
+        BTreeMap::from([
             ("x86_64-unknown-linux-gnu".to_string(), "a".repeat(64)),
             ("aarch64-apple-darwin".to_string(), "b".repeat(64)),
             ("x86_64-pc-windows-msvc".to_string(), "c".repeat(64)),
-        ]));
+        ]),
+    );
     let plan_contract = RuntimeComponentRevision::new("1", sha256_hex(b"plan"));
     let adapters = vec![RuntimeAdapterRevision::new(
-        AdapterIdentity::new(
-            AdapterKind::ExecutionBackend,
-            GITHUB_ACTIONS_BACKEND_ID,
-            1,
-        ),
+        AdapterIdentity::new(AdapterKind::ExecutionBackend, GITHUB_ACTIONS_BACKEND_ID, 1),
         sha256_hex(b"adapters"),
     )];
     let runtime_revision = AutomationRuntimeRevision::seal(runner, plan_contract, adapters)

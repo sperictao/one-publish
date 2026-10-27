@@ -102,7 +102,10 @@ pub fn load_staged_artifacts(root: &Path) -> Result<Vec<ArtifactCandidate>, Publ
             continue;
         }
         let manifest = std::fs::read(&manifest_path).map_err(|error| {
-            staging_io_error(format!("read staging manifest {}", segment.display()), error)
+            staging_io_error(
+                format!("read staging manifest {}", segment.display()),
+                error,
+            )
         })?;
         let records: Vec<StagedCandidateRecord> =
             serde_json::from_slice(&manifest).map_err(|error| {

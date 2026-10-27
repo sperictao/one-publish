@@ -185,10 +185,7 @@ pub(crate) fn merge_imported_profiles(
             }
             ImportConflictStrategy::Rename if name_taken => {
                 import.name = derive_imported_profile_name(&repo.publish_config, &import.name);
-                let imported = repo
-                    .publish_config
-                    .import_profile(import)?
-                    .is_some();
+                let imported = repo.publish_config.import_profile(import)?.is_some();
                 debug_assert!(imported, "派生名不应再冲突");
                 summary.renamed += 1;
                 continue;
@@ -364,8 +361,9 @@ mod tests {
             provider_id: Some("tauri".to_string()),
             ..test_repo("repo-2")
         };
-        let summary = merge_imported_profiles(&mut target, profiles, super::ImportConflictStrategy::Skip)
-            .expect("merge backup");
+        let summary =
+            merge_imported_profiles(&mut target, profiles, super::ImportConflictStrategy::Skip)
+                .expect("merge backup");
         assert_eq!(summary.imported, 1);
 
         let revision = target.publish_config.profiles[0]
@@ -646,12 +644,18 @@ mod tests {
             false,
         );
 
-        let summary =
-            merge_imported_profiles(&mut repo, vec![conflicting_import("dup")], ImportConflictStrategy::Overwrite)
-                .expect("merge profiles");
+        let summary = merge_imported_profiles(
+            &mut repo,
+            vec![conflicting_import("dup")],
+            ImportConflictStrategy::Overwrite,
+        )
+        .expect("merge profiles");
 
         assert_eq!(summary.overwritten, 1);
-        assert_eq!(summary.imported + summary.renamed + summary.skipped_existing, 0);
+        assert_eq!(
+            summary.imported + summary.renamed + summary.skipped_existing,
+            0
+        );
         assert_eq!(repo.publish_config.profiles.len(), 1, "覆盖不新建 profile");
 
         let profile = &repo.publish_config.profiles[0];

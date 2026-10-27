@@ -20,22 +20,20 @@ use std::sync::Arc;
 
 use common::*;
 use publish_adapters::{
-    AdapterContract, AdapterRegistry, ChecksumProcessor, CustomCommandProcessor,
-    ExecutionBackend, FakeAutomationBackend, FakeGitHubReleaseApi, FakeSftpServer,
-    GitHubActionsBackend, GitHubApiFailure, GitHubReleaseDestination, LocalDirectoryDestination,
-    LocalExecutionBackend, ProjectProvider, SftpDeliveryDestination, SftpTransportFailure,
-    StaticCredentialSource, TauriProjectProvider, TauriVersionSourceKind,
-    TemporaryArtifactStore, CHECKSUM_MANIFEST_ROLE, FAKE_OPERATION_UPLOAD,
-    GITHUB_ACTIONS_BACKEND_ID, FAKE_AUTOMATION_BACKEND_ID,
+    AdapterContract, AdapterRegistry, ChecksumProcessor, CustomCommandProcessor, ExecutionBackend,
+    FakeAutomationBackend, FakeGitHubReleaseApi, FakeSftpServer, GitHubActionsBackend,
+    GitHubApiFailure, GitHubReleaseDestination, LocalDirectoryDestination, LocalExecutionBackend,
+    ProjectProvider, SftpDeliveryDestination, SftpTransportFailure, StaticCredentialSource,
+    TauriProjectProvider, TauriVersionSourceKind, TemporaryArtifactStore, CHECKSUM_MANIFEST_ROLE,
+    FAKE_AUTOMATION_BACKEND_ID, FAKE_OPERATION_UPLOAD, GITHUB_ACTIONS_BACKEND_ID,
 };
 use publish_domain::{
-    AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
-    AdapterSettings, AutomationBindingProjection, AutomationProjection,
-    AutomationRuntimeRevision, AutomationTriggerPolicy, CapabilityRequirement, CredentialKind,
-    DeliveryRoute, DeliveryStatus, PlanNodeTemplate, PlanOperation, PlanStage,
-    PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError,
-    PublishFailureCategory,
-    PublishingCapability, RuntimeAdapterRevision, RuntimeComponentRevision, sha256_hex,
+    sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
+    AdapterSettings, AutomationBindingProjection, AutomationProjection, AutomationRuntimeRevision,
+    AutomationTriggerPolicy, CapabilityRequirement, CredentialKind, DeliveryRoute, DeliveryStatus,
+    PlanNodeTemplate, PlanOperation, PlanStage, PlanningInputSnapshot, PublishAttemptStatus,
+    PublishAttemptView, PublishError, PublishFailureCategory, PublishingCapability,
+    RuntimeAdapterRevision, RuntimeComponentRevision,
 };
 use publish_runner_core::{AttemptExecutionContext, PublishRuntime};
 use serde_json::Value;
@@ -168,10 +166,7 @@ fn build_github_registry(
         )
         .expect("register backend");
     registry
-        .register_artifact_store(
-            Arc::new(TemporaryArtifactStore::new(store_dir)),
-            &fixture,
-        )
+        .register_artifact_store(Arc::new(TemporaryArtifactStore::new(store_dir)), &fixture)
         .expect("register store");
     registry
         .register_delivery_destination(
@@ -180,10 +175,7 @@ fn build_github_registry(
         )
         .expect("register local");
     registry
-        .register_delivery_destination(
-            Arc::new(GitHubReleaseDestination::new(github)),
-            &fixture,
-        )
+        .register_delivery_destination(Arc::new(GitHubReleaseDestination::new(github)), &fixture)
         .expect("register github");
     registry
 }
@@ -217,10 +209,7 @@ fn build_sftp_registry(
         )
         .expect("register backend");
     registry
-        .register_artifact_store(
-            Arc::new(TemporaryArtifactStore::new(store_dir)),
-            &fixture,
-        )
+        .register_artifact_store(Arc::new(TemporaryArtifactStore::new(store_dir)), &fixture)
         .expect("register store");
     registry
         .register_delivery_destination(
@@ -229,10 +218,7 @@ fn build_sftp_registry(
         )
         .expect("register local");
     registry
-        .register_delivery_destination(
-            Arc::new(SftpDeliveryDestination::new(sftp)),
-            &fixture,
-        )
+        .register_delivery_destination(Arc::new(SftpDeliveryDestination::new(sftp)), &fixture)
         .expect("register sftp");
     registry
 }
@@ -273,10 +259,7 @@ fn build_sftp_github_registry(
         )
         .expect("register backend");
     registry
-        .register_artifact_store(
-            Arc::new(TemporaryArtifactStore::new(store_dir)),
-            &fixture,
-        )
+        .register_artifact_store(Arc::new(TemporaryArtifactStore::new(store_dir)), &fixture)
         .expect("register store");
     registry
         .register_delivery_destination(
@@ -285,16 +268,10 @@ fn build_sftp_github_registry(
         )
         .expect("register local");
     registry
-        .register_delivery_destination(
-            Arc::new(SftpDeliveryDestination::new(sftp)),
-            &fixture,
-        )
+        .register_delivery_destination(Arc::new(SftpDeliveryDestination::new(sftp)), &fixture)
         .expect("register sftp");
     registry
-        .register_delivery_destination(
-            Arc::new(GitHubReleaseDestination::new(github)),
-            &fixture,
-        )
+        .register_delivery_destination(Arc::new(GitHubReleaseDestination::new(github)), &fixture)
         .expect("register github");
     registry
 }
@@ -348,9 +325,18 @@ fn cross_recovery_01_sftp_network_error() {
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     // Local (Required) + SFTP (Required)
-    snapshot.adapters.delivery_routes.push(sftp_route("sftp-route", "/upload"));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(sftp_route("sftp-route", "/upload"));
 
-    let registry = build_sftp_registry(provider, store_dir.path(), delivery_dir.path(), sftp.clone(), &snapshot);
+    let registry = build_sftp_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        sftp.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cross-rec-01");
@@ -375,11 +361,7 @@ fn cross_recovery_01_sftp_network_error() {
         .prepare_attempt(&snapshot)
         .expect("prepare for resume");
     let resumed = runtime
-        .resume_attempt(
-            &prepared,
-            &attempt,
-            &AttemptExecutionContext::at(1),
-        )
+        .resume_attempt(&prepared, &attempt, &AttemptExecutionContext::at(1))
         .expect("resume attempt");
 
     assert_eq!(
@@ -388,7 +370,10 @@ fn cross_recovery_01_sftp_network_error() {
         "expected Published after resume, got {:?}",
         resumed.status
     );
-    assert!(!sftp.paths().is_empty(), "SFTP should have files after resume");
+    assert!(
+        !sftp.paths().is_empty(),
+        "SFTP should have files after resume"
+    );
 }
 
 /// CROSS-RECOVERY-02: GitHub 500 error on upload causes Failed; resume succeeds.
@@ -409,7 +394,13 @@ fn cross_recovery_02_github_500_error() {
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot.adapters.delivery_routes = vec![github_route("github-route", "v")];
 
-    let registry = build_github_registry(provider, store_dir.path(), delivery_dir.path(), github.clone(), &snapshot);
+    let registry = build_github_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        github.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     // Inject 500 error on the next upload
@@ -437,11 +428,7 @@ fn cross_recovery_02_github_500_error() {
         .prepare_attempt(&snapshot)
         .expect("prepare for resume");
     let resumed = runtime
-        .resume_attempt(
-            &prepared,
-            &attempt,
-            &AttemptExecutionContext::at(1),
-        )
+        .resume_attempt(&prepared, &attempt, &AttemptExecutionContext::at(1))
         .expect("resume attempt");
 
     assert_eq!(
@@ -451,9 +438,7 @@ fn cross_recovery_02_github_500_error() {
         resumed.status
     );
 
-    let release = github
-        .release("v0.1.0")
-        .expect("release should exist");
+    let release = github.release("v0.1.0").expect("release should exist");
     assert!(!release.assets.is_empty(), "release should have assets");
 }
 
@@ -476,7 +461,13 @@ fn cross_recovery_03_sftp_file_corruption() {
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot.adapters.delivery_routes = vec![sftp_route("sftp-route", "/upload")];
 
-    let registry = build_sftp_registry(provider, store_dir.path(), delivery_dir.path(), sftp.clone(), &snapshot);
+    let registry = build_sftp_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        sftp.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cross-rec-03");
@@ -495,11 +486,7 @@ fn cross_recovery_03_sftp_file_corruption() {
         .prepare_attempt(&snapshot)
         .expect("prepare for resume");
     let resumed = runtime
-        .resume_attempt(
-            &prepared,
-            &attempt,
-            &AttemptExecutionContext::at(1),
-        )
+        .resume_attempt(&prepared, &attempt, &AttemptExecutionContext::at(1))
         .expect("resume attempt");
 
     assert_eq!(
@@ -508,7 +495,10 @@ fn cross_recovery_03_sftp_file_corruption() {
         "expected Published after retry, got {:?}",
         resumed.status
     );
-    assert!(!sftp.paths().is_empty(), "SFTP should have files after retry");
+    assert!(
+        !sftp.paths().is_empty(),
+        "SFTP should have files after retry"
+    );
 }
 
 /// CROSS-RECOVERY-04: GitHub conflict (different manifest marker) blocks delivery.
@@ -543,7 +533,13 @@ fn cross_recovery_04_github_conflict() {
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot.adapters.delivery_routes = vec![github_route("github-route", "v")];
 
-    let registry = build_github_registry(provider, store_dir.path(), delivery_dir.path(), github.clone(), &snapshot);
+    let registry = build_github_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        github.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cross-rec-04");
@@ -592,8 +588,12 @@ fn cross_promote_01_local_to_sftp() {
     // First publish: build to Local
     let provider = cargo_provider("cross-promote-01");
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    let registry =
-        build_local_registry(provider.clone(), store_dir.path(), delivery_dir.path(), &snapshot);
+    let registry = build_local_registry(
+        provider.clone(),
+        store_dir.path(),
+        delivery_dir.path(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt1 = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cross-prom-1");
@@ -603,7 +603,8 @@ fn cross_promote_01_local_to_sftp() {
     // Second publish: promote to SFTP (no rebuild). The planner skips the
     // build, but still resolves capabilities through the registered provider.
     let sftp = Arc::new(FakeSftpServer::new());
-    let mut snapshot2 = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let mut snapshot2 =
+        build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot2.promoted_manifest_digest = Some(original_digest.clone());
     snapshot2.adapters.delivery_routes = vec![sftp_route("sftp-route", "/upload")];
 
@@ -622,7 +623,10 @@ fn cross_promote_01_local_to_sftp() {
         manifest2.digest, original_digest,
         "promoted manifest digest should match original"
     );
-    assert!(!sftp.paths().is_empty(), "SFTP should have files after promotion");
+    assert!(
+        !sftp.paths().is_empty(),
+        "SFTP should have files after promotion"
+    );
 }
 
 /// CROSS-PROMOTE-02: Build to Local, then promote to GitHub Release.
@@ -640,8 +644,12 @@ fn cross_promote_02_local_to_github() {
     // First publish: build to Local
     let provider = cargo_provider("cross-promote-02");
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    let registry =
-        build_local_registry(provider.clone(), store_dir.path(), delivery_dir.path(), &snapshot);
+    let registry = build_local_registry(
+        provider.clone(),
+        store_dir.path(),
+        delivery_dir.path(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt1 = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cross-prom-g-1");
@@ -652,7 +660,8 @@ fn cross_promote_02_local_to_github() {
     // skips the build, but still resolves capabilities through the
     // registered provider.
     let github = Arc::new(FakeGitHubReleaseApi::new());
-    let mut snapshot2 = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let mut snapshot2 =
+        build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot2.promoted_manifest_digest = Some(original_digest.clone());
     snapshot2.adapters.delivery_routes = vec![github_route("github-route", "v")];
 
@@ -665,7 +674,13 @@ fn cross_promote_02_local_to_github() {
     );
     let runtime2 = PublishRuntime::new(registry2);
 
-    let attempt2 = run_publish(&runtime2, &snapshot2, "cargo-cli", "0.1.0", "cross-prom-g-2");
+    let attempt2 = run_publish(
+        &runtime2,
+        &snapshot2,
+        "cargo-cli",
+        "0.1.0",
+        "cross-prom-g-2",
+    );
     let manifest2 = assert_published(&attempt2);
     assert_eq!(
         manifest2.digest, original_digest,
@@ -691,8 +706,12 @@ fn cross_promote_03_local_to_sftp_and_github() {
     // First publish: build to Local
     let provider = cargo_provider("cross-promote-03");
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    let registry =
-        build_local_registry(provider.clone(), store_dir.path(), delivery_dir.path(), &snapshot);
+    let registry = build_local_registry(
+        provider.clone(),
+        store_dir.path(),
+        delivery_dir.path(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt1 = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cross-prom-b-1");
@@ -704,7 +723,8 @@ fn cross_promote_03_local_to_sftp_and_github() {
     // registered provider.
     let sftp = Arc::new(FakeSftpServer::new());
     let github = Arc::new(FakeGitHubReleaseApi::new());
-    let mut snapshot2 = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let mut snapshot2 =
+        build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot2.promoted_manifest_digest = Some(original_digest.clone());
     snapshot2.adapters.delivery_routes = vec![
         sftp_route("sftp-route", "/upload"),
@@ -721,7 +741,13 @@ fn cross_promote_03_local_to_sftp_and_github() {
     );
     let runtime2 = PublishRuntime::new(registry2);
 
-    let attempt2 = run_publish(&runtime2, &snapshot2, "cargo-cli", "0.1.0", "cross-prom-b-2");
+    let attempt2 = run_publish(
+        &runtime2,
+        &snapshot2,
+        "cargo-cli",
+        "0.1.0",
+        "cross-prom-b-2",
+    );
     // Both required routes must be Published; a failed route has no
     // receipt, so checking receipts alone would not catch it.
     let manifest2 = assert_published(&attempt2);
@@ -732,7 +758,10 @@ fn cross_promote_03_local_to_sftp_and_github() {
 
     assert!(!sftp.paths().is_empty(), "SFTP should have files");
     let release = github.release("v0.1.0").expect("release should exist");
-    assert!(!release.assets.is_empty(), "GitHub release should have assets");
+    assert!(
+        !release.assets.is_empty(),
+        "GitHub release should have assets"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -952,18 +981,21 @@ fn cross_gate_01_planning_only() {
     let custom_processor = CustomCommandProcessor::new(["test:gate"]);
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    snapshot.adapters.artifact_processors.push(AdapterBinding::new(
-        "gate",
-        AdapterIdentity::new(AdapterKind::ArtifactProcessor, "custom-command", 1),
-        AdapterSettings::new(1)
-            .with_value("program", Value::String("test:gate".to_string()))
-            .with_value("args", Value::Array(vec![]))
-            .with_value(
-                "input_roles",
-                Value::Array(vec![Value::String("installer".to_string())]),
-            )
-            .with_value("output_roles", Value::Array(vec![])),
-    ));
+    snapshot
+        .adapters
+        .artifact_processors
+        .push(AdapterBinding::new(
+            "gate",
+            AdapterIdentity::new(AdapterKind::ArtifactProcessor, "custom-command", 1),
+            AdapterSettings::new(1)
+                .with_value("program", Value::String("test:gate".to_string()))
+                .with_value("args", Value::Array(vec![]))
+                .with_value(
+                    "input_roles",
+                    Value::Array(vec![Value::String("installer".to_string())]),
+                )
+                .with_value("output_roles", Value::Array(vec![])),
+        ));
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
@@ -998,9 +1030,7 @@ fn cross_gate_01_planning_only() {
         .expect("register local");
     let runtime = PublishRuntime::new(registry);
 
-    let prepared = runtime
-        .prepare_attempt(&snapshot)
-        .expect("prepare attempt");
+    let prepared = runtime.prepare_attempt(&snapshot).expect("prepare attempt");
 
     let has_gate = prepared
         .plan
@@ -1032,18 +1062,21 @@ fn cross_gate_02_gate_failure_blocks() {
     let custom_processor = CustomCommandProcessor::new(["test:gate"]);
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    snapshot.adapters.artifact_processors.push(AdapterBinding::new(
-        "gate",
-        AdapterIdentity::new(AdapterKind::ArtifactProcessor, "custom-command", 1),
-        AdapterSettings::new(1)
-            .with_value("program", Value::String("test:gate".to_string()))
-            .with_value("args", Value::Array(vec![]))
-            .with_value(
-                "input_roles",
-                Value::Array(vec![Value::String("installer".to_string())]),
-            )
-            .with_value("output_roles", Value::Array(vec![])),
-    ));
+    snapshot
+        .adapters
+        .artifact_processors
+        .push(AdapterBinding::new(
+            "gate",
+            AdapterIdentity::new(AdapterKind::ArtifactProcessor, "custom-command", 1),
+            AdapterSettings::new(1)
+                .with_value("program", Value::String("test:gate".to_string()))
+                .with_value("args", Value::Array(vec![]))
+                .with_value(
+                    "input_roles",
+                    Value::Array(vec![Value::String("installer".to_string())]),
+                )
+                .with_value("output_roles", Value::Array(vec![])),
+        ));
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
@@ -1078,9 +1111,7 @@ fn cross_gate_02_gate_failure_blocks() {
         .expect("register local");
     let runtime = PublishRuntime::new(registry);
 
-    let prepared = runtime
-        .prepare_attempt(&snapshot)
-        .expect("prepare attempt");
+    let prepared = runtime.prepare_attempt(&snapshot).expect("prepare attempt");
 
     // Verify the gate node exists in the plan
     let gate_node = prepared
@@ -1175,9 +1206,7 @@ fn cross_gate_03_gate_before_checksum() {
         .expect("register local");
     let runtime = PublishRuntime::new(registry);
 
-    let prepared = runtime
-        .prepare_attempt(&snapshot)
-        .expect("prepare attempt");
+    let prepared = runtime.prepare_attempt(&snapshot).expect("prepare attempt");
 
     // Find the gate node index and checksum node index
     let gate_index = prepared
@@ -1263,7 +1292,13 @@ fn cross_idempotent_02_github_matching() {
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot.adapters.delivery_routes = vec![github_route("github-route", "v")];
 
-    let registry = build_github_registry(provider, store_dir.path(), delivery_dir.path(), github.clone(), &snapshot);
+    let registry = build_github_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        github.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     // First publish
@@ -1305,7 +1340,13 @@ fn cross_idempotent_03_sftp_matching() {
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot.adapters.delivery_routes = vec![sftp_route("sftp-route", "/upload")];
 
-    let registry = build_sftp_registry(provider, store_dir.path(), delivery_dir.path(), sftp.clone(), &snapshot);
+    let registry = build_sftp_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        sftp.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     // First publish
@@ -1502,19 +1543,16 @@ fn cross_cred_02_github_auth_failure() {
 fn cross_auto_01_automation_bundle() {
     let backend = GitHubActionsBackend::new(Arc::new(StaticCredentialSource::new()));
 
-    let runner = RuntimeComponentRevision::new("0.1.0", sha256_hex(b"runner"))
-        .with_binary_digests(BTreeMap::from([
+    let runner = RuntimeComponentRevision::new("0.1.0", sha256_hex(b"runner")).with_binary_digests(
+        BTreeMap::from([
             ("x86_64-unknown-linux-gnu".to_string(), "a".repeat(64)),
             ("aarch64-apple-darwin".to_string(), "b".repeat(64)),
             ("x86_64-pc-windows-msvc".to_string(), "c".repeat(64)),
-        ]));
+        ]),
+    );
     let plan_contract = RuntimeComponentRevision::new("1", sha256_hex(b"plan"));
     let adapters = vec![RuntimeAdapterRevision::new(
-        AdapterIdentity::new(
-            AdapterKind::ExecutionBackend,
-            GITHUB_ACTIONS_BACKEND_ID,
-            1,
-        ),
+        AdapterIdentity::new(AdapterKind::ExecutionBackend, GITHUB_ACTIONS_BACKEND_ID, 1),
         sha256_hex(b"adapters"),
     )];
     let runtime_revision = AutomationRuntimeRevision::seal(runner, plan_contract, adapters)

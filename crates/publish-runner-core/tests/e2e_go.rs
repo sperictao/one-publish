@@ -92,17 +92,22 @@ fn build_registry_with_sftp(
         .register_project_provider(provider, &fixture)
         .expect("register provider");
     registry
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    "sftp-key",
-                    CredentialKind::SshPrivateKey,
-                    "test-key-value",
-                ),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new().with_secret(
+                        "sftp-key",
+                        CredentialKind::SshPrivateKey,
+                        "test-key-value",
+                    ),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
@@ -114,15 +119,14 @@ fn build_registry_with_sftp(
         .expect("register store");
     registry
         .register_delivery_destination(
-            Arc::new(publish_adapters::LocalDirectoryDestination::new(delivery_dir)),
+            Arc::new(publish_adapters::LocalDirectoryDestination::new(
+                delivery_dir,
+            )),
             &fixture,
         )
         .expect("register local");
     registry
-        .register_delivery_destination(
-            Arc::new(SftpDeliveryDestination::new(sftp)),
-            &fixture,
-        )
+        .register_delivery_destination(Arc::new(SftpDeliveryDestination::new(sftp)), &fixture)
         .expect("register sftp");
     registry
 }
@@ -141,7 +145,11 @@ fn go_01_single_platform_build_to_local() {
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     let provider = go_provider(
-        vec!["build".to_string(), "-o".to_string(), output_arg(&output_dir, "app")],
+        vec![
+            "build".to_string(),
+            "-o".to_string(),
+            output_arg(&output_dir, "app"),
+        ],
         output_dir,
     );
     let snapshot = build_snapshot("real-go", store_dir.path(), delivery_dir.path(), "0.1.0");
@@ -162,7 +170,10 @@ fn go_01_single_platform_build_to_local() {
         "SHA256SUMS should exist in delivery directory"
     );
     let checksums_content = fs::read_to_string(&checksums_path).expect("read SHA256SUMS");
-    assert!(!checksums_content.is_empty(), "SHA256SUMS should not be empty");
+    assert!(
+        !checksums_content.is_empty(),
+        "SHA256SUMS should not be empty"
+    );
 
     // 交付出的二进制保留执行位，可以直接运行。
     #[cfg(unix)]
@@ -312,30 +323,33 @@ fn go_04_dual_route_local_and_github_release() {
     let platform_key = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
     let mut snapshot = build_snapshot("real-go", store_dir.path(), delivery_dir.path(), "0.1.0");
     // 添加 GitHub Release 路线（Required）
-    snapshot.adapters.delivery_routes.push(DeliveryRoute::required(
-        AdapterBinding::new(
-            "github-route",
-            AdapterIdentity::new(AdapterKind::DeliveryDestination, "github-release", 1),
-            AdapterSettings::new(1)
-                .with_value("repository", Value::String("acme/go-cli".to_string()))
-                .with_value("visibility", Value::String("public".to_string()))
-                .with_value("tag_prefix", Value::String("v".to_string()))
-                .with_value(
-                    "allowed_asset_roles",
-                    Value::Array(vec![
-                        Value::String("installer".to_string()),
-                        Value::String(CHECKSUM_MANIFEST_ROLE.to_string()),
-                    ]),
-                )
-                .with_value("updater_enabled", Value::Bool(false))
-                .with_value(
-                    "enabled_platforms",
-                    Value::Array(vec![Value::String(platform_key)]),
-                )
-                .with_value("unsigned_release_override", Value::Bool(true)),
-        )
-        .with_credential("github_token", "github-token-ref"),
-    ));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(DeliveryRoute::required(
+            AdapterBinding::new(
+                "github-route",
+                AdapterIdentity::new(AdapterKind::DeliveryDestination, "github-release", 1),
+                AdapterSettings::new(1)
+                    .with_value("repository", Value::String("acme/go-cli".to_string()))
+                    .with_value("visibility", Value::String("public".to_string()))
+                    .with_value("tag_prefix", Value::String("v".to_string()))
+                    .with_value(
+                        "allowed_asset_roles",
+                        Value::Array(vec![
+                            Value::String("installer".to_string()),
+                            Value::String(CHECKSUM_MANIFEST_ROLE.to_string()),
+                        ]),
+                    )
+                    .with_value("updater_enabled", Value::Bool(false))
+                    .with_value(
+                        "enabled_platforms",
+                        Value::Array(vec![Value::String(platform_key)]),
+                    )
+                    .with_value("unsigned_release_override", Value::Bool(true)),
+            )
+            .with_credential("github_token", "github-token-ref"),
+        ));
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
@@ -343,29 +357,38 @@ fn go_04_dual_route_local_and_github_release() {
         .register_project_provider(provider, &fixture)
         .expect("register provider");
     registry
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    "github-token-ref",
-                    CredentialKind::Token,
-                    "ghp_test-token-value",
-                ),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new().with_secret(
+                        "github-token-ref",
+                        CredentialKind::Token,
+                        "ghp_test-token-value",
+                    ),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
     registry
         .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
+            Arc::new(publish_adapters::TemporaryArtifactStore::new(
+                store_dir.path(),
+            )),
             &fixture,
         )
         .expect("register store");
     registry
         .register_delivery_destination(
-            Arc::new(publish_adapters::LocalDirectoryDestination::new(delivery_dir.path())),
+            Arc::new(publish_adapters::LocalDirectoryDestination::new(
+                delivery_dir.path(),
+            )),
             &fixture,
         )
         .expect("register local");
@@ -489,9 +512,18 @@ fn go_06_trimpath_reproducible_build() {
         ],
         output_dir_1,
     );
-    let snapshot_1 = build_snapshot("real-go", store_dir_1.path(), delivery_dir_1.path(), "0.1.0");
-    let registry_1 =
-        build_local_registry(provider_1, store_dir_1.path(), delivery_dir_1.path(), &snapshot_1);
+    let snapshot_1 = build_snapshot(
+        "real-go",
+        store_dir_1.path(),
+        delivery_dir_1.path(),
+        "0.1.0",
+    );
+    let registry_1 = build_local_registry(
+        provider_1,
+        store_dir_1.path(),
+        delivery_dir_1.path(),
+        &snapshot_1,
+    );
     let runtime_1 = PublishRuntime::new(registry_1);
 
     // Manifest 摘要包含规划快照摘要与存储定位（随临时目录变化），
@@ -521,9 +553,18 @@ fn go_06_trimpath_reproducible_build() {
         ],
         output_dir_2,
     );
-    let snapshot_2 = build_snapshot("real-go", store_dir_2.path(), delivery_dir_2.path(), "0.1.0");
-    let registry_2 =
-        build_local_registry(provider_2, store_dir_2.path(), delivery_dir_2.path(), &snapshot_2);
+    let snapshot_2 = build_snapshot(
+        "real-go",
+        store_dir_2.path(),
+        delivery_dir_2.path(),
+        "0.1.0",
+    );
+    let registry_2 = build_local_registry(
+        provider_2,
+        store_dir_2.path(),
+        delivery_dir_2.path(),
+        &snapshot_2,
+    );
     let runtime_2 = PublishRuntime::new(registry_2);
 
     let attempt_2 = run_publish(&runtime_2, &snapshot_2, "go-cli", "0.1.0", "go-06-2");
@@ -552,12 +593,20 @@ fn go_07_artifact_promotion() {
 
     // 第一次发布：构建到 Local
     let provider = go_provider(
-        vec!["build".to_string(), "-o".to_string(), output_arg(&output_dir, "app")],
+        vec![
+            "build".to_string(),
+            "-o".to_string(),
+            output_arg(&output_dir, "app"),
+        ],
         output_dir,
     );
     let snapshot = build_snapshot("real-go", store_dir.path(), delivery_dir.path(), "0.1.0");
-    let registry =
-        build_local_registry(provider.clone(), store_dir.path(), delivery_dir.path(), &snapshot);
+    let registry = build_local_registry(
+        provider.clone(),
+        store_dir.path(),
+        delivery_dir.path(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt1 = run_publish(&runtime, &snapshot, "go-cli", "0.1.0", "go-07-1");
@@ -595,23 +644,30 @@ fn go_07_artifact_promotion() {
         .register_project_provider(provider, &fixture)
         .expect("register provider");
     registry2
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry2
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    "sftp-key",
-                    CredentialKind::SshPrivateKey,
-                    "test-key-value",
-                ),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new().with_secret(
+                        "sftp-key",
+                        CredentialKind::SshPrivateKey,
+                        "test-key-value",
+                    ),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
     registry2
         .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
+            Arc::new(publish_adapters::TemporaryArtifactStore::new(
+                store_dir.path(),
+            )),
             &fixture,
         )
         .expect("register store");
@@ -650,7 +706,11 @@ fn go_08_partial_delivery_recovery() {
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     let provider = go_provider(
-        vec!["build".to_string(), "-o".to_string(), output_arg(&output_dir, "app")],
+        vec![
+            "build".to_string(),
+            "-o".to_string(),
+            output_arg(&output_dir, "app"),
+        ],
         output_dir,
     );
     let sftp = Arc::new(FakeSftpServer::new());
@@ -664,25 +724,28 @@ fn go_08_partial_delivery_recovery() {
 
     let mut snapshot = build_snapshot("real-go", store_dir.path(), delivery_dir.path(), "0.1.0");
     // Local (Required) + SFTP (Required)
-    snapshot.adapters.delivery_routes.push(DeliveryRoute::required(
-        AdapterBinding::new(
-            "sftp-route",
-            AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
-            AdapterSettings::new(1)
-                .with_value("host", Value::String("localhost".to_string()))
-                .with_value("port", Value::from(2222u64))
-                .with_value("username", Value::String("testuser".to_string()))
-                .with_value("remote_path", Value::String("/upload".to_string()))
-                .with_value(
-                    "artifact_roles",
-                    Value::Array(vec![
-                        Value::String("build-output".to_string()),
-                        Value::String("checksum-manifest".to_string()),
-                    ]),
-                ),
-        )
-        .with_credential("ssh_private_key", "sftp-key"),
-    ));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(DeliveryRoute::required(
+            AdapterBinding::new(
+                "sftp-route",
+                AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
+                AdapterSettings::new(1)
+                    .with_value("host", Value::String("localhost".to_string()))
+                    .with_value("port", Value::from(2222u64))
+                    .with_value("username", Value::String("testuser".to_string()))
+                    .with_value("remote_path", Value::String("/upload".to_string()))
+                    .with_value(
+                        "artifact_roles",
+                        Value::Array(vec![
+                            Value::String("build-output".to_string()),
+                            Value::String("checksum-manifest".to_string()),
+                        ]),
+                    ),
+            )
+            .with_credential("ssh_private_key", "sftp-key"),
+        ));
 
     let registry = build_registry_with_sftp(
         provider,
@@ -732,7 +795,10 @@ fn go_08_partial_delivery_recovery() {
     );
 
     // SFTP 远端应有文件
-    assert!(!sftp.paths().is_empty(), "SFTP should have files after resume");
+    assert!(
+        !sftp.paths().is_empty(),
+        "SFTP should have files after resume"
+    );
 }
 
 /// GO-09: Optional 路线失败不影响整体成功。
@@ -750,7 +816,11 @@ fn go_09_optional_route_failure_does_not_affect_overall() {
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     let provider = go_provider(
-        vec!["build".to_string(), "-o".to_string(), output_arg(&output_dir, "app")],
+        vec![
+            "build".to_string(),
+            "-o".to_string(),
+            output_arg(&output_dir, "app"),
+        ],
         output_dir,
     );
     let sftp = Arc::new(FakeSftpServer::new());
@@ -764,25 +834,28 @@ fn go_09_optional_route_failure_does_not_affect_overall() {
 
     let mut snapshot = build_snapshot("real-go", store_dir.path(), delivery_dir.path(), "0.1.0");
     // Local (Required) + SFTP (Optional)
-    snapshot.adapters.delivery_routes.push(DeliveryRoute::optional(
-        AdapterBinding::new(
-            "sftp-route",
-            AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
-            AdapterSettings::new(1)
-                .with_value("host", Value::String("localhost".to_string()))
-                .with_value("port", Value::from(2222u64))
-                .with_value("username", Value::String("testuser".to_string()))
-                .with_value("remote_path", Value::String("/upload".to_string()))
-                .with_value(
-                    "artifact_roles",
-                    Value::Array(vec![
-                        Value::String("build-output".to_string()),
-                        Value::String("checksum-manifest".to_string()),
-                    ]),
-                ),
-        )
-        .with_credential("ssh_private_key", "sftp-key"),
-    ));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(DeliveryRoute::optional(
+            AdapterBinding::new(
+                "sftp-route",
+                AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
+                AdapterSettings::new(1)
+                    .with_value("host", Value::String("localhost".to_string()))
+                    .with_value("port", Value::from(2222u64))
+                    .with_value("username", Value::String("testuser".to_string()))
+                    .with_value("remote_path", Value::String("/upload".to_string()))
+                    .with_value(
+                        "artifact_roles",
+                        Value::Array(vec![
+                            Value::String("build-output".to_string()),
+                            Value::String("checksum-manifest".to_string()),
+                        ]),
+                    ),
+            )
+            .with_credential("ssh_private_key", "sftp-key"),
+        ));
 
     let registry = build_registry_with_sftp(
         provider,

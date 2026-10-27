@@ -14,8 +14,7 @@ use std::sync::Arc;
 use common::*;
 use publish_adapters::{
     AdapterRegistry, FakeGitHubReleaseApi, FakeSftpServer, GitHubReleaseDestination,
-    RemoteGitHubRelease, SftpDeliveryDestination, StaticCredentialSource,
-    CHECKSUM_MANIFEST_ROLE,
+    RemoteGitHubRelease, SftpDeliveryDestination, StaticCredentialSource, CHECKSUM_MANIFEST_ROLE,
 };
 use publish_domain::{
     AdapterBinding, AdapterIdentity, AdapterKind, AdapterSettings, CredentialKind, DeliveryRoute,
@@ -178,23 +177,30 @@ fn java_02_bootjar_to_sftp() {
         .register_project_provider(provider, &fixture)
         .expect("register provider");
     registry
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    "sftp-key",
-                    CredentialKind::SshPrivateKey,
-                    "test-key-value",
-                ),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new().with_secret(
+                        "sftp-key",
+                        CredentialKind::SshPrivateKey,
+                        "test-key-value",
+                    ),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
     registry
         .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
+            Arc::new(publish_adapters::TemporaryArtifactStore::new(
+                store_dir.path(),
+            )),
             &fixture,
         )
         .expect("register store");
@@ -234,22 +240,24 @@ fn java_03_properties_multi_route() {
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     let provider = java_provider(
-        vec![
-            "build".to_string(),
-            "-Dcustom=value".to_string(),
-        ],
+        vec!["build".to_string(), "-Dcustom=value".to_string()],
         output_dir,
     );
     let github = Arc::new(FakeGitHubReleaseApi::new());
 
     let mut snapshot = build_snapshot("real-java", store_dir.path(), delivery_dir.path(), "0.1.0");
     // 添加 GitHub Release 作为 Optional 路线
-    snapshot.adapters.delivery_routes.push(DeliveryRoute::optional(
-        github_route_binding("github-route", "v"),
-    ));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(DeliveryRoute::optional(github_route_binding(
+            "github-route",
+            "v",
+        )));
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
-    let mut registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
+    let mut registry =
+        build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     registry
         .register_delivery_destination(
             Arc::new(GitHubReleaseDestination::new(github.clone())),
@@ -387,23 +395,30 @@ fn java_07_artifact_promotion() {
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot2.clone());
     let mut registry2 = AdapterRegistry::new();
     registry2
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry2
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    GITHUB_TOKEN_REFERENCE,
-                    CredentialKind::Token,
-                    GITHUB_TOKEN_VALUE,
-                ),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new().with_secret(
+                        GITHUB_TOKEN_REFERENCE,
+                        CredentialKind::Token,
+                        GITHUB_TOKEN_VALUE,
+                    ),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
     registry2
         .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
+            Arc::new(publish_adapters::TemporaryArtifactStore::new(
+                store_dir.path(),
+            )),
             &fixture,
         )
         .expect("register store");
@@ -415,7 +430,13 @@ fn java_07_artifact_promotion() {
         .expect("register github");
     let runtime2 = PublishRuntime::new(registry2);
 
-    let attempt2 = run_publish(&runtime2, &snapshot2, "java-gradle-app", "0.1.0", "java-07-2");
+    let attempt2 = run_publish(
+        &runtime2,
+        &snapshot2,
+        "java-gradle-app",
+        "0.1.0",
+        "java-07-2",
+    );
     let manifest2 = attempt2.manifest.as_ref().expect("manifest");
     // 推广：digest 应与原 Manifest 一致
     assert_eq!(
@@ -424,7 +445,9 @@ fn java_07_artifact_promotion() {
     );
 
     // GitHub Release 应有创建的 release
-    let release = github.release("v0.1.0").expect("github release should exist");
+    let release = github
+        .release("v0.1.0")
+        .expect("github release should exist");
     assert!(!release.draft, "release should be published (not draft)");
 }
 
@@ -458,10 +481,14 @@ fn java_08_partial_delivery_github_conflict() {
 
     let mut snapshot = build_snapshot("real-java", store_dir.path(), delivery_dir.path(), "0.1.0");
     // Local (Required) + GitHub Release (Required)
-    snapshot.adapters.delivery_routes.push(github_route("github-route", "v"));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(github_route("github-route", "v"));
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
-    let mut registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
+    let mut registry =
+        build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     registry
         .register_delivery_destination(
             Arc::new(GitHubReleaseDestination::new(github.clone())),
@@ -499,7 +526,10 @@ fn java_08_partial_delivery_github_conflict() {
         DeliveryStatus::Failed,
         "github route should be Failed"
     );
-    let failure = github_route_view.failure.as_ref().expect("classified failure");
+    let failure = github_route_view
+        .failure
+        .as_ref()
+        .expect("classified failure");
     assert_eq!(
         failure.category,
         PublishFailureCategory::Conflict,
@@ -509,8 +539,7 @@ fn java_08_partial_delivery_github_conflict() {
     // 冲突时远端 Release 保持原样（不覆盖）
     let release = github.release("v0.1.0").expect("remote release");
     assert_eq!(
-        release.body,
-        "a foreign release without our manifest marker",
+        release.body, "a foreign release without our manifest marker",
         "conflicting release body should be unchanged"
     );
     assert!(release.assets.is_empty(), "no assets should be uploaded");

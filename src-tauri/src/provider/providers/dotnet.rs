@@ -80,7 +80,10 @@ impl BuiltInProvider {
                     cleanup_parameter: Some(DOTNET_CLEANUP_PARAMETER.to_string()),
                 }),
                 project_profiles: Some(dotnet_project_profiles()),
-                framework_tags: vec!["TargetFramework".to_string(), "TargetFrameworks".to_string()],
+                framework_tags: vec![
+                    "TargetFramework".to_string(),
+                    "TargetFrameworks".to_string(),
+                ],
             },
             ProviderCatalogEntry {
                 id: "dotnet".to_string(),
@@ -255,7 +258,10 @@ pub(crate) fn msbuild_property_args(spec: &PublishSpec) -> Vec<String> {
 /// 求值输出取最后一个非空行；Windows 分隔符统一为 `/`，去尾部斜杠。
 /// 相对路径按项目文件目录解析（与 `infer_output_dir` 的基准一致）。
 pub(crate) fn parse_msbuild_publish_dir(stdout: &str) -> Option<String> {
-    let line = stdout.lines().map(str::trim).rfind(|line| !line.is_empty())?;
+    let line = stdout
+        .lines()
+        .map(str::trim)
+        .rfind(|line| !line.is_empty())?;
     let normalized = line.replace('\\', "/");
     let trimmed = normalized.trim_end_matches('/');
     (!trimmed.is_empty()).then(|| trimmed.to_string())

@@ -16,13 +16,12 @@ pub use staging::{
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterRegistry, CancellationSignal, ChecksumProcessor,
-    CustomCommandProcessor,
-    FakeGitHubActionsBackend, GhCliGitHubReleaseApi, GitHubActionsBackend,
+    CustomCommandProcessor, FakeGitHubActionsBackend, GhCliGitHubReleaseApi, GitHubActionsBackend,
     GitHubReleaseDestination, LocalDirectoryDestination, LocalExecutionBackend,
-    OpenSshSftpTransport, SftpDeliveryDestination, StaticCredentialSource,
-    TemporaryArtifactStore, CHECKSUM_PROCESSOR_ID, CUSTOM_COMMAND_PROCESSOR_ID,
-    FAKE_GITHUB_ACTIONS_BACKEND_ID, GITHUB_ACTIONS_BACKEND_ID,
-    GITHUB_RELEASE_DESTINATION_ID, SFTP_DESTINATION_ID, TAURI_PROVIDER_ID,
+    OpenSshSftpTransport, SftpDeliveryDestination, StaticCredentialSource, TemporaryArtifactStore,
+    CHECKSUM_PROCESSOR_ID, CUSTOM_COMMAND_PROCESSOR_ID, FAKE_GITHUB_ACTIONS_BACKEND_ID,
+    GITHUB_ACTIONS_BACKEND_ID, GITHUB_RELEASE_DESTINATION_ID, SFTP_DESTINATION_ID,
+    TAURI_PROVIDER_ID,
 };
 use publish_domain::{
     AdapterIdentity, AdapterKind, AdapterSelection, AutomationRuntimeRevision,
@@ -89,11 +88,7 @@ fn built_in_adapter_identities() -> BTreeSet<AdapterIdentity> {
             1,
         ),
         AdapterIdentity::new(AdapterKind::ExecutionBackend, "local-execution", 1),
-        AdapterIdentity::new(
-            AdapterKind::ExecutionBackend,
-            GITHUB_ACTIONS_BACKEND_ID,
-            1,
-        ),
+        AdapterIdentity::new(AdapterKind::ExecutionBackend, GITHUB_ACTIONS_BACKEND_ID, 1),
         AdapterIdentity::new(AdapterKind::ArtifactStore, "temporary-artifact-store", 1),
         AdapterIdentity::new(AdapterKind::DeliveryDestination, "local-directory", 1),
     ]
@@ -249,7 +244,10 @@ pub fn validate_projection(projection: &RunnerProjection) -> Result<(), PublishE
     for (name, value) in [
         ("binding", &projection.binding_id),
         ("configuration", &projection.configuration_id),
-        ("configuration revision", &projection.configuration_revision_id),
+        (
+            "configuration revision",
+            &projection.configuration_revision_id,
+        ),
     ] {
         if value.trim().is_empty() {
             return Err(PublishError::InvalidPlan(format!(
@@ -404,7 +402,9 @@ fn env_credential_source(
             }
         }
     }
-    Ok(Arc::new(publish_adapters::EnvCredentialSource::new(entries)))
+    Ok(Arc::new(publish_adapters::EnvCredentialSource::new(
+        entries,
+    )))
 }
 
 fn register_project_provider(
@@ -505,10 +505,8 @@ fn register_execution_backend(
         ("local-execution", 1) => {
             registry.register_execution_backend(Arc::new(LocalExecutionBackend::new()), fixture)
         }
-        (GITHUB_ACTIONS_BACKEND_ID, 1) => registry.register_execution_backend(
-            Arc::new(GitHubActionsBackend::new(credentials)),
-            fixture,
-        ),
+        (GITHUB_ACTIONS_BACKEND_ID, 1) => registry
+            .register_execution_backend(Arc::new(GitHubActionsBackend::new(credentials)), fixture),
         // 无副作用模拟器：不在 built-in 身份集合内（决议 #96），只在投影
         // 显式选择时命中；离线契约测试经真实二进制走此分支。
         (FAKE_GITHUB_ACTIONS_BACKEND_ID, 1) => registry.register_execution_backend(
@@ -684,8 +682,7 @@ mod projection_template_tests {
     fn installed_template_projection_round_trips_and_verifies() {
         let projection = fixture_projection();
         let serialized = serde_json::to_string(&projection).expect("serialize template");
-        let decoded: RunnerProjection =
-            serde_json::from_str(&serialized).expect("decode template");
+        let decoded: RunnerProjection = serde_json::from_str(&serialized).expect("decode template");
         assert_eq!(decoded, projection);
         verify_installed_projection(&decoded).expect("installed runner serves the template");
     }

@@ -40,22 +40,17 @@ fn dotnet_rid() -> String {
 }
 
 /// 辅助：创建 Dotnet provider。
-fn dotnet_provider(
-    args: Vec<String>,
-    output_dir: PathBuf,
-) -> Arc<RealBuildProvider> {
+fn dotnet_provider(args: Vec<String>, output_dir: PathBuf) -> Arc<RealBuildProvider> {
     let project = sample_path("dotnet-console");
-    Arc::new(
-        RealBuildProvider::new(
-            "real-dotnet",
-            "dotnet:publish",
-            "dotnet",
-            args,
-            project,
-            output_dir,
-            classify_dotnet,
-        ),
-    )
+    Arc::new(RealBuildProvider::new(
+        "real-dotnet",
+        "dotnet:publish",
+        "dotnet",
+        args,
+        project,
+        output_dir,
+        classify_dotnet,
+    ))
 }
 
 /// 辅助：构建 GitHub Release 交付路线。
@@ -140,7 +135,12 @@ fn dotnet_01_self_contained_to_local() {
         ],
         output_dir,
     );
-    let snapshot = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let snapshot = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "0.1.0",
+    );
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
@@ -191,7 +191,12 @@ fn dotnet_02_framework_dependent_to_local() {
         ],
         output_dir,
     );
-    let snapshot = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let snapshot = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "0.1.0",
+    );
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
@@ -245,7 +250,12 @@ fn dotnet_03_framework_dependent_to_github_release() {
     );
     let github = Arc::new(FakeGitHubReleaseApi::new());
 
-    let mut snapshot = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let mut snapshot = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "0.1.0",
+    );
     // 替换交付路线为 GitHub Release
     snapshot.adapters.delivery_routes = vec![github_route("github-route", "v")];
 
@@ -255,23 +265,30 @@ fn dotnet_03_framework_dependent_to_github_release() {
         .register_project_provider(provider, &fixture)
         .expect("register provider");
     registry
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    GITHUB_TOKEN_REFERENCE,
-                    CredentialKind::Token,
-                    GITHUB_TOKEN_VALUE,
-                ),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new().with_secret(
+                        GITHUB_TOKEN_REFERENCE,
+                        CredentialKind::Token,
+                        GITHUB_TOKEN_VALUE,
+                    ),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
     registry
         .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
+            Arc::new(publish_adapters::TemporaryArtifactStore::new(
+                store_dir.path(),
+            )),
             &fixture,
         )
         .expect("register store");
@@ -332,16 +349,27 @@ fn dotnet_04_msbuild_properties_custom_gate() {
 
     let custom_processor = publish_adapters::CustomCommandProcessor::new(["test:gate"]);
 
-    let mut snapshot = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "1.0.0");
-    snapshot.adapters.artifact_processors.push(AdapterBinding::new(
-        "gate",
-        AdapterIdentity::new(AdapterKind::ArtifactProcessor, "custom-command", 1),
-        AdapterSettings::new(1)
-            .with_value("program", Value::String("test:gate".to_string()))
-            .with_value("args", Value::Array(vec![]))
-            .with_value("input_roles", Value::Array(vec![Value::String("build-output".to_string())]))
-            .with_value("output_roles", Value::Array(vec![])),
-    ));
+    let mut snapshot = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "1.0.0",
+    );
+    snapshot
+        .adapters
+        .artifact_processors
+        .push(AdapterBinding::new(
+            "gate",
+            AdapterIdentity::new(AdapterKind::ArtifactProcessor, "custom-command", 1),
+            AdapterSettings::new(1)
+                .with_value("program", Value::String("test:gate".to_string()))
+                .with_value("args", Value::Array(vec![]))
+                .with_value(
+                    "input_roles",
+                    Value::Array(vec![Value::String("build-output".to_string())]),
+                )
+                .with_value("output_roles", Value::Array(vec![])),
+        ));
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
@@ -349,37 +377,44 @@ fn dotnet_04_msbuild_properties_custom_gate() {
         .register_project_provider(provider, &fixture)
         .expect("register provider");
     registry
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry
         .register_artifact_processor(Arc::new(custom_processor), &fixture)
         .expect("register custom command");
     registry
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new(),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new(),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
     registry
         .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
+            Arc::new(publish_adapters::TemporaryArtifactStore::new(
+                store_dir.path(),
+            )),
             &fixture,
         )
         .expect("register store");
     registry
         .register_delivery_destination(
-            Arc::new(publish_adapters::LocalDirectoryDestination::new(delivery_dir.path())),
+            Arc::new(publish_adapters::LocalDirectoryDestination::new(
+                delivery_dir.path(),
+            )),
             &fixture,
         )
         .expect("register local");
     let runtime = PublishRuntime::new(registry);
 
     // 只验证计划：门禁节点应出现在计划中
-    let prepared = runtime
-        .prepare_attempt(&snapshot)
-        .expect("prepare attempt");
+    let prepared = runtime.prepare_attempt(&snapshot).expect("prepare attempt");
 
     let has_gate_node = prepared
         .plan
@@ -419,7 +454,12 @@ fn dotnet_05_custom_output_directory() {
         ],
         output_dir,
     );
-    let snapshot = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let snapshot = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "0.1.0",
+    );
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
@@ -485,7 +525,12 @@ fn dotnet_06_no_build_publish() {
         ],
         output_dir,
     );
-    let snapshot = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let snapshot = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "0.1.0",
+    );
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
@@ -542,9 +587,17 @@ fn dotnet_07_dual_route_local_sftp() {
     );
     let sftp = Arc::new(publish_adapters::FakeSftpServer::new());
 
-    let mut snapshot = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let mut snapshot = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "0.1.0",
+    );
     // 添加 SFTP 作为第二 Required 路线
-    snapshot.adapters.delivery_routes.push(sftp_route("sftp-route"));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(sftp_route("sftp-route"));
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
@@ -552,29 +605,38 @@ fn dotnet_07_dual_route_local_sftp() {
         .register_project_provider(provider, &fixture)
         .expect("register provider");
     registry
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    "sftp-key",
-                    CredentialKind::SshPrivateKey,
-                    "test-key-value",
-                ),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new().with_secret(
+                        "sftp-key",
+                        CredentialKind::SshPrivateKey,
+                        "test-key-value",
+                    ),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
     registry
         .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
+            Arc::new(publish_adapters::TemporaryArtifactStore::new(
+                store_dir.path(),
+            )),
             &fixture,
         )
         .expect("register store");
     registry
         .register_delivery_destination(
-            Arc::new(publish_adapters::LocalDirectoryDestination::new(delivery_dir.path())),
+            Arc::new(publish_adapters::LocalDirectoryDestination::new(
+                delivery_dir.path(),
+            )),
             &fixture,
         )
         .expect("register local");
@@ -639,40 +701,63 @@ fn dotnet_08_artifact_promotion_to_github_release() {
         ],
         output_dir,
     );
-    let snapshot = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let snapshot = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "0.1.0",
+    );
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
-    let attempt1 = run_publish(&runtime, &snapshot, "dotnet-console", "0.1.0", "dotnet-08-1");
+    let attempt1 = run_publish(
+        &runtime,
+        &snapshot,
+        "dotnet-console",
+        "0.1.0",
+        "dotnet-08-1",
+    );
     let manifest1 = assert_published(&attempt1);
     let original_digest = manifest1.digest.clone();
 
     // 第二次发布：推广到 GitHub Release（不重新构建）
     let github = Arc::new(FakeGitHubReleaseApi::new());
-    let mut snapshot2 = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let mut snapshot2 = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "0.1.0",
+    );
     snapshot2.promoted_manifest_digest = Some(original_digest.clone());
     snapshot2.adapters.delivery_routes = vec![github_route("github-route", "v")];
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot2.clone());
     let mut registry2 = AdapterRegistry::new();
     registry2
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry2
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    GITHUB_TOKEN_REFERENCE,
-                    CredentialKind::Token,
-                    GITHUB_TOKEN_VALUE,
-                ),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new().with_secret(
+                        GITHUB_TOKEN_REFERENCE,
+                        CredentialKind::Token,
+                        GITHUB_TOKEN_VALUE,
+                    ),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
     registry2
         .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
+            Arc::new(publish_adapters::TemporaryArtifactStore::new(
+                store_dir.path(),
+            )),
             &fixture,
         )
         .expect("register store");
@@ -684,7 +769,13 @@ fn dotnet_08_artifact_promotion_to_github_release() {
         .expect("register github");
     let runtime2 = PublishRuntime::new(registry2);
 
-    let attempt2 = run_publish(&runtime2, &snapshot2, "dotnet-console", "0.1.0", "dotnet-08-2");
+    let attempt2 = run_publish(
+        &runtime2,
+        &snapshot2,
+        "dotnet-console",
+        "0.1.0",
+        "dotnet-08-2",
+    );
     let manifest2 = attempt2.manifest.as_ref().expect("manifest");
     // 推广：digest 应与原 Manifest 一致
     assert_eq!(
@@ -739,9 +830,17 @@ fn dotnet_09_partial_delivery_github_rate_limited() {
         },
     );
 
-    let mut snapshot = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let mut snapshot = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "0.1.0",
+    );
     // Local (Required) + GitHub (Required)
-    snapshot.adapters.delivery_routes.push(github_route("github-route", "v"));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(github_route("github-route", "v"));
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
@@ -749,29 +848,38 @@ fn dotnet_09_partial_delivery_github_rate_limited() {
         .register_project_provider(provider, &fixture)
         .expect("register provider");
     registry
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    GITHUB_TOKEN_REFERENCE,
-                    CredentialKind::Token,
-                    GITHUB_TOKEN_VALUE,
-                ),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new().with_secret(
+                        GITHUB_TOKEN_REFERENCE,
+                        CredentialKind::Token,
+                        GITHUB_TOKEN_VALUE,
+                    ),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
     registry
         .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
+            Arc::new(publish_adapters::TemporaryArtifactStore::new(
+                store_dir.path(),
+            )),
             &fixture,
         )
         .expect("register store");
     registry
         .register_delivery_destination(
-            Arc::new(publish_adapters::LocalDirectoryDestination::new(delivery_dir.path())),
+            Arc::new(publish_adapters::LocalDirectoryDestination::new(
+                delivery_dir.path(),
+            )),
             &fixture,
         )
         .expect("register local");
@@ -868,7 +976,12 @@ fn dotnet_10_multiple_projectfile_selection() {
         ],
         output_dir,
     );
-    let snapshot = build_snapshot("real-dotnet", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let snapshot = build_snapshot(
+        "real-dotnet",
+        store_dir.path(),
+        delivery_dir.path(),
+        "0.1.0",
+    );
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 

@@ -11,8 +11,8 @@ use publish_domain::{
 };
 use serde_json::Value;
 
-mod credentials;
 pub mod bridge;
+mod credentials;
 mod fake;
 pub mod fixture;
 mod github_actions;
@@ -23,6 +23,12 @@ mod processors;
 mod sftp;
 pub mod tauri;
 
+pub use bridge::{
+    is_one_publish_owned_file, ArtifactEntryFilter, CleanCheckoutGuard,
+    DirectProviderExecutionPort, ExecutionSourceGuard, ProviderExecution, ProviderExecutionOutcome,
+    ProviderExecutionPort, SealedBuildCommand, SelectedProjectProvider,
+    EXECUTION_SNAPSHOT_FILE_PREFIX, SELECTED_PROVIDER_ID, SELECTED_PROVIDER_PROGRAM,
+};
 pub use credentials::{
     CredentialResolveFailure, CredentialSource, EnvCredentialSource, StaticCredentialSource,
 };
@@ -33,12 +39,6 @@ pub use fake::{
 pub use fixture::{
     fixture_candidate_identity, FixtureAppInspection, FixtureAppProvider, FIXTURE_BUILD_PROGRAM,
     FIXTURE_BUNDLE_ROLE, FIXTURE_INSPECT_ACTION, FIXTURE_MANIFEST_FILE_NAME, FIXTURE_PROVIDER_ID,
-};
-pub use bridge::{
-    is_one_publish_owned_file, ArtifactEntryFilter, CleanCheckoutGuard,
-    DirectProviderExecutionPort, ExecutionSourceGuard, ProviderExecution, ProviderExecutionOutcome,
-    ProviderExecutionPort, SealedBuildCommand, SelectedProjectProvider,
-    EXECUTION_SNAPSHOT_FILE_PREFIX, SELECTED_PROVIDER_ID, SELECTED_PROVIDER_PROGRAM,
 };
 pub use github_actions::{GitHubActionsBackend, GITHUB_ACTIONS_BACKEND_ID};
 pub use github_release::{
@@ -64,9 +64,8 @@ pub use sftp::{
 };
 pub use tauri::{
     SealedReleaseGate, TauriBuildDriver, TauriProjectInspection, TauriProjectProvider,
-    TauriRuntimeProvider, TauriVersionSource,
-    TauriVersionSourceKind, VersionMirror, VersionMirrorKind, TAURI_INSPECT_ACTION,
-    TAURI_PROVIDER_ID,
+    TauriRuntimeProvider, TauriVersionSource, TauriVersionSourceKind, VersionMirror,
+    VersionMirrorKind, TAURI_INSPECT_ACTION, TAURI_PROVIDER_ID,
 };
 
 pub const AUTOMATION_PROJECTION_CAPABILITY: &str = "automation-projection";

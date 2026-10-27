@@ -147,8 +147,7 @@ fn command_import_covers_every_declared_flag_alias_and_positional() {
 fn command_import_recovers_flags_outside_legacy_hand_maps() {
     let provider = provider_registry().get("go").expect("go provider");
     let schema = provider.get_schema().expect("go schema");
-    let result =
-        CommandParser::new("go".to_string()).parse("go build -ldflags=-s", &schema);
+    let result = CommandParser::new("go".to_string()).parse("go build -ldflags=-s", &schema);
     assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
     assert_eq!(
         result.parameters.get("ldflags"),
@@ -160,7 +159,10 @@ fn command_import_recovers_flags_outside_legacy_hand_maps() {
     let result = CommandParser::new("cargo".to_string())
         .parse("cargo build -v --target-dir ./target", &schema);
     assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
-    assert_eq!(result.parameters.get("verbose"), Some(&serde_json::json!(true)));
+    assert_eq!(
+        result.parameters.get("verbose"),
+        Some(&serde_json::json!(true))
+    );
     assert_eq!(
         result.parameters.get("target_dir"),
         Some(&serde_json::json!("./target"))
@@ -168,10 +170,12 @@ fn command_import_recovers_flags_outside_legacy_hand_maps() {
 
     let provider = provider_registry().get("dotnet").expect("dotnet provider");
     let schema = provider.get_schema().expect("dotnet schema");
-    let result =
-        CommandParser::new("dotnet".to_string()).parse("dotnet publish -nologo", &schema);
+    let result = CommandParser::new("dotnet".to_string()).parse("dotnet publish -nologo", &schema);
     assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
-    assert_eq!(result.parameters.get("no_logo"), Some(&serde_json::json!(true)));
+    assert_eq!(
+        result.parameters.get("no_logo"),
+        Some(&serde_json::json!(true))
+    );
 }
 
 /// 回归钉子（ADR-0059 项目配置宿主语义）：解决方案文件（.sln）不承载
@@ -184,10 +188,11 @@ fn solution_files_are_not_project_profile_hosts() {
     let discovery = dotnet.repository_discovery();
     assert!(dotnet.capabilities().project_profiles.is_some());
 
-    let sln_hit_as_solution = discovery
-        .solution_file_extensions
-        .iter()
-        .any(|extension| Path::new("/repo/App.sln").extension().is_some_and(|ext| ext.eq_ignore_ascii_case(extension.as_str())));
+    let sln_hit_as_solution = discovery.solution_file_extensions.iter().any(|extension| {
+        Path::new("/repo/App.sln")
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case(extension.as_str()))
+    });
     assert!(sln_hit_as_solution, "sln 必须被声明为 solution 扩展名");
 }
 

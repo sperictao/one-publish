@@ -353,8 +353,11 @@ impl ConfigProfile {
         };
 
         if let Some(project_binding) = revision.project_binding.as_deref() {
-            if crate::publish_runtime::project_binding_selector(&revision.provider_id, project_binding)
-                .is_none()
+            if crate::publish_runtime::project_binding_selector(
+                &revision.provider_id,
+                project_binding,
+            )
+            .is_none()
             {
                 return Some(format!(
                     "project_binding_provider_mismatch:{project_binding}"
@@ -376,7 +379,8 @@ impl ConfigProfile {
             ));
         }
 
-        if let Some(reason) = crate::publish_runtime::composition_blocked_reason(&revision.composition)
+        if let Some(reason) =
+            crate::publish_runtime::composition_blocked_reason(&revision.composition)
         {
             return Some(reason);
         }
@@ -732,7 +736,6 @@ impl RepoPublishConfig {
         self.selection.is_none() && self.drafts.is_empty() && self.profiles.is_empty()
     }
 
-
     pub fn create_profile(
         &mut self,
         name: String,
@@ -777,11 +780,21 @@ impl RepoPublishConfig {
         let position = self.profiles.iter().position(|profile| {
             profile.is_draft
                 && profile.deleted_at.is_none()
-                && profile.current_revision().is_some_and(|revision| revision.provider_id == content.provider_id)
+                && profile
+                    .current_revision()
+                    .is_some_and(|revision| revision.provider_id == content.provider_id)
         });
-        let sequence = position.map(|index| {
-            self.profiles[index].revisions.iter().map(|revision| revision.sequence).max().unwrap_or(0)
-        }).unwrap_or(0) + 1;
+        let sequence = position
+            .map(|index| {
+                self.profiles[index]
+                    .revisions
+                    .iter()
+                    .map(|revision| revision.sequence)
+                    .max()
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0)
+            + 1;
         let revision = PublishConfigurationRevision {
             id: new_configuration_identity("configuration-revision"),
             sequence,
@@ -844,9 +857,11 @@ impl RepoPublishConfig {
         &mut self,
         import: ConfigurationImport,
     ) -> Result<Option<&ConfigProfile>, crate::errors::AppError> {
-        let Some(profile) = self.profiles.iter_mut().find(|profile| {
-            profile.deleted_at.is_none() && profile.name == import.name
-        }) else {
+        let Some(profile) = self
+            .profiles
+            .iter_mut()
+            .find(|profile| profile.deleted_at.is_none() && profile.name == import.name)
+        else {
             return self.append_imported_profile(import);
         };
 
@@ -869,7 +884,10 @@ impl RepoPublishConfig {
         profile.profile_group = import.profile_group;
         let profile_id = profile.id.clone();
         profile.revisions.push(revision);
-        Ok(self.profiles.iter().find(|candidate| candidate.id == profile_id))
+        Ok(self
+            .profiles
+            .iter()
+            .find(|candidate| candidate.id == profile_id))
     }
 
     fn append_imported_profile(
