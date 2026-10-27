@@ -1118,3 +1118,194 @@ fn probe_failures_surface_as_classified_errors() {
         PublishFailureCategory::Transient
     );
 }
+
+fn classified_code(error: &PublishError) -> &str {
+    match error {
+        PublishError::Classified { failure } => failure.native_code.as_str(),
+        other => panic!("expected a classified failure, got {other}"),
+    }
+}
+
+#[test]
+fn observe_requires_a_submitted_delivery_receipt() {
+    // observe 只消费既有 publish receipt；缺失时是执行错误而非远端探测。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage the release envelope");
+
+    let error = fixture
+        .execute(&nodes[2], &manifest, &staged.envelopes, &[])
+        .expect_err("observe without a publish receipt must fail");
+    assert!(matches!(error, PublishError::Execution(_)));
+}
+
+#[test]
+fn observe_reports_release_not_observable_until_the_tag_exists() {
+    // receipt 已提交但远端尚无该 tag（job 未上传/尚未拉到）：瞬时态可重试。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage");
+    let submitted = DeliveryReceipt {
+        version: 1,
+        receipt_id: "receipt-submitted".to_string(),
+        revision: 1,
+        route_id: ROUTE_ID.to_string(),
+        manifest_digest: manifest.digest.clone(),
+        status: DeliveryStatus::Submitted,
+        external_reference: String::new(),
+    };
+
+    let error = fixture
+        .execute(
+            &nodes[2],
+            &manifest,
+            &staged.envelopes,
+            &[submitted],
+        )
+        .expect_err("a release that does not exist yet is not observable");
+    assert_eq!(
+        classified_category(&error),
+        PublishFailureCategory::Transient
+    );
+    assert_eq!(classified_code(&error), "release_not_observable");
+}
+
+#[test]
+fn observe_waits_out_a_draft_release_as_transient() {
+    // 我方 release 仍是 draft：瞬时态，不视为交付完成也不判冲突。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage");
+    let published = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish");
+
+    let mut draft = fixture.api.release("v1.2.3").expect("published release");
+    draft.draft = true;
+    fixture.api.seed_release(draft);
+
+    let error = fixture
+        .execute(
+            &nodes[2],
+            &manifest,
+            &staged.envelopes,
+            &published.receipts,
+        )
+        .expect_err("a draft release is still transient");
+    assert_eq!(
+        classified_category(&error),
+        PublishFailureCategory::Transient
+    );
+    assert_eq!(classified_code(&error), "release_still_draft");
+}
+
+#[test]
+fn observe_refuses_releases_not_delivered_from_this_manifest() {
+    // 同名 tag 但 body 无我方 manifest 标记：冲突而非覆盖（tag 不可变）。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage");
+    let published = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish");
+
+    let mut foreign = fixture.api.release("v1.2.3").expect("published release");
+    foreign.body = "hand-written release notes".to_string();
+    fixture.api.seed_release(foreign);
+
+    let error = fixture
+        .execute(
+            &nodes[2],
+            &manifest,
+            &staged.envelopes,
+            &published.receipts,
+        )
+        .expect_err("an unmanaged release must not be observed as ours");
+    assert_eq!(
+        classified_category(&error),
+        PublishFailureCategory::Conflict
+    );
+    assert_eq!(classified_code(&error), "release_not_managed");
+}
+
+#[test]
+fn observe_detects_manifest_digest_conflicts_on_the_tag() {
+    // 同名 tag 携带另一 manifest 摘要：产物集不同的冲突交付。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage");
+    let published = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish");
+
+    let mut conflicting = fixture
+        .api
+        .release("v1.2.3")
+        .expect("published release");
+    conflicting.body = format!(
+        "notes\n\n<!-- one-publish-manifest:{} -->",
+        sha256_hex(b"another artifact set")
+    );
+    fixture.api.seed_release(conflicting);
+
+    let error = fixture
+        .execute(
+            &nodes[2],
+            &manifest,
+            &staged.envelopes,
+            &published.receipts,
+        )
+        .expect_err("a different manifest digest is a conflict");
+    assert_eq!(
+        classified_category(&error),
+        PublishFailureCategory::Conflict
+    );
+    assert_eq!(classified_code(&error), "release_manifest_conflict");
+}
+
+#[test]
+fn observe_rejects_releases_missing_expected_assets() {
+    // 远端 release 缺资产/摘要漂移：冲突态——交付完整性不成立。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage");
+    let published = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish");
+
+    let mut degraded = fixture.api.release("v1.2.3").expect("published release");
+    degraded.assets.pop();
+    fixture.api.seed_release(degraded);
+
+    let error = fixture
+        .execute(
+            &nodes[2],
+            &manifest,
+            &staged.envelopes,
+            &published.receipts,
+        )
+        .expect_err("a release missing assets fails observation");
+    assert_eq!(
+        classified_category(&error),
+        PublishFailureCategory::Conflict
+    );
+    assert_eq!(classified_code(&error), "release_asset_missing");
+}
