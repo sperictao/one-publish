@@ -167,7 +167,12 @@ describe("ReleaseSettingsEditorDialog", () => {
     });
     const props = renderDialog();
 
-    fireEvent.click(await screen.findByTestId("release-settings-save"));
+    // draft 加载前保存按钮即渲染但 disabled——findByTestId 只等元素存在，
+    // fireEvent.click 落在禁用按钮上会被吞掉（覆盖插桩下 draft 加载变慢、
+    // 竞态窗口放大，曾两次打挂 CI）。先等按钮使能再点击。
+    const saveButton = await screen.findByTestId("release-settings-save");
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
 
     // ADR-0006：默认值没有签名决定，后端校验在保存前显式拒绝。
     // CI 覆盖插桩下异步 mutation 可能擦过 findBy 默认 1s 窗口——放宽到 3s。
