@@ -527,6 +527,9 @@ fn project_scan_candidates_from_context(context: &FileScanContext) -> ProjectSca
     }
 }
 
+/// All-provider convenience wrapper used by tests and the test-only
+/// scan_project_files utility; production callers pass an explicit provider.
+#[cfg(test)]
 pub fn scan_project_candidates_from_path(
     start_path: &Path,
 ) -> Result<ProjectScanCandidates, crate::errors::AppError> {

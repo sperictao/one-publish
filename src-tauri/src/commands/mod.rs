@@ -53,8 +53,8 @@ pub(crate) use repository::{
 };
 pub use repository::{
     check_repository_branch_connectivity, detect_repository_provider, read_project_publish_profile,
-    resolve_project_info, scan_project, scan_project_candidates,
-    scan_repository_branches, ProjectInfo, ProjectPublishProfileFile, ProjectScanCandidates,
+    resolve_project_info, scan_project, scan_project_candidates, scan_repository_branches,
+    ProjectInfo, ProjectPublishProfileFile, ProjectScanCandidates,
     RepositoryBranchConnectivityResult, RepositoryBranchScanResult, RepositoryProviderCandidate,
     RepositoryProviderDetection,
 };

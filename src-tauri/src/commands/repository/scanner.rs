@@ -379,6 +379,9 @@ pub async fn detect_repository_provider(
 }
 
 /// Scan project files for the detected provider.
+/// Retained as a test-only utility: the registered command was pruned (#204)
+/// once the UI consolidated on scan_project_candidates.
+#[cfg(test)]
 pub async fn scan_project_files(path: String) -> Result<Vec<String>, crate::errors::AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new(
         "commands::repository::scanner::scan_project_files",
