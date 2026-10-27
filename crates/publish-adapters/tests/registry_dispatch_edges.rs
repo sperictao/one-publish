@@ -1151,3 +1151,200 @@ fn registration_rejects_malformed_fragments_and_forbidden_values() {
         .expect_err("settings leaking forbidden values are rejected");
     assert!(error.to_string().contains("forbidden value"));
 }
+
+/// 凭据解析绑定把三类失败精确分类：绑定缺失需求 → CredentialNotBound、
+/// 来源查无引用 → CredentialReferenceMissing、来源拒绝 → CredentialAccessDenied。
+struct CredentialedProvider {
+    descriptor: AdapterDescriptor,
+}
+
+impl CredentialedProvider {
+    fn new() -> Self {
+        Self {
+            descriptor: AdapterDescriptor::new(
+                AdapterKind::ProjectProvider,
+                "credentialed-provider",
+                1,
+                AdapterSchema::new(1).with_credential(
+                    "deploy-token",
+                    publish_domain::CredentialKind::Token,
+                    "delivery token",
+                ),
+                PublishingCapability {
+                    provides: vec![],
+                    requires: vec![],
+                },
+            ),
+        }
+    }
+}
+
+impl AdapterContract for CredentialedProvider {
+    fn descriptor(&self) -> &AdapterDescriptor {
+        &self.descriptor
+    }
+
+    fn default_settings(&self) -> AdapterSettings {
+        AdapterSettings::new(1)
+    }
+
+    fn plan_fragment(
+        &self,
+        _snapshot: &PlanningInputSnapshot,
+        _settings: &AdapterSettings,
+    ) -> Result<Vec<publish_domain::PlanNodeTemplate>, PublishError> {
+        Ok(vec![])
+    }
+}
+
+impl ProjectProvider for CredentialedProvider {}
+
+struct DenyingBackend;
+impl AdapterContract for DenyingBackend {
+    fn descriptor(&self) -> &AdapterDescriptor {
+        static DESCRIPTOR: std::sync::OnceLock<AdapterDescriptor> = std::sync::OnceLock::new();
+        DESCRIPTOR.get_or_init(|| {
+            AdapterDescriptor::new(
+                AdapterKind::ExecutionBackend,
+                "denying-backend",
+                1,
+                AdapterSchema::new(1),
+                PublishingCapability {
+                    provides: vec![],
+                    requires: vec![],
+                },
+            )
+        })
+    }
+
+    fn default_settings(&self) -> AdapterSettings {
+        AdapterSettings::new(1)
+    }
+
+    fn plan_fragment(
+        &self,
+        _snapshot: &PlanningInputSnapshot,
+        _settings: &AdapterSettings,
+    ) -> Result<Vec<publish_domain::PlanNodeTemplate>, PublishError> {
+        Ok(vec![])
+    }
+}
+impl ExecutionBackend for DenyingBackend {
+    fn resolve_credential(
+        &self,
+        _reference: &str,
+    ) -> Result<ResolvedCredential, CredentialResolveFailure> {
+        Err(CredentialResolveFailure::AccessDenied)
+    }
+}
+
+#[test]
+fn binding_credential_resolution_stays_classified() {
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let mut registry = AdapterRegistry::new();
+    let provider = CredentialedProvider::new();
+    let provider_id = provider.descriptor().identity();
+    registry
+        .register_project_provider(Arc::new(provider), &fixture)
+        .expect("register provider");
+    let backend = DenyingBackend;
+    let backend_id = backend.descriptor().identity();
+    registry
+        .register_execution_backend(Arc::new(backend), &fixture)
+        .expect("register backend");
+    registry
+        .register_execution_backend(Arc::new(BareAdapter::new()), &fixture)
+        .expect("register bare backend");
+
+    // 绑定未声明 schema 要求的凭据。
+    let unbound = AdapterBinding::new("provider", provider_id.clone(), AdapterSettings::new(1));
+    assert!(matches!(
+        registry
+            .resolve_binding_credentials(&backend_id, &unbound)
+            .expect_err("unbound requirements are rejected"),
+        PublishError::CredentialNotBound { .. }
+    ));
+
+    // 后端身份必须是 ExecutionBackend。
+    let missing = AdapterBinding::new("provider", provider_id.clone(), AdapterSettings::new(1))
+        .with_credential("deploy-token", "vault://missing");
+    assert!(matches!(
+        registry
+            .resolve_binding_credentials(&provider_id, &missing)
+            .expect_err("non-backend identities cannot resolve credentials"),
+        PublishError::AdapterKindMismatch {
+            expected: AdapterKind::ExecutionBackend,
+            actual: AdapterKind::ProjectProvider,
+            ..
+        }
+    ));
+
+    // 来源查无引用 → CredentialReferenceMissing（BareAdapter 默认 resolve → Missing）。
+    let bare_id = AdapterIdentity::new(AdapterKind::ExecutionBackend, "bare-backend", 1);
+    assert!(matches!(
+        registry
+            .resolve_binding_credentials(&bare_id, &missing)
+            .expect_err("unresolvable references surface as missing"),
+        PublishError::CredentialReferenceMissing { .. }
+    ));
+
+    // 来源拒绝 → CredentialAccessDenied。
+    let denied = AdapterBinding::new("provider", provider_id, AdapterSettings::new(1))
+        .with_credential("deploy-token", "vault://secret");
+    assert!(matches!(
+        registry
+            .resolve_binding_credentials(&backend_id, &denied)
+            .expect_err("denied references stay denied"),
+        PublishError::CredentialAccessDenied { .. }
+    ));
+}
+
+#[test]
+fn registered_backends_execute_plans_through_the_registry() {
+    use publish_adapters::{FakeRemoteBackend, StaticCredentialSource};
+
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let mut registry = AdapterRegistry::new();
+    let backend = FakeRemoteBackend::new(Arc::new(StaticCredentialSource::new()));
+    let backend_id = backend.descriptor().identity();
+    registry
+        .register_execution_backend(Arc::new(backend), &fixture)
+        .expect("register backend");
+
+    let plan = publish_domain::PublishPlan {
+        version: publish_domain::PUBLISH_PLAN_VERSION,
+        snapshot_digest: "snapshot".to_string(),
+        adapters: vec![],
+        execution_backend: backend_id.clone(),
+        routes: vec![],
+        nodes: vec![node_with_adapter(AdapterIdentity::new(
+            AdapterKind::DeliveryDestination,
+            "dest",
+            1,
+        ))],
+        digest: "plan".to_string(),
+    };
+    let mut executor = NoopExecutor;
+    registry
+        .execute_plan(&backend_id, &plan, &mut executor)
+        .expect("registered backends interpret plans in order");
+
+    // schema 未声明的凭据名绑定也被拒绝，不得携带游离引用。
+    let mut registry = AdapterRegistry::new();
+    let provider = CredentialedProvider::new();
+    let provider_id = provider.descriptor().identity();
+    registry
+        .register_project_provider(Arc::new(provider), &fixture)
+        .expect("register provider");
+    let foreign = AdapterBinding::new("provider", provider_id, AdapterSettings::new(1))
+        .with_credential("undeclared", "vault://anything");
+    assert!(matches!(
+        registry
+            .resolve_binding_credentials(
+                &AdapterIdentity::new(AdapterKind::ExecutionBackend, "bare-backend", 1),
+                &foreign,
+            )
+            .expect_err("undeclared credential names are rejected"),
+        PublishError::CredentialNotDeclared { .. }
+    ));
+}
