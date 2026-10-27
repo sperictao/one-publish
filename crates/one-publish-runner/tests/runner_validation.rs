@@ -272,3 +272,280 @@ fn registry_rejects_adapters_the_runner_does_not_ship() {
         .expect("a projection cannot conjure adapters the binary lacks");
     assert!(matches!(error, PublishError::AdapterNotRegistered { .. }));
 }
+
+#[test]
+fn prepare_attempt_rejects_snapshots_without_the_pinned_revision() {
+    let temp = tempfile::tempdir().expect("temp dirs");
+    let mut snapshot = fixture_snapshot(
+        &temp.path().join("store").to_string_lossy(),
+        &temp.path().join("out").to_string_lossy(),
+    );
+    let revision = runtime_revision(&snapshot);
+    let registry = installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
+        .expect("materialize adapters");
+    let runner = StandaloneRunner::new(registry, revision).expect("runner");
+
+    // 缺省钉住：规划输入必须携带明确的 Runtime Revision（决议 #86）。
+    let error = runner
+        .prepare_attempt(&snapshot)
+        .expect_err("an unpinned snapshot must fail closed");
+    assert!(
+        error
+            .to_string()
+            .contains("missing its pinned runtime revision"),
+        "unexpected error: {error}"
+    );
+
+    // 钉住别的修订：预备尝试不得跨越修订边界执行。
+    snapshot.runtime_revision = "runtime-v1-ghost".to_string();
+    let error = runner
+        .prepare_attempt(&snapshot)
+        .expect_err("a foreign pinned revision must fail closed");
+    assert!(
+        error.to_string().contains("this runner provides"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn execute_rejects_attempts_pinned_to_another_runner_revision() {
+    let attempt = prepared_attempt();
+    let temp = tempfile::tempdir().expect("temp dirs");
+    let mut snapshot = fixture_snapshot(
+        &temp.path().join("store-b").to_string_lossy(),
+        &temp.path().join("out-b").to_string_lossy(),
+    );
+    // 不同的 Adapter 选择产生不同的修订身份（github-release 不在
+    // built-in 身份集合内，加入它会改变修订摘要）。
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(DeliveryRoute::optional(AdapterBinding::new(
+            "github-mirror",
+            AdapterIdentity::new(AdapterKind::DeliveryDestination, "github-release", 1),
+            AdapterSettings::new(1),
+        )));
+    snapshot.runtime_revision = runtime_revision(&snapshot).identifier();
+    let registry = installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
+        .expect("materialize second registry");
+    let other = StandaloneRunner::new(registry, runtime_revision(&snapshot)).expect("runner");
+
+    let error = other
+        .execute(&attempt, "attempt-revision-mismatch")
+        .expect_err("attempts pinned to another revision must fail closed");
+    assert!(
+        error.to_string().contains("but this runner provides"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn execute_rejects_a_prepared_attempt_that_no_longer_matches_its_snapshot() {
+    let mut attempt = prepared_attempt();
+    let temp = tempfile::tempdir().expect("temp dirs");
+    let mut snapshot = fixture_snapshot(
+        &temp.path().join("store-c").to_string_lossy(),
+        &temp.path().join("out-c").to_string_lossy(),
+    );
+    let revision = runtime_revision(&snapshot);
+    snapshot.runtime_revision = revision.identifier();
+    let registry = installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
+        .expect("materialize registry");
+    // 同一修订的 runner 消费被篡改过的 PreparedAttempt：重放规划逐字比对。
+    attempt.prepared.snapshot = snapshot.clone();
+    let runner = StandaloneRunner::new(registry, revision).expect("runner");
+    attempt.prepared.plan.nodes.pop();
+    attempt.prepared.plan.digest = attempt
+        .prepared
+        .plan
+        .recomputed_digest()
+        .expect("reseal tampered plan");
+
+    let error = runner
+        .execute(&attempt, "attempt-stale-prepared")
+        .expect_err("a drifted prepared plan must fail closed");
+    assert!(
+        error
+            .to_string()
+            .contains("no longer matches its sealed planning input"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn installed_registry_materializes_every_shipped_destination() {
+    let temp = tempfile::tempdir().expect("temp dirs");
+    for id in ["github-release", "sftp"] {
+        let mut snapshot = fixture_snapshot(
+            &temp.path().join(format!("store-{id}")).to_string_lossy(),
+            &temp.path().join(format!("out-{id}")).to_string_lossy(),
+        );
+        snapshot.adapters.delivery_routes = vec![DeliveryRoute::required(AdapterBinding::new(
+            "remote",
+            AdapterIdentity::new(AdapterKind::DeliveryDestination, id, 1),
+            AdapterSettings::new(1),
+        ))];
+        installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
+            .unwrap_or_else(|error| panic!("{id} must materialize: {error}"));
+    }
+
+    // 本地目录缺 directory 设置：构造点显式拒绝而不是物化出空路径。
+    let mut snapshot = fixture_snapshot(
+        &temp.path().join("store-local").to_string_lossy(),
+        &temp.path().join("out-local").to_string_lossy(),
+    );
+    snapshot.adapters.delivery_routes[0].binding.settings = AdapterSettings::new(1);
+    let error = installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
+        .err()
+        .expect("a directory-less local destination must fail closed");
+    assert!(
+        error.to_string().contains("directory is required"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn installed_registry_rejects_missing_required_settings_and_unshipped_adapters() {
+    let temp = tempfile::tempdir().expect("temp dirs");
+    let mut snapshot = fixture_snapshot(
+        &temp.path().join("store-d").to_string_lossy(),
+        &temp.path().join("out-d").to_string_lossy(),
+    );
+
+    // Provider 缺 config_path：物化前显式拒绝。
+    snapshot.adapters.project_provider.settings = AdapterSettings::new(1);
+    let error = installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
+        .err()
+        .expect("providers without required settings must fail closed");
+    assert!(
+        error.to_string().contains("config_path is required"),
+        "unexpected error: {error}"
+    );
+
+    // 产物存储缺 root_directory：同样显式拒绝。
+    let mut snapshot = fixture_snapshot(
+        &temp.path().join("store-e").to_string_lossy(),
+        &temp.path().join("out-e").to_string_lossy(),
+    );
+    snapshot.adapters.artifact_store.settings = AdapterSettings::new(1);
+    let error = installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
+        .err()
+        .expect("stores without a root directory must fail closed");
+    assert!(
+        error.to_string().contains("root_directory is required"),
+        "unexpected error: {error}"
+    );
+
+    // 未随二进制分发的 Destination 身份：不可由投影凭空创建。
+    let mut snapshot = fixture_snapshot(
+        &temp.path().join("store-f").to_string_lossy(),
+        &temp.path().join("out-f").to_string_lossy(),
+    );
+    snapshot.adapters.delivery_routes[0].binding.adapter =
+        AdapterIdentity::new(AdapterKind::DeliveryDestination, "unshipped-destination", 1);
+    let error = installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
+        .err()
+        .expect("unshipped destinations must fail closed");
+    assert!(matches!(error, PublishError::AdapterNotRegistered { .. }));
+}
+
+#[test]
+fn env_credential_source_joins_declared_requirements_with_secret_bindings() {
+    let temp = tempfile::tempdir().expect("temp dirs");
+    let secret = "ONE_PUBLISH_RUNNER_TEST_GH_TOKEN";
+    std::env::set_var(secret, "gh-token-value");
+
+    let mut snapshot = fixture_snapshot(
+        &temp.path().join("store-g").to_string_lossy(),
+        &temp.path().join("out-g").to_string_lossy(),
+    );
+    // 执行后端换成带凭据源的 Fake GitHub Actions：只有它消费 env 解析条目。
+    snapshot.adapters.execution_backend.adapter = AdapterIdentity::new(
+        AdapterKind::ExecutionBackend,
+        publish_adapters::FAKE_GITHUB_ACTIONS_BACKEND_ID,
+        1,
+    );
+    let github_route = AdapterBinding::new(
+        "github-route",
+        AdapterIdentity::new(AdapterKind::DeliveryDestination, "github-release", 1),
+        AdapterSettings::new(1),
+    )
+    .with_credential("github_token", "github-token-ref");
+    snapshot.adapters.delivery_routes = vec![
+        // 已声明凭据 + 有 Secret 映射：进入 env 解析条目。
+        DeliveryRoute::required(github_route.clone()),
+        // 未声明的凭据要求被跳过；声明了但缺 Secret 映射的引用也被跳过——
+        // 两条臂都不在物化期报错，由执行期凭据解析按分类显式失败。
+        DeliveryRoute::optional(
+            AdapterBinding::new(
+                "sftp-orphan",
+                AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
+                AdapterSettings::new(1),
+            )
+            .with_credential("undeclared-requirement", "ghost-ref"),
+        ),
+    ];
+    let secret_bindings = BTreeMap::from([("github-token-ref".to_string(), secret.to_string())]);
+    let registry = installed_registry(&snapshot, RunnerPorts::default(), &secret_bindings)
+        .expect("materialize registry with env credential source");
+
+    // 已映射引用经 env 解析出声明类型的凭据。
+    let resolved = registry
+        .resolve_binding_credentials(&snapshot.adapters.execution_backend.adapter, &github_route)
+        .expect("resolve mapped credential");
+    assert!(resolved.contains_key("github_token"));
+
+    // 缺 Secret 映射的引用解析为 ReferenceMissing——跳过臂的正确后果。
+    let unmapped = AdapterBinding::new(
+        "github-unmapped",
+        AdapterIdentity::new(AdapterKind::DeliveryDestination, "github-release", 1),
+        AdapterSettings::new(1),
+    )
+    .with_credential("github_token", "unmapped-ref");
+    let error = registry
+        .resolve_binding_credentials(&snapshot.adapters.execution_backend.adapter, &unmapped)
+        .expect_err("unmapped references must resolve as missing");
+    assert!(
+        matches!(error, PublishError::CredentialReferenceMissing { .. }),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn installed_registry_materializes_selected_provider_and_custom_processors() {
+    let temp = tempfile::tempdir().expect("temp dirs");
+    let mut snapshot = fixture_snapshot(
+        &temp.path().join("store-h").to_string_lossy(),
+        &temp.path().join("out-h").to_string_lossy(),
+    );
+    snapshot.adapters.project_provider = AdapterBinding::new(
+        "project",
+        AdapterIdentity::new(
+            AdapterKind::ProjectProvider,
+            publish_adapters::SELECTED_PROVIDER_ID,
+            1,
+        ),
+        AdapterSettings::new(1).with_value(
+            "spec_json",
+            Value::String("{\"program\":\"selected:builder\"}".to_string()),
+        ),
+    );
+    snapshot.adapters.artifact_processors = vec![
+        AdapterBinding::new(
+            "checksum",
+            AdapterIdentity::new(AdapterKind::ArtifactProcessor, "checksum", 1),
+            AdapterSettings::new(1),
+        ),
+        AdapterBinding::new(
+            "custom",
+            AdapterIdentity::new(
+                AdapterKind::ArtifactProcessor,
+                publish_adapters::CUSTOM_COMMAND_PROCESSOR_ID,
+                1,
+            ),
+            AdapterSettings::new(1).with_value("program", Value::String("custom:sign".to_string())),
+        ),
+    ];
+    installed_registry(&snapshot, RunnerPorts::default(), &BTreeMap::new())
+        .expect("selected provider and custom processors must materialize");
+}
