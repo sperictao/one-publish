@@ -170,8 +170,11 @@ describe("ReleaseSettingsEditorDialog", () => {
     fireEvent.click(await screen.findByTestId("release-settings-save"));
 
     // ADR-0006：默认值没有签名决定，后端校验在保存前显式拒绝。
+    // CI 覆盖插桩下异步 mutation 可能擦过 findBy 默认 1s 窗口——放宽到 3s。
     expect(
-      await screen.findByTestId("release-settings-error")
+      await screen.findByTestId("release-settings-error", undefined, {
+        timeout: 3000,
+      })
     ).toHaveTextContent(zh.errors.tauri_release_platform_signing_required);
     expect(props.onSaved).not.toHaveBeenCalled();
     expect(props.onOpenChange).not.toHaveBeenCalled();
