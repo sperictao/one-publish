@@ -32,7 +32,7 @@ tauri-plugin-updater = "2"
 rustls = { version = "=0.23.46", default-features = false }
 tauri-plugin-notification = "2"
 tauri-plugin-decorum = { path = "vendor/tauri-plugin-decorum" }
-dirs = "6.0"
+dirs = "7.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "time"] }
 thiserror = "2.0"
 anyhow = "1.0"
