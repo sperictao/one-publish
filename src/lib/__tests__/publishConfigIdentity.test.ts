@@ -6,9 +6,12 @@ import {
   createProjectProfileSelectedPreset,
   createRecentConfigRenderId,
   createUserProfileConfigKey,
+  getActiveProfileIdFromSelection,
   getProjectProfileNameFromConfigKey,
   getProjectProfileNameFromRenderId,
+  getProjectProfileNameFromSelection,
   getRecentConfigKeyFromRenderId,
+  getRecentConfigKeyFromSelection,
   getSelectedProjectProfileName,
   getUserProfileIdFromConfigKey,
   getUserProfileIdFromRenderId,
@@ -215,6 +218,52 @@ describe("publishConfigIdentity", () => {
         activeProviderId: "dotnet",
         selection: null,
       })
+    ).toBeNull();
+  });
+
+  it("rejects recent render ids whose config key does not parse", () => {
+    expect(getRecentConfigKeyFromRenderId("recent:not-a-key")).toBeNull();
+    expect(getRecentConfigKeyFromRenderId("pubxml:Release")).toBeNull();
+    expect(getRecentConfigKeyFromRenderId(null)).toBeNull();
+  });
+
+  it("returns null when normalizing an empty render id", () => {
+    expect(normalizeRenderableConfigId(null)).toBeNull();
+    expect(normalizeRenderableConfigId("")).toBeNull();
+  });
+
+  it("extracts profile identities from selection unions", () => {
+    const userProfile = {
+      kind: "user-profile" as const,
+      profileId: "p-1",
+      configKey: "userprofile:p-1" as const,
+    };
+    const projectProfile = {
+      kind: "project-profile" as const,
+      profileName: "Release",
+      configKey: "pubxml:Release" as const,
+    };
+    const preset = {
+      kind: "preset" as const,
+      presetId: "fast",
+      configKey: "preset:fast" as const,
+    };
+
+    expect(getActiveProfileIdFromSelection(userProfile)).toBe("p-1");
+    expect(getActiveProfileIdFromSelection(projectProfile)).toBeNull();
+
+    expect(getProjectProfileNameFromSelection(projectProfile)).toBe("Release");
+    expect(getProjectProfileNameFromSelection(userProfile)).toBeNull();
+
+    expect(getRecentConfigKeyFromSelection(userProfile)).toBe(
+      "userprofile:p-1"
+    );
+    expect(getRecentConfigKeyFromSelection(preset)).toBe("preset:fast");
+    expect(
+      getRecentConfigKeyFromSelection({
+        kind: "provider" as const,
+        providerId: "dotnet",
+      } as never)
     ).toBeNull();
   });
 });
