@@ -26,7 +26,7 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
-    "doctor": "npx react-doctor@latest",
+    "doctor": "react-doctor",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
