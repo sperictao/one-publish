@@ -68,4 +68,41 @@ describe("installFrontendErrorHooks", () => {
       "[unhandledrejection] Error: invoke 失败"
     );
   });
+
+  it("非 Error 的 rejection reason 走 JSON.stringify 描述", () => {
+    setTauriInternals(true);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    installFrontendErrorHooks();
+
+    const event = new Event("unhandledrejection");
+    Object.defineProperty(event, "reason", { value: { code: 42 } });
+    window.dispatchEvent(event);
+    expect(consoleSpy).toHaveBeenCalledWith('[unhandledrejection] {"code":42}');
+  });
+
+  it("JSON.stringify 不可用结果回落 String（undefined 与循环引用）", () => {
+    setTauriInternals(true);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    installFrontendErrorHooks();
+
+    // JSON.stringify(Symbol()) === undefined → ?? String(reason)
+    const symbolEvent = new Event("unhandledrejection");
+    Object.defineProperty(symbolEvent, "reason", {
+      value: Symbol("aborted"),
+    });
+    window.dispatchEvent(symbolEvent);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "[unhandledrejection] Symbol(aborted)"
+    );
+
+    // 循环引用让 JSON.stringify 抛错 → catch → String(reason)
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const circularEvent = new Event("unhandledrejection");
+    Object.defineProperty(circularEvent, "reason", { value: circular });
+    window.dispatchEvent(circularEvent);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "[unhandledrejection] [object Object]"
+    );
+  });
 });
