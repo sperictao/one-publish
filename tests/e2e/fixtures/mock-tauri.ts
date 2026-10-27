@@ -470,6 +470,73 @@ export async function installMockTauri(
         };
       };
 
+      // 模块级 createConfigProfile 的页面内副本：init script 运行于页面
+      // 上下文，外部作用域不可达。结构与外层保持一致。
+      const createConfigProfile = (
+        id: string,
+        name: string,
+        createdAt: string
+      ): ConfigProfile => {
+        const revisionId = `${id}-revision-1`;
+        return {
+          id,
+          name,
+          profileGroup: null,
+          createdAt,
+          isSystemDefault: false,
+          isDraft: false,
+          currentRevisionId: revisionId,
+          revisions: [
+            {
+              id: revisionId,
+              sequence: 1,
+              createdAt,
+              contractVersion: 1,
+              providerId: "dotnet",
+              providerVersion: "1",
+              settingsVersion: 1,
+              parameters: {},
+              composition: {
+                executionBackend: {
+                  adapterId: "local-execution",
+                  settingsVersion: 1,
+                  settings: {},
+                  credentials: {},
+                },
+                artifactStore: {
+                  adapterId: "temporary-artifact-store",
+                  settingsVersion: 1,
+                  settings: {},
+                  credentials: {},
+                },
+                artifactProcessors: [
+                  {
+                    adapterId: "checksum",
+                    settingsVersion: 1,
+                    settings: {},
+                    credentials: {},
+                  },
+                ],
+                deliveryRoutes: [
+                  {
+                    routeId: "local-delivery",
+                    required: true,
+                    destination: {
+                      adapterId: "local-directory",
+                      settingsVersion: 1,
+                      settings: {},
+                      credentials: {},
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          deletedAt: null,
+          blockedReason: null,
+        };
+      };
+
       const appState = clone(opts.appState) as AppState;
       const providerList = clone(opts.providers) as ProviderCatalogEntry[];
       const dotnetSchema = clone(opts.dotnetSchema) as ParameterSchema;
@@ -674,7 +741,38 @@ export async function installMockTauri(
 
             case "remove_repository":
             case "reorder_repositories":
-            case "save_profile":
+            case "save_profile": {
+              // 与 store/commands.rs#save_profile 对齐：在目标仓库追加配置
+              // 并返回新 AppState（前端保存后按名称回读新配置身份）。
+              const repoId = args?.repoId as string;
+              const name = args?.name as string;
+              const repo = appState.repositories?.find((r) => r.id === repoId);
+              if (!repo) {
+                throw { code: "repository_not_found", message: "仓库不存在" };
+              }
+              const profile = createConfigProfile(
+                `profile-${name}`,
+                name,
+                new Date().toISOString()
+              );
+              if (typeof args?.profileGroup === "string" && args.profileGroup) {
+                profile.profileGroup = args.profileGroup;
+              }
+              const revision = profile.revisions[0];
+              if (typeof args?.providerId === "string") {
+                revision.providerId = args.providerId;
+              }
+              if (args?.parameters && typeof args.parameters === "object") {
+                revision.parameters =
+                  args.parameters as typeof revision.parameters;
+              }
+              repo.publishConfig.profiles = [
+                ...(repo.publishConfig.profiles ?? []),
+                profile,
+              ];
+              return clone({ ...appState, executionHistory: [] });
+            }
+
             case "update_profile":
             case "delete_profile":
             case "remove_recent_publish_config":
