@@ -24,11 +24,30 @@ fn main() -> ExitCode {
     }
 }
 
+const USAGE: &str =
+    "usage: one-publish-runner <verify|prepare-from-projection|execute> <path> [arguments]";
+
+const HELP: &str = "\
+one-publish-runner — standalone One Publish execution runner
+
+usage:
+  verify <projection.json>
+      validate an installed automation projection (integrity + pinned runtime)
+  prepare-from-projection <projection.json> <checkout-root> <tag:<tag>|version:<version>>
+      replay the deterministic planner for a trigger and print the sealed attempt as JSON
+  execute <attempt.json> <attempt-id> [any|linux|macos|windows]
+      execute a sealed attempt; an optional platform affinity runs one shard
+
+exit status: 0 success · 1 failure · 128+<signal> when a termination
+signal cancels the run";
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let command = args.next().ok_or(
-        "usage: one-publish-runner <verify|prepare-from-projection|execute> <path> [arguments]",
-    )?;
+    let command = args.next().ok_or(USAGE)?;
+    if matches!(command.as_str(), "-h" | "--help" | "help") {
+        println!("{HELP}");
+        return Ok(());
+    }
     let path = args.next().ok_or("projection path is required")?;
 
     match command.as_str() {

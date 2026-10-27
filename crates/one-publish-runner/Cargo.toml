@@ -1,5 +1,6 @@
 [package]
 name = "one-publish-runner"
+description = "Standalone One Publish execution runner: verifies automation projections, replays the deterministic planner, and executes sealed publish attempts."
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
