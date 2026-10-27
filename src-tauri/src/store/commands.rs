@@ -248,14 +248,19 @@ pub async fn get_repository(repo_id: String) -> Result<Repository, AppError> {
     with_read_state(|state| find_repository(&state.repositories, &repo_id).cloned())
 }
 
+/// 新增仓库：判重后入列并选中新增项。
+fn add_repository_in_state(state: &mut AppState, repo: &Repository) -> Result<(), AppError> {
+    ensure_repository_path_absent(&state.repositories, &repo.path)?;
+    state.repositories.push(repo.clone());
+    state.selected_repo_id = Some(repo.id.clone());
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn add_repository(app: tauri::AppHandle, repo: Repository) -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::add_repository");
     let mut state = get_state();
-    ensure_repository_path_absent(&state.repositories, &repo.path)?;
-
-    state.repositories.push(repo.clone());
-    state.selected_repo_id = Some(repo.id);
+    add_repository_in_state(&mut state, &repo)?;
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
 }
@@ -283,6 +288,13 @@ fn merge_repository_metadata(existing: &Repository, mut update: Repository) -> R
     update
 }
 
+/// 更新仓库前的暂存：定位既有仓库并继承权威 publish_config（含历史修订）。
+/// 返回的合并结果仍需经项目绑定校验才可写回。
+fn stage_repository_update(state: &AppState, repo: Repository) -> Result<Repository, AppError> {
+    let existing = find_repository(&state.repositories, &repo.id)?;
+    Ok(merge_repository_metadata(existing, repo))
+}
+
 #[tauri::command]
 pub async fn update_repository(
     app: tauri::AppHandle,
@@ -291,8 +303,7 @@ pub async fn update_repository(
     let _timer =
         crate::commands::middleware::CommandTimer::new("store::commands::update_repository");
     let mut state = get_state();
-    let existing = find_repository(&state.repositories, &repo.id)?;
-    let repo = merge_repository_metadata(existing, repo);
+    let repo = stage_repository_update(&state, repo)?;
     validate_repository_project_binding(&repo).await?;
     let repo_id = repo.id.clone();
     *find_repository_mut(&mut state.repositories, &repo_id)? = repo;
@@ -301,14 +312,9 @@ pub async fn update_repository(
     Ok(get_bootstrap_state())
 }
 
-#[tauri::command]
-pub async fn reorder_repositories(
-    app: tauri::AppHandle,
-    repo_ids: Vec<String>,
-) -> Result<AppState, AppError> {
-    let _timer =
-        crate::commands::middleware::CommandTimer::new("store::commands::reorder_repositories");
-    let mut state = get_state();
+/// 应用仓库重排：成员集校验先于同序短路——请求必须恰好覆盖当前 id 集合；
+/// 相同顺序返回 false 表示无需落盘。
+fn apply_repository_reorder(state: &mut AppState, repo_ids: Vec<String>) -> Result<bool, AppError> {
     let requested_ids = normalize_ordered_ids(repo_ids);
     let current_ids = state
         .repositories
@@ -319,10 +325,25 @@ pub async fn reorder_repositories(
     ensure_exact_order_match(&current_ids, &requested_ids, "repository_order_mismatch")?;
 
     if current_ids == requested_ids {
-        return Ok(get_bootstrap_state());
+        return Ok(false);
     }
 
-    state.repositories = apply_repository_order(state.repositories, requested_ids);
+    state.repositories =
+        apply_repository_order(std::mem::take(&mut state.repositories), requested_ids);
+    Ok(true)
+}
+
+#[tauri::command]
+pub async fn reorder_repositories(
+    app: tauri::AppHandle,
+    repo_ids: Vec<String>,
+) -> Result<AppState, AppError> {
+    let _timer =
+        crate::commands::middleware::CommandTimer::new("store::commands::reorder_repositories");
+    let mut state = get_state();
+    if !apply_repository_reorder(&mut state, repo_ids)? {
+        return Ok(get_bootstrap_state());
+    }
 
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
@@ -418,17 +439,12 @@ pub struct PublishDraftSubmission {
     pub base_revision: Option<PublishBaseRevisionRef>,
 }
 
-#[tauri::command]
-pub async fn update_publish_edit_state(
-    repo_id: String,
+/// 编辑状态更新（§4.1 v4）：草稿优先——写入草稿时自动选中该草稿作用域；
+/// 仅给选择时校验所选修订与仓库 Provider 一致。两者皆空为合法 no-op。
+fn apply_publish_edit_update(
+    repo: &mut Repository,
     update: PublishEditStateUpdate,
-) -> Result<AppState, AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new(
-        "store::commands::update_publish_edit_state",
-    );
-    let mut state = get_state();
-    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
-
+) -> Result<(), AppError> {
     if let Some(draft) = update.draft {
         let project_binding = upsert_edit_draft(
             repo,
@@ -445,6 +461,20 @@ pub async fn update_publish_edit_state(
         ensure_selection_matches_repository_provider(repo, &selection)?;
         repo.publish_config.selection = Some(selection);
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_publish_edit_state(
+    repo_id: String,
+    update: PublishEditStateUpdate,
+) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "store::commands::update_publish_edit_state",
+    );
+    let mut state = get_state();
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
+    apply_publish_edit_update(repo, update)?;
 
     update_state(state)?;
     Ok(get_bootstrap_state())
@@ -690,6 +720,17 @@ pub async fn update_profile_release_settings(
 
 /// 显式换绑到当前仓库候选（决议 #78）：换绑是显式动作，产一版新修订；
 /// 与更新保存的"继承绑定"语义互补。
+/// 换绑前解析配置的 Provider：取当前修订的 provider_id，缺失或已删除的
+/// 配置（含无当前修订）报 profile_not_found。
+fn resolve_rebind_provider(repo: &Repository, profile_id: &str) -> Result<String, AppError> {
+    repo.publish_config
+        .profile(profile_id)
+        .filter(|profile| profile.deleted_at.is_none())
+        .and_then(|profile| profile.current_revision())
+        .map(|revision| revision.provider_id.clone())
+        .ok_or_else(|| super::types::profile_not_found_error(profile_id))
+}
+
 #[tauri::command]
 pub async fn rebind_profile_project(
     app: tauri::AppHandle,
@@ -701,13 +742,7 @@ pub async fn rebind_profile_project(
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
-    let provider_id = repo
-        .publish_config
-        .profile(&profile_id)
-        .filter(|profile| profile.deleted_at.is_none())
-        .and_then(|profile| profile.current_revision())
-        .map(|revision| revision.provider_id.clone())
-        .ok_or_else(|| super::types::profile_not_found_error(&profile_id))?;
+    let provider_id = resolve_rebind_provider(repo, &profile_id)?;
     let project_binding = repository_project_binding(repo, &provider_id);
     repo.publish_config.rebind_profile_project(
         &profile_id,
@@ -720,6 +755,27 @@ pub async fn rebind_profile_project(
     Ok(response)
 }
 
+/// 删除配置并清掉其最近使用键（`userprofile:{id}`）——墓碑与最近列表
+/// 同属一次状态变更，避免留下悬空的 recent 条目。
+fn delete_profile_in_state(
+    state: &mut AppState,
+    repo_id: &str,
+    profile_id: &str,
+) -> Result<(), AppError> {
+    {
+        let repo = find_repository_mut(&mut state.repositories, repo_id)?;
+        repo.publish_config
+            .delete_profile(profile_id, chrono::Utc::now().to_rfc3339())?;
+    }
+    remove_recent_publish_config_state(
+        &mut state.recent_repo_ids,
+        &mut state.recent_config_keys_by_repo,
+        repo_id,
+        &format!("userprofile:{profile_id}"),
+    );
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn delete_profile(
     app: tauri::AppHandle,
@@ -728,20 +784,25 @@ pub async fn delete_profile(
 ) -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::delete_profile");
     let mut state = get_state();
-    {
-        let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
-        repo.publish_config
-            .delete_profile(&profile_id, chrono::Utc::now().to_rfc3339())?;
-    }
-    remove_recent_publish_config_state(
-        &mut state.recent_repo_ids,
-        &mut state.recent_config_keys_by_repo,
-        &repo_id,
-        &format!("userprofile:{profile_id}"),
-    );
+    delete_profile_in_state(&mut state, &repo_id, &profile_id)?;
     let response = state.clone();
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(response)
+}
+
+/// 置顶最近配置：仓库必须先存在；返回是否真正改变了最近列表。
+fn push_recent_config_in_state(
+    state: &mut AppState,
+    repo_id: &str,
+    config_key: &str,
+) -> Result<bool, AppError> {
+    find_repository(&state.repositories, repo_id)?;
+    Ok(push_recent_publish_config_state(
+        &mut state.recent_repo_ids,
+        &mut state.recent_config_keys_by_repo,
+        repo_id,
+        config_key,
+    ))
 }
 
 #[tauri::command]
@@ -754,14 +815,7 @@ pub async fn push_recent_publish_config(
         "store::commands::push_recent_publish_config",
     );
     let mut state = get_state();
-    find_repository(&state.repositories, &repo_id)?;
-
-    if !push_recent_publish_config_state(
-        &mut state.recent_repo_ids,
-        &mut state.recent_config_keys_by_repo,
-        &repo_id,
-        &config_key,
-    ) {
+    if !push_recent_config_in_state(&mut state, &repo_id, &config_key)? {
         return Ok(get_bootstrap_state());
     }
 
@@ -818,21 +872,18 @@ pub async fn replace_recent_publish_config_key(
     Ok(get_bootstrap_state())
 }
 
-#[tauri::command]
-pub async fn reorder_recent_publish_configs(
-    app: tauri::AppHandle,
-    repo_id: String,
+/// 重排最近配置：仓库必须存在；请求键须恰好覆盖当前集合（先校验后同序
+/// 短路）；返回是否写入了新顺序。
+fn apply_recent_config_reorder(
+    state: &mut AppState,
+    repo_id: &str,
     config_keys: Vec<String>,
-) -> Result<AppState, AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new(
-        "store::commands::reorder_recent_publish_configs",
-    );
-    let mut state = get_state();
-    find_repository(&state.repositories, &repo_id)?;
+) -> Result<bool, AppError> {
+    find_repository(&state.repositories, repo_id)?;
 
     let current_keys = state
         .recent_config_keys_by_repo
-        .get(&repo_id)
+        .get(repo_id)
         .cloned()
         .unwrap_or_default();
     let requested_keys = normalize_ordered_ids(config_keys);
@@ -844,12 +895,28 @@ pub async fn reorder_recent_publish_configs(
     )?;
 
     if current_keys == requested_keys {
-        return Ok(get_bootstrap_state());
+        return Ok(false);
     }
 
     state
         .recent_config_keys_by_repo
-        .insert(repo_id, requested_keys);
+        .insert(repo_id.to_string(), requested_keys);
+    Ok(true)
+}
+
+#[tauri::command]
+pub async fn reorder_recent_publish_configs(
+    app: tauri::AppHandle,
+    repo_id: String,
+    config_keys: Vec<String>,
+) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "store::commands::reorder_recent_publish_configs",
+    );
+    let mut state = get_state();
+    if !apply_recent_config_reorder(&mut state, &repo_id, config_keys)? {
+        return Ok(get_bootstrap_state());
+    }
 
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
@@ -945,6 +1012,21 @@ pub async fn add_execution_record(
     Ok(history)
 }
 
+/// 写快照路径：记录不存在时给出 execution_record_not_found（附 record_id）。
+fn set_snapshot_in_state(
+    state: &mut AppState,
+    record_id: &str,
+    snapshot_path: String,
+) -> Result<(), AppError> {
+    if !set_record_snapshot_path(&mut state.execution_history, record_id, snapshot_path) {
+        return Err(
+            AppError::validation_with_code("未找到执行记录", "execution_record_not_found")
+                .with_details(record_id.to_string()),
+        );
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn set_execution_record_snapshot(
     record_id: String,
@@ -954,12 +1036,7 @@ pub async fn set_execution_record_snapshot(
         "store::commands::set_execution_record_snapshot",
     );
     let mut state = get_state();
-    if !set_record_snapshot_path(&mut state.execution_history, &record_id, snapshot_path) {
-        return Err(
-            AppError::validation_with_code("未找到执行记录", "execution_record_not_found")
-                .with_details(record_id),
-        );
-    }
+    set_snapshot_in_state(&mut state, &record_id, snapshot_path)?;
 
     let history = state.execution_history.clone();
     update_state(state)?;
@@ -1821,6 +1898,348 @@ mod tests {
         assert_eq!(
             draft.settings,
             crate::tauri_release::TauriReleaseConfig::default()
+        );
+    }
+
+    #[test]
+    fn add_repository_in_state_selects_new_repo_and_rejects_duplicates() {
+        use super::{add_repository_in_state, AppState};
+
+        let mut state = AppState::default();
+        let repo = test_repository("r1", "/repo-one");
+        add_repository_in_state(&mut state, &repo).expect("add repository");
+        assert_eq!(state.repositories.len(), 1);
+        assert_eq!(state.selected_repo_id.as_deref(), Some("r1"));
+
+        let duplicate = test_repository("r2", "/repo-one/");
+        let error = add_repository_in_state(&mut state, &duplicate)
+            .expect_err("normalized duplicate path must be rejected");
+        assert_eq!(error.code.as_deref(), Some("repository_exists"));
+        assert_eq!(state.repositories.len(), 1);
+    }
+
+    #[test]
+    fn stage_repository_update_inherits_publish_config_and_requires_existing_repo() {
+        use super::{stage_repository_update, AppState};
+
+        let mut existing = test_repository("r1", "/repo");
+        existing
+            .publish_config
+            .create_profile(
+                "Release".to_string(),
+                "dotnet".to_string(),
+                json!({ "configuration": "Release" }),
+                None,
+                None,
+                "2026-11-02T10:00:00Z".to_string(),
+            )
+            .expect("create profile");
+        let mut state = AppState::default();
+        state.repositories.push(existing);
+
+        let update = Repository {
+            name: "Renamed".to_string(),
+            publish_config: RepoPublishConfig::default(),
+            ..test_repository("r1", "/repo")
+        };
+        let staged = stage_repository_update(&state, update).expect("stage update");
+        assert_eq!(staged.name, "Renamed");
+        assert_eq!(staged.publish_config.profiles.len(), 1);
+
+        let error = stage_repository_update(&state, test_repository("ghost", "/elsewhere"))
+            .expect_err("unknown repository must be rejected");
+        assert_eq!(error.code.as_deref(), Some("repository_not_found"));
+    }
+
+    #[test]
+    fn apply_repository_reorder_validates_membership_before_noop() {
+        use super::{apply_repository_reorder, AppState};
+
+        let mut state = AppState::default();
+        state.repositories = vec![
+            test_repository("r1", "/one"),
+            test_repository("r2", "/two"),
+            test_repository("r3", "/three"),
+        ];
+
+        let error = apply_repository_reorder(&mut state, vec!["r1".to_string(), "r2".to_string()])
+            .expect_err("subset must be rejected");
+        assert_eq!(error.code.as_deref(), Some("repository_order_mismatch"));
+
+        let same_order = vec!["r1".to_string(), "r2".to_string(), "r3".to_string()];
+        assert!(
+            !apply_repository_reorder(&mut state, same_order).expect("same order is a valid no-op"),
+            "identical order must report unchanged"
+        );
+
+        let reordered = vec!["r3".to_string(), "r1".to_string(), "r2".to_string()];
+        assert!(apply_repository_reorder(&mut state, reordered).expect("apply reorder"));
+        let ids = state
+            .repositories
+            .iter()
+            .map(|repository| repository.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["r3", "r1", "r2"]);
+    }
+
+    #[test]
+    fn apply_publish_edit_update_selects_draft_scope_or_validates_revision() {
+        use super::{apply_publish_edit_update, PublishDraftSubmission, PublishEditStateUpdate};
+        use crate::store::PublishSelectionRef;
+
+        // 空更新是合法 no-op
+        let mut repo = test_repository("r1", "/repo");
+        apply_publish_edit_update(
+            &mut repo,
+            PublishEditStateUpdate {
+                selection: None,
+                draft: None,
+            },
+        )
+        .expect("empty update is a no-op");
+        assert!(repo.publish_config.selection.is_none());
+
+        // 草稿写入自动选中草稿作用域
+        apply_publish_edit_update(
+            &mut repo,
+            PublishEditStateUpdate {
+                selection: None,
+                draft: Some(PublishDraftSubmission {
+                    provider_id: "dotnet".to_string(),
+                    project_binding: Some("dotnet:App.csproj".to_string()),
+                    parameters: json!({ "configuration": "Release" }),
+                    base_revision: None,
+                }),
+            },
+        )
+        .expect("draft upsert");
+        match repo.publish_config.selection.as_ref() {
+            Some(PublishSelectionRef::Draft {
+                provider_id,
+                project_binding,
+            }) => {
+                assert_eq!(provider_id, "dotnet");
+                assert_eq!(project_binding.as_deref(), Some("dotnet:App.csproj"));
+            }
+            other => panic!("expected draft selection, got {other:?}"),
+        }
+        assert_eq!(repo.publish_config.drafts.len(), 1);
+
+        // 未声明 Provider 的仓库允许选任意修订（provider 校验在专门用例覆盖）
+        let profile = repo
+            .publish_config
+            .create_profile(
+                "Pinned".to_string(),
+                "dotnet".to_string(),
+                json!({}),
+                None,
+                None,
+                "2026-11-02T10:00:00Z".to_string(),
+            )
+            .expect("create profile")
+            .clone();
+        apply_publish_edit_update(
+            &mut repo,
+            PublishEditStateUpdate {
+                selection: Some(PublishSelectionRef::Revision {
+                    configuration_id: profile.id.clone(),
+                }),
+                draft: None,
+            },
+        )
+        .expect("selection update");
+        assert_eq!(
+            repo.publish_config.selection,
+            Some(PublishSelectionRef::Revision {
+                configuration_id: profile.id,
+            })
+        );
+    }
+
+    #[test]
+    fn apply_publish_edit_update_rejects_selection_of_foreign_provider() {
+        use super::{apply_publish_edit_update, PublishEditStateUpdate};
+        use crate::store::PublishSelectionRef;
+
+        let mut repo = test_repository("r1", "/repo");
+        repo.provider_id = Some("dotnet".to_string());
+        let foreign = repo
+            .publish_config
+            .create_profile(
+                "Cargo".to_string(),
+                "cargo".to_string(),
+                json!({}),
+                None,
+                None,
+                "2026-11-02T10:00:00Z".to_string(),
+            )
+            .expect("create cargo profile")
+            .clone();
+
+        let error = apply_publish_edit_update(
+            &mut repo,
+            PublishEditStateUpdate {
+                selection: Some(PublishSelectionRef::Revision {
+                    configuration_id: foreign.id,
+                }),
+                draft: None,
+            },
+        )
+        .expect_err("foreign-provider selection must be rejected");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_selection_provider_mismatch")
+        );
+        assert!(repo.publish_config.selection.is_none());
+    }
+
+    #[test]
+    fn resolve_rebind_provider_rejects_missing_or_deleted_profiles() {
+        use super::resolve_rebind_provider;
+
+        let mut repo = test_repository("r1", "/repo");
+        let error = resolve_rebind_provider(&repo, "missing")
+            .expect_err("unknown profile must be rejected");
+        assert_eq!(error.code.as_deref(), Some("profile_not_found"));
+        assert_eq!(error.details.as_deref(), Some("missing"));
+
+        let profile = repo
+            .publish_config
+            .create_profile(
+                "Release".to_string(),
+                "dotnet".to_string(),
+                json!({}),
+                None,
+                None,
+                "2026-11-02T10:00:00Z".to_string(),
+            )
+            .expect("create profile")
+            .clone();
+        assert_eq!(
+            resolve_rebind_provider(&repo, &profile.id).expect("live profile"),
+            "dotnet"
+        );
+
+        repo.publish_config
+            .delete_profile(&profile.id, "2026-11-02T11:00:00Z".to_string())
+            .expect("tombstone profile");
+        let error = resolve_rebind_provider(&repo, &profile.id)
+            .expect_err("deleted profile must be rejected");
+        assert_eq!(error.code.as_deref(), Some("profile_not_found"));
+    }
+
+    #[test]
+    fn delete_profile_in_state_tombstones_and_cleans_recent_key() {
+        use super::{delete_profile_in_state, AppState};
+
+        let mut state = AppState::default();
+        let mut repo = test_repository("r1", "/repo");
+        let profile = repo
+            .publish_config
+            .create_profile(
+                "Release".to_string(),
+                "dotnet".to_string(),
+                json!({}),
+                None,
+                None,
+                "2026-11-02T10:00:00Z".to_string(),
+            )
+            .expect("create profile")
+            .clone();
+        state.repositories.push(repo);
+        state.recent_config_keys_by_repo.insert(
+            "r1".to_string(),
+            vec![format!("userprofile:{}", profile.id)],
+        );
+
+        delete_profile_in_state(&mut state, "r1", &profile.id).expect("delete profile");
+        let repo = &state.repositories[0];
+        assert!(repo
+            .publish_config
+            .profile(&profile.id)
+            .expect("tombstone kept")
+            .deleted_at
+            .is_some());
+        assert!(state
+            .recent_config_keys_by_repo
+            .get("r1")
+            .map(|keys| keys.is_empty())
+            .unwrap_or(true));
+
+        let error = delete_profile_in_state(&mut state, "ghost", "p")
+            .expect_err("missing repo must be rejected");
+        assert_eq!(error.code.as_deref(), Some("repository_not_found"));
+    }
+
+    #[test]
+    fn push_recent_config_in_state_requires_existing_repo() {
+        use super::{push_recent_config_in_state, AppState};
+
+        let mut state = AppState::default();
+        let error = push_recent_config_in_state(&mut state, "ghost", "userprofile:x")
+            .expect_err("missing repo must be rejected");
+        assert_eq!(error.code.as_deref(), Some("repository_not_found"));
+
+        state.repositories.push(test_repository("r1", "/repo"));
+        assert!(push_recent_config_in_state(&mut state, "r1", "userprofile:p1").expect("push key"));
+        assert_eq!(
+            state.recent_config_keys_by_repo.get("r1"),
+            Some(&vec!["userprofile:p1".to_string()])
+        );
+    }
+
+    #[test]
+    fn apply_recent_config_reorder_validates_membership_before_noop() {
+        use super::{apply_recent_config_reorder, AppState};
+
+        let mut state = AppState::default();
+        state.repositories.push(test_repository("r1", "/repo"));
+        state
+            .recent_config_keys_by_repo
+            .insert("r1".to_string(), vec!["a".to_string(), "b".to_string()]);
+
+        let error = apply_recent_config_reorder(&mut state, "ghost", Vec::new())
+            .expect_err("missing repo must be rejected");
+        assert_eq!(error.code.as_deref(), Some("repository_not_found"));
+
+        let error = apply_recent_config_reorder(&mut state, "r1", vec!["a".to_string()])
+            .expect_err("subset must be rejected");
+        assert_eq!(error.code.as_deref(), Some("recent_config_order_mismatch"));
+
+        assert!(
+            !apply_recent_config_reorder(&mut state, "r1", vec!["a".to_string(), "b".to_string()],)
+                .expect("same order is a no-op"),
+            "identical order must report unchanged"
+        );
+
+        assert!(apply_recent_config_reorder(
+            &mut state,
+            "r1",
+            vec!["b".to_string(), "a".to_string()],
+        )
+        .expect("apply reorder"));
+        assert_eq!(
+            state.recent_config_keys_by_repo.get("r1"),
+            Some(&vec!["b".to_string(), "a".to_string()])
+        );
+    }
+
+    #[test]
+    fn set_snapshot_in_state_maps_missing_record_to_error() {
+        use super::{set_snapshot_in_state, AppState};
+
+        let mut state = AppState::default();
+        let error = set_snapshot_in_state(&mut state, "missing", "/s.json".to_string())
+            .expect_err("missing record must be rejected");
+        assert_eq!(error.code.as_deref(), Some("execution_record_not_found"));
+        assert_eq!(error.details.as_deref(), Some("missing"));
+
+        state.execution_history.push(test_record());
+        set_snapshot_in_state(&mut state, "rec-1", "/snapshots/r1.json".to_string())
+            .expect("set snapshot");
+        assert_eq!(
+            state.execution_history[0].snapshot_path.as_deref(),
+            Some("/snapshots/r1.json")
         );
     }
 }
