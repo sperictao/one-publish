@@ -208,9 +208,6 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       if (options.isCancelled()) {
         return false;
       }
-      if (options.isCancelled()) {
-        return false;
-      }
       await abortPublishPreparation({
         ...options,
         level: "error",
@@ -231,9 +228,6 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         return false;
       }
     } catch (err) {
-      if (options.isCancelled()) {
-        return false;
-      }
       if (options.isCancelled()) {
         return false;
       }
@@ -274,9 +268,6 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         }
         outputPreflight = accessRequest.preflight;
       } catch (err) {
-        if (options.isCancelled()) {
-          return false;
-        }
         if (options.isCancelled()) {
           return false;
         }

@@ -410,3 +410,329 @@ describe("createPublishPreflightPipeline", () => {
     });
   });
 });
+
+describe("cancellation interleaves", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.runEnvironmentCheck.mockResolvedValue(envResult());
+    mocks.preflightPublishOutput.mockResolvedValue(preflight());
+  });
+
+  function cancelling() {
+    const state = { flag: false };
+    return {
+      state,
+      isCancelled: () => state.flag,
+    };
+  }
+
+  it("stops after the environment check resolves when cancelled", async () => {
+    const c = cancelling();
+    mocks.runEnvironmentCheck.mockImplementation(async () => {
+      c.state.flag = true;
+      return envResult();
+    });
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(mocks.preflightPublishOutput).not.toHaveBeenCalled();
+  });
+
+  it("stops inside the critical branch when cancelled", async () => {
+    const c = cancelling();
+    mocks.runEnvironmentCheck.mockResolvedValue(
+      envResult([issue("critical", "dotnet missing")])
+    );
+    const d = deps();
+    d.setEnvironmentLastCheck.mockImplementation(() => {
+      c.state.flag = true;
+    });
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("stops inside the warning branch when cancelled", async () => {
+    const c = cancelling();
+    mocks.runEnvironmentCheck.mockResolvedValue(
+      envResult([issue("warning", "old sdk")])
+    );
+    const d = deps();
+    d.setEnvironmentLastCheck.mockImplementation(() => {
+      c.state.flag = true;
+    });
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("swallows the environment check failure when cancelled", async () => {
+    const c = cancelling();
+    mocks.runEnvironmentCheck.mockImplementation(async () => {
+      c.state.flag = true;
+      throw new Error("probe down");
+    });
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("stops before output preflight when cancelled", async () => {
+    const c = cancelling();
+    const d = deps();
+    d.setEnvironmentLastCheck.mockImplementation(() => {
+      c.state.flag = true;
+    });
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(mocks.preflightPublishOutput).not.toHaveBeenCalled();
+  });
+
+  it("stops after output preflight resolves when cancelled", async () => {
+    const c = cancelling();
+    mocks.preflightPublishOutput.mockImplementation(async () => {
+      c.state.flag = true;
+      return preflight();
+    });
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("swallows the output preflight failure when cancelled", async () => {
+    const c = cancelling();
+    mocks.preflightPublishOutput.mockImplementation(async () => {
+      c.state.flag = true;
+      throw new Error("io");
+    });
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("stops inside the incompatible branch when cancelled", async () => {
+    const c = cancelling();
+    mocks.preflightPublishOutput.mockImplementation(async () => {
+      c.state.flag = true;
+      return preflight({
+        validation: { status: "incompatible", issue: null },
+      });
+    });
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("stops inside the access request when the window restore cancels", async () => {
+    const c = cancelling();
+    mocks.preflightPublishOutput.mockResolvedValue(deniedPreflight());
+    const d = deps();
+    d.restoreMainWindowIfNeeded.mockImplementation(async () => {
+      c.state.flag = true;
+    });
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(mocks.requestProtectedOutputAccess).not.toHaveBeenCalled();
+  });
+
+  it("stops at the second denied check when the request cancels", async () => {
+    const c = cancelling();
+    mocks.preflightPublishOutput.mockResolvedValue(deniedPreflight());
+    mocks.requestProtectedOutputAccess.mockImplementation(async () => {
+      c.state.flag = true;
+      return { preflight: deniedPreflight() };
+    });
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("swallows the access request failure when cancelled", async () => {
+    const c = cancelling();
+    mocks.preflightPublishOutput.mockResolvedValue(deniedPreflight());
+    mocks.requestProtectedOutputAccess.mockImplementation(async () => {
+      c.state.flag = true;
+      throw new Error("access io");
+    });
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("stops the abort flow after the tray sync when cancelled", async () => {
+    const c = cancelling();
+    mocks.runEnvironmentCheck.mockResolvedValue(
+      envResult([issue("critical", "dotnet missing")])
+    );
+    const d = deps();
+    d.syncTrayPublishStatus.mockImplementation(async () => {
+      c.state.flag = true;
+    });
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled, trayStatusEffect: true })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("stops the abort flow after notification when cancelled", async () => {
+    const c = cancelling();
+    mocks.runEnvironmentCheck.mockResolvedValue(
+      envResult([issue("critical", "dotnet missing")])
+    );
+    const d = deps();
+    d.notifyFeedback.mockImplementation(async () => {
+      c.state.flag = true;
+      return true;
+    });
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.resetLogCapture).not.toHaveBeenCalled();
+    expect(d.restoreMainWindowIfNeeded).not.toHaveBeenCalled();
+  });
+
+  it("skips the window restore when cancelled after log reset", async () => {
+    const c = cancelling();
+    mocks.runEnvironmentCheck.mockResolvedValue(
+      envResult([issue("critical", "dotnet missing")])
+    );
+    const d = deps();
+    d.resetLogCapture.mockImplementation(() => {
+      c.state.flag = true;
+    });
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled: c.isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.resetLogCapture).toHaveBeenCalled();
+    expect(d.restoreMainWindowIfNeeded).not.toHaveBeenCalled();
+  });
+
+  it("returns early from abort when already cancelled at entry", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(
+      envResult([issue("critical", "dotnet missing")])
+    );
+    let calls = 0;
+    const isCancelled = () => ++calls >= 4;
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+    expect(d.restoreMainWindowIfNeeded).not.toHaveBeenCalled();
+  });
+
+  it("stops inside the incompatible branch at its cancel point", async () => {
+    mocks.preflightPublishOutput.mockResolvedValue(
+      preflight({ validation: { status: "incompatible", issue: null } })
+    );
+    let calls = 0;
+    const isCancelled = () => ++calls >= 5;
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("returns null from the access request when cancelled at its entry", async () => {
+    mocks.preflightPublishOutput.mockResolvedValue(deniedPreflight());
+    let calls = 0;
+    const isCancelled = () => ++calls >= 5;
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.restoreMainWindowIfNeeded).not.toHaveBeenCalled();
+    expect(mocks.requestProtectedOutputAccess).not.toHaveBeenCalled();
+  });
+
+  it("stops at the post-request denied check when cancelled", async () => {
+    mocks.preflightPublishOutput.mockResolvedValue(deniedPreflight());
+    mocks.requestProtectedOutputAccess.mockResolvedValue({
+      preflight: deniedPreflight(),
+    });
+    let calls = 0;
+    const isCancelled = () => ++calls >= 8;
+    const d = deps();
+    const ok = await createPublishPreflightPipeline(d).runPublishPreflight(
+      SPEC,
+      options({ isCancelled })
+    );
+    expect(ok).toBe(false);
+    expect(d.notifyFeedback).not.toHaveBeenCalled();
+  });
+
+  it("refuses runtime output access when cancelled after the restore", async () => {
+    const c = cancelling();
+    const d = deps();
+    d.restoreMainWindowIfNeeded.mockImplementation(async () => {
+      c.state.flag = true;
+    });
+    mocks.requestPreparedOutputDirectoryAccess.mockResolvedValue(true);
+    const ok = await createPublishPreflightPipeline(
+      d
+    ).requestRuntimeOutputAccess(
+      {
+        status: "blocked",
+        diagnostics: [
+          { code: "publish_output_access_denied", message: "denied" },
+        ],
+        outputPreflight: { outputDir: "/out", accessStatus: "denied" },
+      } as PreparedPublishRuntime,
+      c.isCancelled
+    );
+    expect(ok).toBe(false);
+    expect(mocks.requestPreparedOutputDirectoryAccess).not.toHaveBeenCalled();
+  });
+});
