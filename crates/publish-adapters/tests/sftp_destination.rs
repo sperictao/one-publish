@@ -1506,3 +1506,325 @@ fn observe_reports_exhausted_receipt_revision_ranges() {
         .expect_err("an exhausted receipt revision cannot advance");
     assert!(matches!(error, PublishError::Execution(_)));
 }
+
+#[test]
+fn sftp_cli_failures_classify_every_openssh_pattern() {
+    use publish_adapters::{parse_sftp_cli_failure, SftpTransportFailure};
+
+    let authentication = [
+        "Permission denied (publickey,password).",
+        "deploy@x: authentication failed",
+        "no supported authentication methods available",
+        "Host key verification failed.",
+        "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!",
+    ];
+    for stderr in authentication {
+        assert!(
+            matches!(
+                parse_sftp_cli_failure(stderr),
+                SftpTransportFailure::Authentication { .. }
+            ),
+            "{stderr} must classify as Authentication"
+        );
+    }
+
+    assert!(matches!(
+        parse_sftp_cli_failure("mkdir /srv: permission denied"),
+        SftpTransportFailure::PermissionDenied { .. }
+    ));
+
+    let network = [
+        "ssh: connect to host x port 22: connection refused",
+        "ssh: connect to host x port 22: connection timed out",
+        "connection reset by peer",
+        "connection closed by remote host",
+        "ssh: could not resolve hostname x: nodename nor servname provided",
+        "ssh: connect to host x: network is unreachable",
+        "client_loop: send disconnect: broken pipe",
+        "operation timed out",
+    ];
+    for stderr in network {
+        assert!(
+            matches!(
+                parse_sftp_cli_failure(stderr),
+                SftpTransportFailure::Network { .. }
+            ),
+            "{stderr} must classify as Network"
+        );
+    }
+
+    assert!(matches!(
+        parse_sftp_cli_failure("remote stat: unexpected reply"),
+        SftpTransportFailure::Protocol { .. }
+    ));
+}
+
+#[test]
+fn summarized_settings_omit_empty_username_and_host() {
+    let fixture = Fixture::new();
+
+    let anonymous = settings().with_value("username", Value::String(String::new()));
+    let summary = fixture
+        .destination
+        .summarize_settings(&anonymous)
+        .expect("summarize settings");
+    assert!(!summary.contains('@'), "{summary} leaks no login segment");
+
+    let hostless = settings().with_value("host", Value::String(String::new()));
+    let summary = fixture
+        .destination
+        .summarize_settings(&hostless)
+        .expect("summarize settings");
+    assert_eq!(summary, fixture.destination.descriptor().id);
+}
+
+#[test]
+fn execution_rejects_foreign_sftp_actions() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let mut node = fixture.nodes(&settings()).remove(0);
+    node.operation = publish_domain::PlanOperation::AdapterAction {
+        action: "not-an-sftp-action".to_string(),
+        inputs: BTreeMap::new(),
+    };
+
+    let error = fixture
+        .execute(&node, &manifest, &[], &[])
+        .expect_err("foreign actions cannot execute on the sftp destination");
+    assert!(error
+        .to_string()
+        .contains("is not an sftp delivery operation"));
+}
+
+#[test]
+fn staging_requires_the_sealed_release_version_input() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let mut node = fixture.nodes(&settings()).remove(0);
+    if let publish_domain::PlanOperation::AdapterAction { inputs, .. } = &mut node.operation {
+        inputs.remove("version");
+    }
+
+    let error = fixture
+        .execute(&node, &manifest, &[], &[])
+        .expect_err("stage nodes need the sealed release version");
+    assert!(matches!(error, PublishError::InvalidPlan(_)));
+    assert!(error.to_string().contains("release version"));
+}
+
+#[test]
+fn observation_reports_records_that_are_not_yet_observable() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+    let published = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish the delivery");
+
+    // 交付记录整体缺失（而非不完整）：观察报告 delivery_not_observable。
+    let endpoint = publish_adapters::SftpEndpoint {
+        host: "files.example.com".to_string(),
+        port: 2022,
+        username: "deploy".to_string(),
+    };
+    let key = CredentialValue::new(KEY_VALUE);
+    publish_adapters::SftpTransport::remove(
+        fixture.server.as_ref(),
+        &key,
+        &endpoint,
+        &final_path(SFTP_DELIVERY_RECORD_NAME),
+    )
+    .expect("drop the delivery record");
+
+    let error = fixture
+        .execute(&nodes[2], &manifest, &staged.envelopes, &published.receipts)
+        .expect_err("a missing record is not observable");
+    assert_eq!(
+        classified_category(&error),
+        PublishFailureCategory::Transient
+    );
+}
+
+#[test]
+fn external_references_join_targets_and_directories_cleanly() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+
+    // 无前导斜杠的 remote_path：引用用 '/' 拼接目标与目录。
+    let relative = settings().with_value("remote_path", Value::String("srv/releases".to_string()));
+    let nodes = fixture.nodes(&relative);
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+    let published = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish the delivery");
+    assert_eq!(
+        published.receipts[0].external_reference,
+        "sftp://deploy@files.example.com:2022/srv/releases/1.2.3"
+    );
+
+    // 尾斜杠被 remote_directory 规整：不产出双斜杠引用。
+    let trailing =
+        settings().with_value("remote_path", Value::String("/srv/releases/".to_string()));
+    let nodes = fixture.nodes(&trailing);
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+    let published = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish the delivery");
+    assert_eq!(
+        published.receipts[0].external_reference,
+        "sftp://deploy@files.example.com:2022/srv/releases/1.2.3"
+    );
+}
+
+#[test]
+fn probing_requires_a_configured_remote_path() {
+    let fixture = Fixture::new();
+    let identity = probe_identity("digest");
+    let settings = settings().with_value("remote_path", Value::String(String::new()));
+
+    let error = fixture
+        .destination
+        .probe_delivery(&settings, &identity, &fixture.credentials)
+        .expect_err("probing without remote_path cannot observe the remote");
+    assert_eq!(classified_code(&error), "remote_path_missing");
+}
+
+#[test]
+fn staged_envelopes_must_carry_a_well_formed_file_selection() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+    let published = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish the delivery");
+
+    // files 载荷存在但结构损坏 → invalid selection，区别于缺失 files。
+    let mut tampered = staged.envelopes[0].clone();
+    tampered
+        .content
+        .insert("files".to_string(), Value::String("corrupt".to_string()));
+    let error = fixture
+        .execute(&nodes[2], &manifest, &[tampered], &published.receipts)
+        .expect_err("a malformed file selection cannot be observed");
+    assert!(error
+        .to_string()
+        .contains("invalid delivery file selection"));
+}
+
+#[test]
+fn publishing_rejects_files_the_sealed_manifest_does_not_declare() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // 把封装中的清单文件换成 Manifest 未声明的名字——封存边界拒绝。
+    let mut tampered = staged.envelopes[0].clone();
+    let files = tampered
+        .content
+        .get_mut("files")
+        .and_then(Value::as_array_mut)
+        .expect("staged file list");
+    files
+        .iter_mut()
+        .find(|file| file.get("name") == Some(&Value::String("Demo.msi".to_string())))
+        .expect("msi entry")
+        .as_object_mut()
+        .expect("file entry is an object")
+        .insert("name".to_string(), Value::String("Ghost.msi".to_string()));
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[tampered], &[])
+        .expect_err("undeclared files cannot be published");
+    assert!(error
+        .to_string()
+        .contains("not declared by the sealed manifest"));
+}
+
+#[test]
+fn publishing_fails_loudly_when_sealed_artifacts_cannot_be_read() {
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    // 清单仍引用该路径，但字节已不可读 → Io，不静默跳过。
+    let locator = manifest
+        .artifacts
+        .iter()
+        .find(|entry| entry.file_name == "Demo.msi")
+        .expect("msi entry")
+        .locator
+        .clone();
+    std::fs::remove_file(&locator).expect("remove the sealed artifact");
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect_err("unreadable sealed artifacts cannot be published");
+    assert!(matches!(error, PublishError::Io { .. }));
+}
+
+#[test]
+fn synchronized_envelopes_are_revalidated_against_sealed_settings() {
+    use publish_adapters::CancellationSignal;
+
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage envelope");
+
+    let context = AdapterExecutionContext {
+        attempt_id: "attempt-sftp",
+        plan_digest: "plan-digest",
+        snapshot_digest: "snapshot-digest",
+        artifacts: &[],
+        manifest: Some(&manifest),
+        envelopes: &[],
+        receipts: &[],
+        credentials: &fixture.credentials,
+        cancellation: CancellationSignal::new(),
+    };
+    fixture
+        .destination
+        .validate_staged_envelope(&nodes[0], &context, &staged.envelopes[0])
+        .expect("the staged envelope validates against its settings");
+
+    let mut foreign = staged.envelopes[0].clone();
+    foreign.content.insert(
+        "remote_directory".to_string(),
+        Value::String("/elsewhere".to_string()),
+    );
+    let error = fixture
+        .destination
+        .validate_staged_envelope(&nodes[0], &context, &foreign)
+        .expect_err("foreign envelopes cannot pass revalidation");
+    assert!(error
+        .to_string()
+        .contains("does not match its sealed SFTP settings"));
+
+    let context = AdapterExecutionContext {
+        manifest: None,
+        ..context
+    };
+    let error = fixture
+        .destination
+        .validate_staged_envelope(&nodes[0], &context, &staged.envelopes[0])
+        .expect_err("revalidation requires the sealed manifest");
+    assert!(matches!(error, PublishError::MissingArtifactManifest));
+}
