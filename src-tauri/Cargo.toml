@@ -45,7 +45,7 @@ hex = "0.4"
 json5 = "0.4"
 regex = "1.11"
 semver = "1.0"
-toml_edit = "0.24"
+toml_edit = "0.25"
 ts-rs = { version = "12.0.1", features = ["chrono-impl", "serde-json-impl"] }
 publish-adapters = { path = "../crates/publish-adapters" }
 publish-domain = { path = "../crates/publish-domain" }
