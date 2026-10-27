@@ -1363,3 +1363,151 @@ fn resolved_secrets_never_reach_envelopes_receipts_events_or_errors() {
         )
         .expect("the sftp destination carries no secrets in its contract surface");
 }
+
+fn classified_code(error: &PublishError) -> &str {
+    match error {
+        PublishError::Classified { failure } => failure.native_code.as_str(),
+        other => panic!("expected a classified failure, got {other}"),
+    }
+}
+
+#[test]
+fn staging_rejects_versions_that_cannot_form_a_remote_directory() {
+    // 版本号直接拼进远端发布目录：路径分隔/逃逸段在封存期就必须拒绝。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let escaped = snapshot_with_release_input(BTreeMap::from([(
+        "version".to_string(),
+        Value::String("../escape".to_string()),
+    )]));
+    let nodes = fixture.nodes_for(&escaped, &settings());
+
+    let error = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect_err("a path-unsafe version cannot stage a release directory");
+    assert_eq!(
+        classified_category(&error),
+        PublishFailureCategory::Validation
+    );
+    assert_eq!(classified_code(&error), "release_directory_invalid");
+}
+
+#[test]
+fn publish_requires_the_resolved_ssh_key_credential() {
+    // 凭据在执行边界解析：缺 ssh_private_key 是执行错误而非传输失败。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage the delivery envelope");
+
+    let empty = BTreeMap::new();
+    let context = AdapterExecutionContext {
+        attempt_id: "attempt-sftp",
+        plan_digest: "plan-digest",
+        snapshot_digest: manifest.planning_snapshot_digest.as_str(),
+        artifacts: &[],
+        manifest: Some(&manifest),
+        envelopes: &staged.envelopes,
+        receipts: &[],
+        credentials: &empty,
+        cancellation: publish_adapters::CancellationSignal::new(),
+    };
+    let error = fixture
+        .destination
+        .execute_node(&nodes[1], &context)
+        .expect_err("publishing without a resolved key must fail");
+    assert!(matches!(error, PublishError::Execution(_)));
+}
+
+#[test]
+fn observe_requires_a_staged_delivery_envelope() {
+    // observe 先定位本路线的封存 envelope；缺失是执行错误而非远端探测。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let submitted = DeliveryReceipt {
+        version: 1,
+        receipt_id: "receipt-submitted".to_string(),
+        revision: 1,
+        route_id: ROUTE_ID.to_string(),
+        manifest_digest: manifest.digest.clone(),
+        status: DeliveryStatus::Submitted,
+        external_reference: String::new(),
+    };
+
+    let error = fixture
+        .execute(&nodes[2], &manifest, &[], &[submitted])
+        .expect_err("observe without a staged envelope must fail");
+    assert!(matches!(error, PublishError::Execution(_)));
+}
+
+#[test]
+fn observe_rejects_envelopes_missing_the_remote_directory() {
+    // 封存 envelope 缺 remote_directory：内容不完整属于执行错误。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage the delivery envelope");
+    let mut degraded = staged.envelopes[0].clone();
+    degraded.content.remove("remote_directory");
+
+    let error = fixture
+        .execute(&nodes[2], &manifest, &[degraded], &[])
+        .expect_err("an envelope without remote_directory must fail");
+    assert!(matches!(error, PublishError::Execution(_)));
+}
+
+#[test]
+fn publish_rejects_envelopes_without_a_file_selection() {
+    // 封存 envelope 缺 files 选择：没有交付物可写属于执行错误。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage the delivery envelope");
+    let mut degraded = staged.envelopes[0].clone();
+    degraded.content.remove("files");
+
+    let error = fixture
+        .execute(&nodes[1], &manifest, &[degraded], &[])
+        .expect_err("an envelope without files must fail");
+    assert!(matches!(error, PublishError::Execution(_)));
+}
+
+#[test]
+fn observe_reports_exhausted_receipt_revision_ranges() {
+    // receipt revision 是递增交付世代；耗尽时只能以执行错误显式呈现。
+    let fixture = Fixture::new();
+    let manifest = desktop_manifest(fixture.root.path());
+    let nodes = fixture.nodes(&settings());
+    let staged = fixture
+        .execute(&nodes[0], &manifest, &[], &[])
+        .expect("stage");
+    fixture
+        .execute(&nodes[1], &manifest, &staged.envelopes, &[])
+        .expect("publish");
+    let exhausted = DeliveryReceipt {
+        version: 1,
+        receipt_id: "receipt-exhausted".to_string(),
+        revision: u32::MAX,
+        route_id: ROUTE_ID.to_string(),
+        manifest_digest: manifest.digest.clone(),
+        status: DeliveryStatus::Submitted,
+        external_reference: String::new(),
+    };
+
+    let error = fixture
+        .execute(
+            &nodes[2],
+            &manifest,
+            &staged.envelopes,
+            &[exhausted],
+        )
+        .expect_err("an exhausted receipt revision cannot advance");
+    assert!(matches!(error, PublishError::Execution(_)));
+}
