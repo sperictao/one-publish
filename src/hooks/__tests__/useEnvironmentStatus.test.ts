@@ -98,4 +98,28 @@ describe("useEnvironmentStatus", () => {
 
     expect(result.current).toBe("unknown");
   });
+
+  it("当前 provider 存在 critical 问题时返回 blocked", () => {
+    const { result } = renderHook(() =>
+      useEnvironmentStatus(
+        {
+          providerIds: ["dotnet"],
+          result: {
+            ...multiProviderResult,
+            providers: [multiProviderResult.providers[0]],
+            issues: [
+              {
+                ...multiProviderResult.issues[0],
+                provider_id: "dotnet",
+              },
+            ],
+            is_ready: false,
+          },
+        },
+        "dotnet"
+      )
+    );
+
+    expect(result.current).toBe("blocked");
+  });
 });
