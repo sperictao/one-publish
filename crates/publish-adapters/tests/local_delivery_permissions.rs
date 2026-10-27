@@ -332,9 +332,27 @@ fn deliver(destination: &LocalDirectoryDestination, manifest: &ArtifactManifest)
 }
 
 fn assert_runs(executable: &Path, expected_stdout: &[u8]) {
-    let run = Command::new(executable)
-        .output()
-        .expect("the delivered binary runs directly");
-    assert!(run.status.success());
-    assert_eq!(run.stdout, expected_stdout);
+    // 内核在文件刚写完并释放写句柄后的短暂窗口内仍可返回 ETXTBSY；
+    // 交付语义只保证「可直接执行」，对瞬时态做有限次重试。
+    let mut last_error = None;
+    for _ in 0..10 {
+        match Command::new(executable).output() {
+            Ok(run) => {
+                assert!(run.status.success());
+                assert_eq!(run.stdout, expected_stdout);
+                return;
+            }
+            // ErrorKind::ExecutableFileBusy is 1.83+; the workspace MSRV is
+            // 1.77 so match the raw errno instead (file is unix-gated).
+            Err(error) if error.raw_os_error() == Some(libc::ETXTBSY) => {
+                last_error = Some(error);
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(error) => panic!("the delivered binary runs directly: {error}"),
+        }
+    }
+    panic!(
+        "the delivered binary runs directly: {}",
+        last_error.expect("a retry left a recorded error")
+    );
 }
