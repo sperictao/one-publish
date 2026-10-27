@@ -72,8 +72,10 @@ export function DiagnosticsSection({
   const {
     isExportingHistory,
     isExportingFailureGroups,
+    isExportingDiagnosticsIndex,
     exportExecutionHistory,
     exportFailureGroupBundle,
+    exportDiagnosticsIndex,
   } = useDiagnosticsExports({
     historyT,
     snapshotPaths,
@@ -96,6 +98,7 @@ export function DiagnosticsSection({
     historyFilterKeyword,
     isExportingHistory,
     isExportingFailureGroups,
+    isExportingDiagnosticsIndex,
     failureGroupCount,
     isPublishing,
     appT,
@@ -107,6 +110,7 @@ export function DiagnosticsSection({
     setHistoryFilterKeyword,
     exportExecutionHistory,
     exportFailureGroupBundle,
+    exportDiagnosticsIndex,
     clearHistoryFilters,
     openSnapshotFromRecord,
     rerunFromHistory,
