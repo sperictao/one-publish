@@ -14,4 +14,9 @@ ignore = [
     "RUSTSEC-2026-0367",
     "RUSTSEC-2026-0368",
     "RUSTSEC-2026-0369",
+    # RUSTSEC-2026-0186: memmap2 0.5.10（linicon 2.3.0 钉 ^0.5，修复仅 >=0.9.11）
+    # 受影响函数为 Mmap::[unchecked_]advise_range 与 MmapMut::flush[_async]_range；
+    # linicon 仅做只读 mmap 图标解析，不调用任何受影响 API，攻击面为零命中。
+    # 复查：linicon 升级 memmap2 依赖线或 tauri 替换图标解析实现时。
+    "RUSTSEC-2026-0186",
 ]
