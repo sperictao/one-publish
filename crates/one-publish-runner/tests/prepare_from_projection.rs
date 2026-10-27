@@ -171,3 +171,65 @@ fn dirty_checkouts_and_foreign_trigger_contexts_are_rejected() {
     .expect_err("dirty checkouts must be rejected");
     assert!(dirty.to_string().contains("clean checkout"));
 }
+
+#[test]
+fn tags_carrying_no_version_after_the_prefix_are_rejected() {
+    let checkout = fixture_checkout(&[]);
+    let projection = fixture_projection();
+    let error = prepare_from_projection(
+        &projection,
+        &TriggerContext {
+            repository_root: checkout.path().to_path_buf(),
+            trigger: TriggerInput::Tag("v".to_string()),
+        },
+    )
+    .expect_err("a tag equal to the prefix carries no version");
+    assert!(
+        error
+            .to_string()
+            .contains("carries no version after the bound tag prefix"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn manual_dispatch_requires_an_explicit_version_input() {
+    let checkout = fixture_checkout(&[]);
+    let mut manual = fixture_projection();
+    manual.trigger_policy = AutomationTriggerPolicy::Manual;
+    let error = prepare_from_projection(
+        &manual,
+        &TriggerContext {
+            repository_root: checkout.path().to_path_buf(),
+            trigger: TriggerInput::Manual {
+                version: "   ".to_string(),
+            },
+        },
+    )
+    .expect_err("blank manual versions are rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("requires an explicit version input"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn source_capture_fails_outside_a_git_checkout() {
+    // 触发上下文必须指向干净 git checkout：普通目录没有可钉住的 HEAD。
+    let plain = tempfile::tempdir().expect("plain directory");
+    let projection = fixture_projection();
+    let error = prepare_from_projection(
+        &projection,
+        &TriggerContext {
+            repository_root: plain.path().to_path_buf(),
+            trigger: TriggerInput::Tag("v1.2.3".to_string()),
+        },
+    )
+    .expect_err("non-checkout roots cannot produce an immutable source snapshot");
+    assert!(
+        error.to_string().contains("git"),
+        "unexpected error: {error}"
+    );
+}
