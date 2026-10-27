@@ -827,4 +827,75 @@ mod tests {
             Some(app_project.to_string_lossy().as_ref())
         );
     }
+
+    #[test]
+    fn read_target_frameworks_reports_missing_and_parses_present_files() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let missing = temp_dir.path().join("gone.csproj");
+        let error = read_target_frameworks(&missing, &["TargetFramework".to_string()])
+            .expect_err("missing project file must fail");
+        assert_eq!(error.code.as_deref(), Some("path_not_found"));
+        assert!(error
+            .details
+            .as_deref()
+            .is_some_and(|d| d.contains("gone.csproj")));
+
+        let project = temp_dir.path().join("App.csproj");
+        fs::write(
+            &project,
+            "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>",
+        )
+        .expect("write csproj");
+        let frameworks = read_target_frameworks(&project, &["TargetFramework".to_string()])
+            .expect("read frameworks");
+        assert_eq!(frameworks, vec!["net8.0".to_string()]);
+    }
+
+    #[test]
+    fn resolve_publish_profile_path_enforces_name_and_support_contract() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let project = temp_dir.path().join("App.csproj");
+        fs::write(&project, "<Project />").expect("write csproj");
+
+        let error = resolve_publish_profile_path(&project, "   ").expect_err("empty profile name");
+        assert_eq!(error.code.as_deref(), Some("profile_name_empty"));
+
+        for name in ["..", "a/b", "a\\b", "x/../../y"] {
+            let error =
+                resolve_publish_profile_path(&project, name).expect_err("invalid profile name");
+            assert_eq!(
+                error.code.as_deref(),
+                Some("invalid_profile_name"),
+                "name: {name}"
+            );
+            assert_eq!(error.details.as_deref(), Some(name));
+        }
+
+        let unsupported = temp_dir.path().join("App.sln");
+        fs::write(&unsupported, "solution").expect("write sln");
+        let error = resolve_publish_profile_path(&unsupported, "Release")
+            .expect_err("solution files do not host profiles");
+        assert_eq!(error.code.as_deref(), Some("publish_profiles_unsupported"));
+
+        let error =
+            resolve_publish_profile_path(&project, "Release").expect_err("missing pubxml file");
+        assert_eq!(error.code.as_deref(), Some("profile_not_found"));
+        assert!(error
+            .details
+            .as_deref()
+            .is_some_and(|d| d.ends_with("Release.pubxml")));
+
+        let profiles_dir = project
+            .parent()
+            .expect("project dir")
+            .join("Properties")
+            .join("PublishProfiles");
+        fs::create_dir_all(&profiles_dir).expect("create profiles dir");
+        let expected = profiles_dir.join("Release.pubxml");
+        fs::write(&expected, "<Project />").expect("write pubxml");
+        assert_eq!(
+            resolve_publish_profile_path(&project, "Release").expect("resolve profile"),
+            expected
+        );
+    }
 }
