@@ -19,8 +19,7 @@ import {
   type PublishOutputPreflightResult,
 } from "@/features/publish/publishRuntime";
 import type { InvokeErrorTranslations } from "@/lib/tauri/invokeErrors";
-
-const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -209,7 +208,6 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       if (options.isCancelled()) {
         return false;
       }
-      const { localizeInvokeError } = await loadInvokeErrors();
       if (options.isCancelled()) {
         return false;
       }
@@ -236,7 +234,6 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       if (options.isCancelled()) {
         return false;
       }
-      const { localizeInvokeError } = await loadInvokeErrors();
       if (options.isCancelled()) {
         return false;
       }
@@ -280,7 +277,6 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         if (options.isCancelled()) {
           return false;
         }
-        const { localizeInvokeError } = await loadInvokeErrors();
         if (options.isCancelled()) {
           return false;
         }

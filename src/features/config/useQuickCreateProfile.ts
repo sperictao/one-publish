@@ -11,8 +11,7 @@ import {
   QUICK_CREATE_PROFILE_GROUP_DEFAULT,
   QUICK_CREATE_PROFILE_GROUP_CUSTOM,
 } from "./types";
-
-const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 
 interface StoreMutationResult {
   repositories: Array<{
@@ -311,7 +310,6 @@ export function useQuickCreateProfile({
           createDraftForProvider(content.providerId, content.parameters)
         );
       } catch (error) {
-        const { localizeInvokeError } = await loadInvokeErrors();
         if (request !== templateRequestRef.current) return;
         setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
         toast.error(localizeInvokeError(error, translations) || "加载模板失败");
@@ -424,7 +422,6 @@ export function useQuickCreateProfile({
       );
       handleQuickCreateProfileOpenChange(false);
     } catch (err) {
-      const { localizeInvokeError } = await loadInvokeErrors();
       console.error("保存配置文件失败:", err);
       toast.error(
         localizeInvokeError(err, translations) ||

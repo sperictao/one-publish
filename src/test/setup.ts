@@ -1,4 +1,4 @@
-import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
 
 // Vitest needs React's development build so that testing-library `act()` is
 // available. Some environments export `NODE_ENV=production`; force test mode
