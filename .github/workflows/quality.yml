@@ -120,12 +120,19 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Workspace coverage report
         run: cargo llvm-cov --workspace --html --output-dir coverage-rust
+      # src-tauri 是独立 workspace（根 Cargo.toml exclude）：平台 crate 报告
+      # 之外单独产出桌面壳层报告，同为 informational。
+      - name: Desktop coverage report (src-tauri)
+        run: cargo llvm-cov --html --output-dir ../coverage-tauri
+        working-directory: src-tauri
       - name: Upload Rust coverage report
         uses: actions/upload-artifact@v6
         if: always()
         with:
           name: rust-coverage
-          path: coverage-rust/
+          path: |
+            coverage-rust/
+            coverage-tauri/
           retention-days: 14
       - name: Contracts drift check
         run: pnpm check:contracts
