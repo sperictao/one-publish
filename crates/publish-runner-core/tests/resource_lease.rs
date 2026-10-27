@@ -273,6 +273,130 @@ fn release_and_reacquire_in_the_same_second_creates_a_new_lease_epoch() {
     assert_eq!(first.acquired_at_seconds, second.acquired_at_seconds);
 }
 
+/// Journal 恢复按 lease_id 幂等：同一租约的较新续租快照覆盖旧快照，
+/// 较旧快照落地为无操作。
+#[test]
+fn restore_active_lease_is_idempotent_per_lease_epoch() {
+    // 源协调器产生 Journal 记录序列：取得租约 → 续租。
+    let source = PublishLeaseCoordinator::new();
+    source
+        .acquire("attempt-1", resources(&[repository("acme/app")]), 100, TTL)
+        .expect("acquire");
+    let acquired = source.leases()[0].clone();
+    source.renew("attempt-1", 200, TTL).expect("renew");
+    let renewed = source.leases()[0].clone();
+
+    // 新协调器按序重放 Journal：较新续租快照覆盖先到的旧快照。
+    let coordinator = PublishLeaseCoordinator::new();
+    coordinator
+        .restore_active_lease(acquired.clone())
+        .expect("the first journal record restores into an empty registry");
+    coordinator
+        .restore_active_lease(renewed)
+        .expect("a newer snapshot of the same lease replaces it");
+    assert_eq!(
+        coordinator
+            .active_lease("attempt-1", 450)
+            .expect("the extended deadline survives restore")
+            .expires_at_seconds,
+        200 + TTL
+    );
+
+    // 乱序到达的较旧快照是过时重放：不得回退已恢复的期限。
+    coordinator
+        .restore_active_lease(acquired)
+        .expect("an older snapshot of the same lease is a no-op");
+    assert_eq!(
+        coordinator
+            .active_lease("attempt-1", 450)
+            .expect("the newer deadline is not rewound")
+            .expires_at_seconds,
+        200 + TTL
+    );
+}
+
+/// 同一 Attempt 携带不同 lease_id 的恢复记录说明 Journal 损坏：
+/// 显式失败而不是把两个纪元合并。
+#[test]
+fn restore_active_lease_rejects_conflicting_lease_identities() {
+    let coordinator = PublishLeaseCoordinator::new();
+    coordinator
+        .acquire("attempt-1", resources(&[repository("acme/app")]), 100, TTL)
+        .expect("acquire");
+    let mut forged = coordinator.leases()[0].clone();
+    forged.lease_id = "lease-forged".to_string();
+
+    let error = coordinator
+        .restore_active_lease(forged)
+        .expect_err("a different lease id for the same attempt is journal corruption");
+    match error {
+        PublishError::Execution(message) => {
+            assert!(message.contains("conflicting active lease identities"))
+        }
+        other => panic!("expected Execution, got {other}"),
+    }
+}
+
+/// 同一租约的资源范围在恢复记录间漂移同样是损坏：租约语义不允许
+/// 中途改 scope。
+#[test]
+fn restore_active_lease_rejects_resource_scope_drift() {
+    let coordinator = PublishLeaseCoordinator::new();
+    coordinator
+        .acquire("attempt-1", resources(&[repository("acme/app")]), 100, TTL)
+        .expect("acquire");
+    let mut drifted = coordinator.leases()[0].clone();
+    drifted.resources = resources(&[namespace("acme-app/stable/1.0.0")]);
+
+    let error = coordinator
+        .restore_active_lease(drifted)
+        .expect_err("a lease cannot change its resource scope");
+    match error {
+        PublishError::Execution(message) => {
+            assert!(message.contains("changed its leased resources"))
+        }
+        other => panic!("expected Execution, got {other}"),
+    }
+}
+
+/// 恢复另一 Attempt 的租约时仍执行互斥检查：与持有者冲突的
+/// Journal 记录被拒绝，不相交的记录正常入册。
+#[test]
+fn restore_active_lease_enforces_mutual_exclusion_across_attempts() {
+    let coordinator = PublishLeaseCoordinator::new();
+    coordinator
+        .acquire("attempt-1", resources(&[repository("acme/app")]), 100, TTL)
+        .expect("acquire");
+
+    let mut conflicting = coordinator.leases()[0].clone();
+    conflicting.lease_id = "lease-other".to_string();
+    conflicting.owner_attempt_id = "attempt-2".to_string();
+    let error = coordinator
+        .restore_active_lease(conflicting)
+        .expect_err("a journal lease overlapping a held resource is refused");
+    match error {
+        PublishError::LeaseResourceConflict {
+            requester,
+            holder,
+            resource,
+        } => {
+            assert_eq!(requester, "attempt-2");
+            assert_eq!(holder, "attempt-1");
+            assert_eq!(resource, repository("acme/app").display_name());
+        }
+        other => panic!("expected a lease resource conflict, got {other}"),
+    }
+
+    let mut disjoint = coordinator.leases()[0].clone();
+    disjoint.lease_id = "lease-other".to_string();
+    disjoint.owner_attempt_id = "attempt-2".to_string();
+    disjoint.resources = resources(&[namespace("acme-app/nightly/20260725")]);
+    coordinator
+        .restore_active_lease(disjoint)
+        .expect("disjoint journal leases restore alongside held ones");
+    assert!(coordinator.active_lease("attempt-2", 200).is_ok());
+}
+
 /// 租约必须限定至少一项具体资源且期限为正：空范围的"全局锁"不被接受。
 #[test]
 fn acquire_rejects_empty_scope_and_zero_ttl() {
