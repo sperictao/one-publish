@@ -6,6 +6,7 @@ import {
   analyzeBranchRefreshFailure,
   analyzeProviderDetectFailure,
   analyzeProjectScanFailure,
+  analyzeRepositoryWriteFailure,
   analyzePublishExecutionFailure,
   extractInvokeErrorCode,
   extractInvokeErrorDetails,
@@ -13,6 +14,7 @@ import {
   localizeInvokeError,
   type BranchRefreshFailureReason,
   type ProjectScanFailureReason,
+  type RepositoryWriteFailureReason,
   type ProviderDetectFailureReason,
   type PublishExecutionFailureReason,
 } from "@/lib/tauri/invokeErrors";
@@ -597,5 +599,135 @@ describe("analyzePublishExecutionFailure", () => {
         message: "another publish execution is already running",
       })
     ).toBe("already_running");
+  });
+});
+
+describe("analyzeBranchRefreshFailure 归一化消息臂", () => {
+  it.each<[string, BranchRefreshFailureReason]>([
+    ["repository path does not exist: /tmp/missing", "path_not_found"],
+    ["repository path is not a directory", "not_directory"],
+    ["fatal: 不是一个git仓库", "not_git_repo"],
+    ["detected dubious ownership in repository", "dubious_ownership"],
+    ["git: operation not permitted", "permission_denied"],
+    ["no git branches found", "no_branches"],
+  ])("消息 %j 命中 %s", (message, expected) => {
+    expect(analyzeBranchRefreshFailure(message)).toBe(expected);
+  });
+});
+
+describe("analyzeProviderDetectFailure 归一化消息臂", () => {
+  it.each<[string, ProviderDetectFailureReason]>([
+    ["repository path does not exist", "path_not_found"],
+    ["repository path is not a directory", "not_directory"],
+    ["操作失败：无权限读取目录", "permission_denied"],
+    ["cannot detect provider from repository path", "unsupported_provider"],
+    ["读取仓库目录失败：input/output error", "read_failed"],
+  ])("消息 %j 命中 %s", (message, expected) => {
+    expect(analyzeProviderDetectFailure(message)).toBe(expected);
+  });
+});
+
+describe("analyzeRepositoryWriteFailure", () => {
+  it.each<[string, RepositoryWriteFailureReason]>([
+    ["repository_exists", "repository_exists"],
+    ["path_not_found", "path_not_found"],
+    ["not_directory", "not_directory"],
+    ["permission_denied", "permission_denied"],
+  ])("code %s 精确命中 %s", (code, expected) => {
+    expect(analyzeRepositoryWriteFailure({ code })).toBe(expected);
+  });
+
+  it.each<[string, RepositoryWriteFailureReason]>([
+    ["repository already exists at this path", "repository_exists"],
+    ["仓库路径不存在，无法写入", "path_not_found"],
+    ["repository path is not a directory", "not_directory"],
+    ["repository path is not a directory：仓库路径不是目录", "not_directory"],
+    ["写入失败：operation not permitted", "permission_denied"],
+    ["some totally novel failure", "unknown"],
+  ])("消息 %j 命中 %s", (message, expected) => {
+    expect(analyzeRepositoryWriteFailure(message)).toBe(expected);
+  });
+});
+
+describe("analyzeProjectScanFailure 归一化消息臂", () => {
+  it.each<[string, ProjectScanFailureReason]>([
+    ["scan start path does not exist", "path_not_found"],
+    ["cannot find project file under scan path", "project_file_not_found"],
+    [
+      "multiple project files found in directory",
+      "multiple_project_files_found",
+    ],
+    ["扫描失败：operation not permitted", "permission_denied"],
+    [
+      "failed to resolve current directory while scanning",
+      "current_dir_failed",
+    ],
+  ])("消息 %j 命中 %s", (message, expected) => {
+    expect(analyzeProjectScanFailure(message)).toBe(expected);
+  });
+
+  it("current_dir_failed code 精确命中", () => {
+    expect(analyzeProjectScanFailure({ code: "current_dir_failed" })).toBe(
+      "current_dir_failed"
+    );
+  });
+});
+
+describe("analyzePublishExecutionFailure 归一化消息臂", () => {
+  it.each<[string, PublishExecutionFailureReason]>([
+    ["project path does not exist: /tmp/gone", "project_path_not_found"],
+    ["missing windows drive or share root", "output_path_invalid"],
+    [
+      "publish output path is incompatible with this system",
+      "output_path_incompatible",
+    ],
+    [
+      "publish output directory requires macos protected folder access",
+      "protected_directory_access_denied",
+    ],
+    [
+      "remote publish target is not implemented yet",
+      "remote_target_not_implemented",
+    ],
+    ["unsupported provider: acme", "unsupported_provider"],
+    ["parameter render error: invalid token", "render_error"],
+    ["failed to spawn dotnet: no such file or directory", "tool_missing"],
+    ["failed to spawn dotnet (os error 2)", "tool_missing"],
+    ["发布进程启动失败：访问被拒绝", "permission_denied"],
+    ["execution plan has no step", "plan_invalid"],
+    ["execution step title is empty", "plan_invalid"],
+    ["gradle wrapper not found in project", "java_gradle_missing"],
+    ["java provider requires a project directory", "java_gradle_missing"],
+    ["failed to wait publish process", "process_failed"],
+    ["failed to collect publish logs", "process_failed"],
+  ])("消息 %j 命中 %s", (message, expected) => {
+    expect(analyzePublishExecutionFailure(message)).toBe(expected);
+  });
+});
+
+describe("提取器与分类器的落空臂", () => {
+  it("data/details 非 object 时跳过嵌套 code 提取", () => {
+    expect(extractInvokeErrorCode({ data: 42 })).toBeNull();
+    expect(extractInvokeErrorCode({ details: "oops" })).toBeNull();
+  });
+
+  it("嵌套 code 非 string 或空白时跳过提取", () => {
+    expect(extractInvokeErrorCode({ data: { code: 7 } })).toBeNull();
+    expect(extractInvokeErrorCode({ details: { code: "   " } })).toBeNull();
+  });
+
+  it("data.details 非 string 时跳过嵌套 details 提取", () => {
+    expect(extractInvokeErrorDetails({ data: { details: 123 } })).toBeNull();
+  });
+
+  it.each<[string, (error: unknown) => string]>([
+    ["branch", analyzeBranchRefreshFailure],
+    ["detect", analyzeProviderDetectFailure],
+    ["write", analyzeRepositoryWriteFailure],
+    ["scan", analyzeProjectScanFailure],
+  ])("未登记 code 的 %s 分类器回落到消息匹配", (_name, analyze) => {
+    expect(
+      analyze({ code: "unregistered_code", message: "permission denied" })
+    ).toBe("permission_denied");
   });
 });
