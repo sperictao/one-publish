@@ -37,7 +37,7 @@ jobs:
           UI_AUDIT_CAPTURE: "1"
           UI_AUDIT_PHASE: ${{ inputs.phase || 'baseline' }}
       - name: Upload recording artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ui-audit-edit-repository-${{ inputs.phase || 'baseline' }}
           path: test-results/ui-audit/edit-repository/
