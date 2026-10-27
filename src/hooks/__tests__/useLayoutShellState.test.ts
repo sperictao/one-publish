@@ -112,4 +112,17 @@ describe("useLayoutShellState", () => {
 
     expect(setLeftPanelWidth).toHaveBeenLastCalledWith(310);
   });
+
+  describe("resize 监听", () => {
+    it("卸载时移除 resize 监听", () => {
+      const removeSpy = vi.spyOn(window, "removeEventListener");
+      const { unmount } = renderHook(() =>
+        useLayoutShellState(createProps({ panelWidthsCustomized: false }))
+      );
+
+      unmount();
+      expect(removeSpy).toHaveBeenCalledWith("resize", expect.any(Function));
+      removeSpy.mockRestore();
+    });
+  });
 });

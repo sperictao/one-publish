@@ -125,4 +125,40 @@ describe("handoffSnippet", () => {
       '    - dotnet publish "/tmp/dotnet-demo/app.csproj"'
     );
   });
+
+  it("裸文件名项目路径回退到当前目录", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "App.csproj" },
+      commandLine: "$ dotnet publish App.csproj -c Release",
+    });
+
+    expect(snippet).toContain('cd "."');
+  });
+
+  it("空项目路径同样回退到当前目录", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "" },
+      commandLine: "$ dotnet publish App.csproj -c Release",
+    });
+
+    expect(snippet).toContain('cd "."');
+  });
+
+  it("尾斜杠目录路径原样作为工作目录", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "/tmp/demo/src/" },
+      commandLine: "$ dotnet publish -c Release",
+    });
+
+    expect(snippet).toContain('cd "/tmp/demo/src/"');
+  });
+
+  it("空白命令行回退到 provider 默认命令", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec,
+      commandLine: "   ",
+    });
+
+    expect(snippet.split("\n").pop()).toContain("dotnet publish");
+  });
 });

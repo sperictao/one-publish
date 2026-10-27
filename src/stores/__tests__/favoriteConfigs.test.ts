@@ -175,3 +175,59 @@ describe("persistFavorites", () => {
     expect(loadFavorites()).toEqual(data);
   });
 });
+
+describe("migrateNameBasedProfileFavorites 守卫臂", () => {
+  it("ignores profiles whose id trims to empty", () => {
+    const repositories = [
+      {
+        id: "r1",
+        publishConfig: {
+          profiles: [{ id: "  ", name: "legacy-name" }],
+        },
+      },
+    ];
+    const current = { r1: ["userprofile:legacy-name"] };
+
+    expect(migrateNameBasedProfileFavorites(current, repositories)).toBe(
+      current
+    );
+  });
+
+  it("collapses duplicate favorites after migration", () => {
+    const repositories = [
+      {
+        id: "r1",
+        publishConfig: {
+          profiles: [{ id: "p1", name: "release" }],
+        },
+      },
+    ];
+    const current = { r1: ["userprofile:release", "userprofile:release"] };
+
+    expect(migrateNameBasedProfileFavorites(current, repositories)).toEqual({
+      r1: ["userprofile:p1"],
+    });
+  });
+
+  it("跳过没有收藏 scope 的仓库", () => {
+    const repositories = [
+      {
+        id: "r1",
+        publishConfig: {
+          profiles: [{ id: "p1", name: "release" }],
+        },
+      },
+      {
+        id: "r2",
+        publishConfig: {
+          profiles: [{ id: "p2", name: "debug" }],
+        },
+      },
+    ];
+    const current = { r2: ["userprofile:debug"] };
+
+    expect(migrateNameBasedProfileFavorites(current, repositories)).toEqual({
+      r2: ["userprofile:p2"],
+    });
+  });
+});

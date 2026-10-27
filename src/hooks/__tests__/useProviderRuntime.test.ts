@@ -146,4 +146,17 @@ describe("useProviderRuntime", () => {
 
     expect(mocks.listProviders).toHaveBeenCalledTimes(1);
   });
+
+  it("retryProviderSchema 对空 providerId 直接返回", async () => {
+    mocks.listProviders.mockResolvedValue([dotnetProvider]);
+    mocks.getProviderSchema.mockResolvedValue({ parameters: {} });
+    const { result } = renderHook(() => useProviderRuntime());
+    await waitFor(() =>
+      expect(result.current.providerListState.status).toBe("ready")
+    );
+    vi.clearAllMocks();
+
+    act(() => result.current.retryProviderSchema(""));
+    expect(mocks.getProviderSchema).not.toHaveBeenCalled();
+  });
 });
