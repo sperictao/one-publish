@@ -906,3 +906,248 @@ fn fake_remote_backend_implements_the_shared_runner_contract() {
     AdapterContract::execute_plan(&backend, &plan, &mut executor)
         .expect("the fake backend interprets plans through the shared executor");
 }
+
+/// 注册时一致性校验把契约违规挡在注册表之外（fail-closed）。每个替身只
+/// 违反一条不变量，确保错误分类指向具体守卫而不是泛型失败。
+struct MisbehavingAdapter {
+    descriptor: AdapterDescriptor,
+    migrate_drift: bool,
+    blank_summary: bool,
+    fragment: Vec<publish_domain::PlanNodeTemplate>,
+    fragment_drift: bool,
+}
+
+impl MisbehavingAdapter {
+    fn conformant() -> Self {
+        Self {
+            descriptor: AdapterDescriptor::new(
+                AdapterKind::ExecutionBackend,
+                "misbehaving",
+                1,
+                AdapterSchema::new(1),
+                PublishingCapability {
+                    provides: vec![],
+                    requires: vec![],
+                },
+            ),
+            migrate_drift: false,
+            blank_summary: false,
+            fragment: vec![],
+            fragment_drift: false,
+        }
+    }
+}
+
+impl AdapterContract for MisbehavingAdapter {
+    fn descriptor(&self) -> &AdapterDescriptor {
+        &self.descriptor
+    }
+
+    fn default_settings(&self) -> AdapterSettings {
+        AdapterSettings::new(1)
+    }
+
+    fn migrate_settings(
+        &self,
+        settings: &AdapterSettings,
+    ) -> Result<AdapterSettings, PublishError> {
+        let mut migrated = settings.clone();
+        if self.migrate_drift {
+            migrated.values.insert(
+                "drift".to_string(),
+                Value::String(std::process::id().to_string()),
+            );
+            // 同一次注册内两次迁移必须一致；用原子计数器制造漂移。
+            static TICK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            migrated.values.insert(
+                "tick".to_string(),
+                Value::from(TICK.fetch_add(1, std::sync::atomic::Ordering::SeqCst)),
+            );
+        }
+        Ok(migrated)
+    }
+
+    fn summarize_settings(&self, _settings: &AdapterSettings) -> Result<String, PublishError> {
+        Ok(if self.blank_summary {
+            "   ".to_string()
+        } else {
+            self.descriptor.id.clone()
+        })
+    }
+
+    fn plan_fragment(
+        &self,
+        _snapshot: &PlanningInputSnapshot,
+        _settings: &AdapterSettings,
+    ) -> Result<Vec<publish_domain::PlanNodeTemplate>, PublishError> {
+        let mut fragment = self.fragment.clone();
+        if self.fragment_drift {
+            fragment.push(publish_domain::PlanNodeTemplate::command(
+                format!("drift-{}", std::process::id()),
+                PlanStage::Build,
+                "program",
+                Vec::new(),
+            ));
+            static TICK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            fragment[0].local_id = format!(
+                "node-{}",
+                TICK.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            );
+        }
+        Ok(fragment)
+    }
+}
+
+impl ExecutionBackend for MisbehavingAdapter {}
+
+#[test]
+fn registration_rejects_kind_and_contract_violations() {
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let mut registry = AdapterRegistry::new();
+
+    // Descriptor kind 与注册槽不匹配。
+    let mut wrong_kind = MisbehavingAdapter::conformant();
+    wrong_kind.descriptor.kind = AdapterKind::DeliveryDestination;
+    assert!(matches!(
+        registry
+            .register_execution_backend(Arc::new(wrong_kind), &fixture)
+            .expect_err("kind mismatches are rejected before lookup"),
+        PublishError::AdapterKindMismatch {
+            expected: AdapterKind::ExecutionBackend,
+            actual: AdapterKind::DeliveryDestination,
+            ..
+        }
+    ));
+
+    // 契约版本漂移。
+    let mut old_contract = MisbehavingAdapter::conformant();
+    old_contract.descriptor.contract_version = 0;
+    assert!(matches!(
+        registry
+            .register_execution_backend(Arc::new(old_contract), &fixture)
+            .expect_err("foreign contract versions are rejected"),
+        PublishError::UnsupportedAdapterContractVersion { .. }
+    ));
+
+    // 空 id。
+    let mut blank_id = MisbehavingAdapter::conformant();
+    blank_id.descriptor.id = "   ".to_string();
+    assert!(matches!(
+        registry
+            .register_execution_backend(Arc::new(blank_id), &fixture)
+            .expect_err("blank adapter ids are rejected"),
+        PublishError::InvalidAdapter { .. }
+    ));
+}
+
+#[test]
+fn registration_rejects_nondeterministic_settings_and_fragments() {
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let mut registry = AdapterRegistry::new();
+
+    let mut drifting = MisbehavingAdapter::conformant();
+    drifting.migrate_drift = true;
+    let error = registry
+        .register_execution_backend(Arc::new(drifting), &fixture)
+        .expect_err("non-deterministic migration is rejected");
+    assert!(error
+        .to_string()
+        .contains("settings migration is not deterministic"));
+
+    let mut blank_summary = MisbehavingAdapter::conformant();
+    blank_summary.blank_summary = true;
+    let error = registry
+        .register_execution_backend(Arc::new(blank_summary), &fixture)
+        .expect_err("empty settings summaries are rejected");
+    assert!(error.to_string().contains("settings summary"));
+
+    let mut drifting_fragment = MisbehavingAdapter::conformant();
+    drifting_fragment.fragment = vec![publish_domain::PlanNodeTemplate::command(
+        "node",
+        PlanStage::Build,
+        "program",
+        Vec::new(),
+    )];
+    drifting_fragment.fragment_drift = true;
+    let error = registry
+        .register_execution_backend(Arc::new(drifting_fragment), &fixture)
+        .expect_err("non-deterministic plan fragments are rejected");
+    assert!(error
+        .to_string()
+        .contains("plan fragment is not deterministic"));
+}
+
+#[test]
+fn registration_rejects_malformed_fragments_and_forbidden_values() {
+    let mut fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let mut registry = AdapterRegistry::new();
+
+    // 空或重复 node id。
+    for fragment in [
+        vec![publish_domain::PlanNodeTemplate::command(
+            "   ",
+            PlanStage::Build,
+            "test-provider:program",
+            Vec::new(),
+        )],
+        vec![
+            publish_domain::PlanNodeTemplate::command(
+                "dup",
+                PlanStage::Build,
+                "test-provider:program",
+                Vec::new(),
+            ),
+            publish_domain::PlanNodeTemplate::command(
+                "dup",
+                PlanStage::Build,
+                "test-provider:program",
+                Vec::new(),
+            ),
+        ],
+    ] {
+        let mut adapter = MisbehavingAdapter::conformant();
+        adapter.descriptor = adapter
+            .descriptor
+            .with_allowed_program("test-provider:program");
+        adapter.fragment = fragment;
+        let error = registry
+            .register_execution_backend(Arc::new(adapter), &fixture)
+            .expect_err("malformed node ids are rejected");
+        assert!(
+            error.to_string().contains("plan node ids"),
+            "unexpected error: {error}"
+        );
+    }
+
+    // forbidden_values 命中 settings 序列化内容时拒绝。
+    fixture.forbidden_values.push("hunter2".to_string());
+    let mut leaking = MisbehavingAdapter::conformant();
+    leaking.descriptor.schema = AdapterSchema::new(1).with_required_string("token");
+    struct SecretAdapter {
+        inner: MisbehavingAdapter,
+    }
+    impl AdapterContract for SecretAdapter {
+        fn descriptor(&self) -> &AdapterDescriptor {
+            &self.inner.descriptor
+        }
+        fn default_settings(&self) -> AdapterSettings {
+            let mut settings = AdapterSettings::new(1);
+            settings
+                .values
+                .insert("token".to_string(), Value::String("hunter2".to_string()));
+            settings
+        }
+        fn plan_fragment(
+            &self,
+            _snapshot: &PlanningInputSnapshot,
+            _settings: &AdapterSettings,
+        ) -> Result<Vec<publish_domain::PlanNodeTemplate>, PublishError> {
+            Ok(vec![])
+        }
+    }
+    impl ExecutionBackend for SecretAdapter {}
+    let error = registry
+        .register_execution_backend(Arc::new(SecretAdapter { inner: leaking }), &fixture)
+        .expect_err("settings leaking forbidden values are rejected");
+    assert!(error.to_string().contains("forbidden value"));
+}

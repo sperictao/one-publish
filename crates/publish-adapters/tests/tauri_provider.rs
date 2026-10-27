@@ -1173,3 +1173,67 @@ fn targeted_builds_materialize_the_platform_bundle_into_staging() {
         .iter()
         .any(|artifact| artifact.file_name.ends_with("Demo.dmg") && artifact.role == "installer"));
 }
+
+#[cfg(unix)]
+#[test]
+fn inspection_rejects_app_roots_escaping_the_repository_via_symlink() {
+    let outside = tempfile::tempdir().expect("outside dir");
+    write_file(
+        &outside.path().join("tauri.conf.json"),
+        r#"{"productName":"Escaped","version":"1.2.3"}"#,
+    );
+    write_file(
+        &outside.path().join("package.json"),
+        r#"{"packageManager":"pnpm@10.0.0","version":"1.2.3"}"#,
+    );
+    write_file(&outside.path().join("pnpm-lock.yaml"), "");
+
+    let repository = tempfile::tempdir().expect("temp repository");
+    std::fs::create_dir_all(repository.path().join("apps")).expect("apps dir");
+    std::os::unix::fs::symlink(outside.path(), repository.path().join("apps/desktop"))
+        .expect("symlink app root");
+
+    let error = TauriProjectProvider::new()
+        .inspect(repository.path(), "apps/desktop/tauri.conf.json")
+        .expect_err("an app root resolving outside the repository must be rejected");
+    assert!(error.to_string().contains("tauri_app_outside_repository"));
+}
+
+#[cfg(unix)]
+#[test]
+fn mirrors_resolving_outside_the_repository_are_skipped_not_reported() {
+    let outside = tempfile::tempdir().expect("outside dir");
+    write_file(
+        &outside.path().join("package.json"),
+        r#"{"packageManager":"pnpm@10.0.0","version":"9.9.9"}"#,
+    );
+
+    let repository = tempfile::tempdir().expect("temp repository");
+    write_file(
+        &repository.path().join("src-tauri/tauri.conf.json"),
+        r#"{"productName":"Demo","version":"1.2.3"}"#,
+    );
+    write_file(
+        &repository.path().join("src-tauri/Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"1.2.3\"\n",
+    );
+    write_file(&repository.path().join("pnpm-lock.yaml"), "");
+    std::os::unix::fs::symlink(
+        outside.path().join("package.json"),
+        repository.path().join("package.json"),
+    )
+    .expect("symlink package.json");
+
+    let inspection = TauriProjectProvider::new()
+        .inspect(repository.path(), "src-tauri/tauri.conf.json")
+        .expect("inspection succeeds while the escaping mirror is skipped");
+
+    assert!(inspection
+        .suggested_version_mirrors
+        .iter()
+        .all(|mirror| mirror.path != "package.json"));
+    assert!(inspection
+        .suggested_version_mirrors
+        .iter()
+        .any(|mirror| mirror.path == "src-tauri/Cargo.toml"));
+}

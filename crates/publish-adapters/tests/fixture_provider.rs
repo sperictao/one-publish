@@ -407,3 +407,30 @@ fn execute_node_builds_the_fixture_bundle_from_the_manifest() {
     assert_eq!(bundle.file_name, "demo_1.2.3.fixture-bundle.json");
     assert_eq!(bundle.media_type, "application/json");
 }
+
+#[test]
+fn inspection_rejects_traversal_manifest_paths_and_missing_roots() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    write_file(
+        &dir.path().join(FIXTURE_MANIFEST_FILE_NAME),
+        &fixture_manifest("demo-app", "1.0.0"),
+    );
+    let provider = FixtureAppProvider::new(dir.path());
+
+    // 便携路径守卫在读取文件之前拒绝遍历。
+    let error = provider
+        .inspect("../outside/fixture-app.json")
+        .expect_err("traversal manifest paths are rejected");
+    assert!(error
+        .to_string()
+        .contains("fixture_app_manifest_path_invalid"));
+
+    // 仓库根必须先 canonicalize，不存在的根显式失败。
+    let missing = FixtureAppProvider::new(dir.path().join("missing-repo"));
+    let error = missing
+        .inspect(FIXTURE_MANIFEST_FILE_NAME)
+        .expect_err("missing repositories cannot be inspected");
+    assert!(error
+        .to_string()
+        .contains("fixture_app_repository_path_invalid"));
+}

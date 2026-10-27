@@ -465,3 +465,11 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
         },
     }
 }
+
+#[test]
+fn checksum_processor_default_matches_new() {
+    assert_eq!(
+        ChecksumProcessor::default().descriptor().identity(),
+        ChecksumProcessor::new().descriptor().identity()
+    );
+}
