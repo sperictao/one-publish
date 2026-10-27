@@ -121,7 +121,10 @@ fn calculate_progress_percent(downloaded_bytes: u64, total_bytes: Option<u64>) -
     })
 }
 
-fn emit_update_download_progress(app: &AppHandle, payload: UpdateDownloadProgressPayload) {
+fn emit_update_download_progress<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    payload: UpdateDownloadProgressPayload,
+) {
     if let Err(err) = app.emit(UPDATE_DOWNLOAD_PROGRESS_EVENT, payload) {
         log::warn!("发送更新下载进度事件失败: {}", err);
     }
@@ -178,7 +181,9 @@ pub(crate) fn map_updater_error(err: UpdaterError) -> String {
     }
 }
 
-fn build_updater(app: &AppHandle) -> Result<Updater, crate::errors::AppError> {
+fn build_updater<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Updater, crate::errors::AppError> {
     app.updater_builder()
         .timeout(UPDATE_CHECK_TIMEOUT)
         .build()
@@ -206,8 +211,8 @@ fn available_update_info(update: &Update) -> UpdateInfo {
     }
 }
 
-async fn fetch_remote_update(
-    app: &AppHandle,
+async fn fetch_remote_update<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     pending_update_state: &PendingUpdateState,
 ) -> Result<Option<Update>, crate::errors::AppError> {
     let updater = build_updater(app)?;
@@ -287,8 +292,8 @@ where
     unreachable!("下载重试循环必须在成功或失败时返回");
 }
 
-async fn download_update_with_retry(
-    app: &AppHandle,
+async fn download_update_with_retry<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     update: &Update,
 ) -> Result<(Vec<u8>, usize), DownloadFailure> {
     let attempt_download = |attempt: u32| async move {
@@ -373,8 +378,8 @@ fn download_failure_to_app_error(failure: DownloadFailure) -> crate::errors::App
         .with_details(details)
 }
 
-async fn resolve_install_update(
-    app: &AppHandle,
+async fn resolve_install_update<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     pending_update_state: &PendingUpdateState,
     expected_version: Option<&str>,
 ) -> Result<Option<(Update, bool)>, crate::errors::AppError> {
@@ -409,8 +414,8 @@ where
     Ok(fetch_remote().await?.map(|update| (update, false)))
 }
 
-async fn refresh_update_after_cached_failure(
-    app: &AppHandle,
+async fn refresh_update_after_cached_failure<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     pending_update_state: &PendingUpdateState,
     previous_update: &Update,
 ) -> Option<Update> {
@@ -520,7 +525,7 @@ pub fn get_updater_help_paths() -> Result<UpdaterHelpPaths, crate::errors::AppEr
 }
 
 #[tauri::command]
-pub fn get_updater_config_health(app: AppHandle) -> UpdaterConfigHealth {
+pub fn get_updater_config_health<R: tauri::Runtime>(app: AppHandle<R>) -> UpdaterConfigHealth {
     let _timer = crate::commands::middleware::CommandTimer::new(
         "commands::updater::get_updater_config_health",
     );
@@ -562,8 +567,8 @@ pub fn open_updater_help(target: String) -> Result<String, crate::errors::AppErr
 
 /// 检查更新
 #[tauri::command]
-pub async fn check_update(
-    app: AppHandle,
+pub async fn check_update<R: tauri::Runtime>(
+    app: AppHandle<R>,
     pending_update_state: State<'_, PendingUpdateState>,
 ) -> Result<UpdateInfo, crate::errors::AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("commands::updater::check_update");
@@ -579,8 +584,8 @@ pub async fn check_update(
 
 /// 执行更新并重启
 #[tauri::command]
-pub async fn install_update(
-    app: AppHandle,
+pub async fn install_update<R: tauri::Runtime>(
+    app: AppHandle<R>,
     pending_update_state: State<'_, PendingUpdateState>,
     expected_version: Option<String>,
 ) -> Result<String, crate::errors::AppError> {
@@ -685,6 +690,7 @@ mod tests {
     use crate::errors::{AppError, ErrorKind};
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+    use tauri::Manager;
     use tauri_plugin_updater::{Error as UpdaterError, Update};
 
     #[test]
@@ -1051,5 +1057,87 @@ mod tests {
 
         assert!(result.is_none(), "fetch 返回 None 时应返回 None");
         assert!(*called.lock().expect("fetch flag poisoned"));
+    }
+
+    // ---- 命令层（mock_app）----
+
+    /// UpdaterState 是插件私有类型、无法手工 manage——经 mock_builder 注册
+    /// updater 插件让其 setup 钩子自行管理状态；注入的空端点配置使
+    /// build_updater 走 EmptyEndpoints 未配置错误路径。
+    fn updater_test_app() -> tauri::App<tauri::test::MockRuntime> {
+        let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+        context.config_mut().plugins.0.insert(
+            "updater".to_string(),
+            serde_json::json!({ "endpoints": [], "pubkey": "" }),
+        );
+        tauri::test::mock_builder()
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .build(context)
+            .expect("mock app with updater plugin")
+    }
+
+    #[test]
+    fn updater_help_paths_resolve_to_repo_docs() {
+        let paths = super::get_updater_help_paths().expect("help paths resolve in repo");
+        assert!(paths.docs_path.ends_with("SETUP.md"));
+        assert!(paths
+            .template_path
+            .ends_with("tauri.conf.updater.example.json"));
+        assert!(std::path::Path::new(&paths.docs_path).is_file());
+        assert!(std::path::Path::new(&paths.template_path).is_file());
+    }
+
+    #[test]
+    fn open_updater_help_rejects_unknown_target_with_stable_code() {
+        // docs 存在时先解析路径、再按 target 匹配——未知 target 命中稳定错误码，
+        // 不会走到 open::that。
+        let err = super::open_updater_help("bogus-target".to_string()).expect_err("unknown target");
+        assert_eq!(err.code.as_deref(), Some("unsupported_updater_help_target"));
+    }
+
+    #[test]
+    fn config_health_reports_unconfigured_on_mock_app() {
+        let app = updater_test_app();
+        let health = super::get_updater_config_health(app.handle().clone());
+        // mock 上下文无 pubkey/endpoints：build_updater 失败 → 未配置路径。
+        assert!(!health.configured);
+        assert!(health.message.contains("更新源未配置或不可用"));
+    }
+
+    #[tokio::test]
+    async fn check_update_on_unconfigured_app_returns_graceful_no_update() {
+        let app = updater_test_app();
+        app.manage(PendingUpdateState::default());
+        let info = super::check_update(app.handle().clone(), app.state::<PendingUpdateState>())
+            .await
+            .expect("check_update must not hard-fail on config errors");
+
+        // 未配置的更新源 → has_update=false + 可读 message（而非 Err）。
+        assert!(!info.has_update);
+        assert!(info.available_version.is_none());
+        assert!(info.message.is_some());
+        // 失败路径同时清空 pending 缓存。
+        assert!(app
+            .state::<PendingUpdateState>()
+            .pending_update
+            .lock()
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn install_update_on_unconfigured_app_propagates_fetch_error() {
+        let app = updater_test_app();
+        app.manage(PendingUpdateState::default());
+        let err = super::install_update(
+            app.handle().clone(),
+            app.state::<PendingUpdateState>(),
+            Some("9.9.9".to_string()),
+        )
+        .await
+        .expect_err("unconfigured updater must fail install");
+
+        assert_eq!(err.kind, ErrorKind::Updater);
+        assert!(err.code.is_some());
     }
 }
