@@ -11,10 +11,10 @@ use publish_adapters::{
 use publish_domain::{
     declares_artifact_role, sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind,
     ArtifactCandidate, ArtifactManifest, DeliveryEnvelope, DeliveryIdempotencyIdentity,
-    DeliveryReceipt, DeliveryStatus, LeaseRenewal, PlanNode, PlanNodeExecutionState, PlanRoute,
-    PlanNodePlatform, PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError,
-    PublishEvent, PublishFailure, PublishOutcome, PublishPlan, PublishResource,
-    PublishResourceLease, ReleaseAttempt, ReleaseIdentity, RouteDeliveryView,
+    DeliveryReceipt, DeliveryStatus, LeaseRenewal, PlanNode, PlanNodeExecutionState,
+    PlanNodePlatform, PlanRoute, PlanStage, PlanningInputSnapshot, PublishAttemptStatus,
+    PublishAttemptView, PublishError, PublishEvent, PublishFailure, PublishOutcome, PublishPlan,
+    PublishResource, PublishResourceLease, ReleaseAttempt, ReleaseIdentity, RouteDeliveryView,
     DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION, PUBLISH_FAILURE_VERSION, PUBLISH_PLAN_VERSION,
     PUBLISH_RESOURCE_LEASE_VERSION, RELEASE_ATTEMPT_VERSION,
 };
@@ -1918,7 +1918,9 @@ impl PublishRuntime {
         let backend_run_id = format!("{attempt_id}/{}", platform_segment_name(platform));
         let mut executor =
             RuntimeNodeExecutor::new(&self.registry, plan, attempt_id, &backend_run_id)
-                .with_promoted_manifest_digest(prepared.snapshot.promoted_manifest_digest.as_deref())
+                .with_promoted_manifest_digest(
+                    prepared.snapshot.promoted_manifest_digest.as_deref(),
+                )
                 .with_assigned_platform(platform, completed_elsewhere)
                 .with_staged_artifacts(handoff.artifacts)
                 .with_cancellation(cancellation.clone());

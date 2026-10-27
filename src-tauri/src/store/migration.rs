@@ -738,13 +738,10 @@ fn draft_content(
 }
 
 fn upsert_scoped_draft(drafts: &mut Vec<ScopedPublishDraft>, draft: ScopedPublishDraft) {
-    if let Some(existing) = drafts
-        .iter_mut()
-        .find(|existing| {
-            existing.provider_id == draft.provider_id
-                && existing.project_binding == draft.project_binding
-        })
-    {
+    if let Some(existing) = drafts.iter_mut().find(|existing| {
+        existing.provider_id == draft.provider_id
+            && existing.project_binding == draft.project_binding
+    }) {
         *existing = draft;
     } else {
         drafts.push(draft);
@@ -822,7 +819,8 @@ pub(crate) fn migrate_repo_edit_state_v3_to_v4(repo: &mut Repository) -> bool {
                     &legacy_custom,
                 ) {
                     Some(parameters) => {
-                        let mut content = crate::publish_runtime::source::content_from_revision(revision);
+                        let mut content =
+                            crate::publish_runtime::source::content_from_revision(revision);
                         content.parameters = parameters;
                         content.project_binding = content.project_binding.or(binding.clone());
                         let draft_binding = content.project_binding.clone();
@@ -877,7 +875,8 @@ pub(crate) fn migrate_repo_edit_state_v3_to_v4(repo: &mut Repository) -> bool {
             provider_id,
             reference: reference.to_string(),
         })
-    } else if legacy_preset.is_empty() || legacy_preset == default_preset() && provider_id != "dotnet"
+    } else if legacy_preset.is_empty()
+        || legacy_preset == default_preset() && provider_id != "dotnet"
     {
         // 非 .NET 不继承无关的 release-fd；旧临时参数仅存于内存，转为空草稿。
         Some(PublishSelectionRef::Draft {

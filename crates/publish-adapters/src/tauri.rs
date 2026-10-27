@@ -360,7 +360,9 @@ fn enabled_build_targets(
         .filter(|targets| !targets.is_empty() && targets.iter().all(|t| !t.trim().is_empty()))
         .ok_or_else(|| PublishError::InvalidAdapterSettings {
             adapter: adapter.to_string(),
-            message: format!("{ENABLED_TARGETS_SETTING} must be a non-empty array of target triples"),
+            message: format!(
+                "{ENABLED_TARGETS_SETTING} must be a non-empty array of target triples"
+            ),
         })?;
     Ok(targets)
 }
@@ -921,7 +923,11 @@ impl TauriRuntimeProvider {
                         cancellation,
                     )
                     .map_err(|error| PublishError::Execution(error.to_string()))?;
-                crate::bridge::finish_provider_execution(execution, outcome, classify_tauri_artifact)
+                crate::bridge::finish_provider_execution(
+                    execution,
+                    outcome,
+                    classify_tauri_artifact,
+                )
             }
             Some(target) => {
                 let staged = execution.output_directory.join(target);
@@ -1178,15 +1184,15 @@ fn run_release_gate(
     node: &publish_domain::PlanNode,
     inputs: &BTreeMap<String, Value>,
 ) -> Result<crate::AdapterExecutionOutput, PublishError> {
-    let gate: SealedReleaseGate =
-        serde_json::from_value(Value::Object(inputs.clone().into_iter().collect())).map_err(
-            |error| {
-                PublishError::InvalidPlan(format!(
-                    "node {} has invalid sealed release gate inputs: {error}",
-                    node.id
-                ))
-            },
-        )?;
+    let gate: SealedReleaseGate = serde_json::from_value(Value::Object(
+        inputs.clone().into_iter().collect(),
+    ))
+    .map_err(|error| {
+        PublishError::InvalidPlan(format!(
+            "node {} has invalid sealed release gate inputs: {error}",
+            node.id
+        ))
+    })?;
     if gate.program.trim().is_empty() {
         return Err(PublishError::InvalidPlan(format!(
             "node {} has no sealed release gate program",
@@ -1468,8 +1474,7 @@ mod shard_materialization_tests {
     fn target_bundles_materialize_once_into_the_staged_directory() {
         let temp = tempfile::tempdir().expect("temp workspace");
         let app_root = temp.path().join("app");
-        let bundle = app_root
-            .join("src-tauri/target/aarch64-apple-darwin/release/bundle/dmg");
+        let bundle = app_root.join("src-tauri/target/aarch64-apple-darwin/release/bundle/dmg");
         std::fs::create_dir_all(&bundle).expect("create bundle dir");
         std::fs::write(bundle.join("app.dmg"), b"installer bytes").expect("write artifact");
         let staged = temp.path().join("staged/aarch64-apple-darwin");
@@ -1489,8 +1494,12 @@ mod shard_materialization_tests {
         assert!(staged.join("dmg/late.dmg").exists());
         assert!(!staged.join("stale.dmg").exists());
 
-        let error = materialize_target_bundle(&app_root, "x86_64-unknown-linux-gnu", &staged.join("missing"))
-            .expect_err("a missing bundle root must fail loudly");
+        let error = materialize_target_bundle(
+            &app_root,
+            "x86_64-unknown-linux-gnu",
+            &staged.join("missing"),
+        )
+        .expect_err("a missing bundle root must fail loudly");
         assert!(error.to_string().contains("no bundle output"));
     }
 }

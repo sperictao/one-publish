@@ -195,7 +195,10 @@ impl AdapterContract for SelectedProjectProvider {
             SELECTED_PROVIDER_PROGRAM,
             Vec::new(),
         )
-        .with_artifact_io(Vec::new(), vec!["provider-output:*".to_string()])])
+        .with_artifact_io(
+            Vec::new(),
+            vec!["provider-output:*".to_string()],
+        )])
     }
 
     fn execute_node(

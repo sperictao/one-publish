@@ -18,6 +18,8 @@ pub use config::{
 };
 pub(crate) use environment::{__cmd__apply_fix, __cmd__run_environment_check};
 pub use environment::{apply_fix, run_environment_check};
+#[cfg(test)]
+pub(crate) use export::write_execution_snapshot;
 pub(crate) use export::{
     __cmd__export_diagnostics_index, __cmd__export_execution_history,
     __cmd__export_execution_snapshot, __cmd__export_failure_group_bundle,
@@ -29,8 +31,6 @@ pub use export::{
     export_failure_group_bundle, export_handoff_bundle, export_preflight_report, open_directory,
     open_execution_snapshot, open_output_directory,
 };
-#[cfg(test)]
-pub(crate) use export::write_execution_snapshot;
 pub(crate) use notification::__cmd__show_system_notification;
 pub use notification::show_system_notification;
 pub(crate) use provider::{

@@ -203,9 +203,7 @@ fn render_thin_shell_workflow(
     let (on_block, run_name_block, trigger_env, trigger_descriptor, attempt_expression) =
         match &binding.trigger_policy {
             AutomationTriggerPolicy::TagPush { tag_prefix } => (
-                format!(
-                    "  push:\n    tags:\n      - '{tag_prefix}[0-9]*.[0-9]*.[0-9]*'\n"
-                ),
+                format!("  push:\n    tags:\n      - '{tag_prefix}[0-9]*.[0-9]*.[0-9]*'\n"),
                 String::new(),
                 String::new(),
                 "tag:${GITHUB_REF_NAME}",
@@ -567,8 +565,8 @@ fn shard_runner(platform: &str) -> (&'static str, &'static str, &'static str) {
 mod tests {
     use super::*;
     use publish_domain::{
-        AdapterIdentity, AutomationProjection, AutomationRuntimeRevision,
-        RuntimeAdapterRevision, RuntimeComponentRevision,
+        AdapterIdentity, AutomationProjection, AutomationRuntimeRevision, RuntimeAdapterRevision,
+        RuntimeComponentRevision,
     };
 
     fn runtime_revision() -> AutomationRuntimeRevision {
@@ -666,9 +664,10 @@ mod tests {
             assert!(workflow.content.contains(&format!(
                 "https://github.com/sperictao/one-publish/releases/download/runner-v0.1.0/one-publish-runner-{triple}.tar.gz"
             )));
-            assert!(workflow
-                .content
-                .contains(&format!("{}  one-publish-runner-{triple}", digest.repeat(64))));
+            assert!(workflow.content.contains(&format!(
+                "{}  one-publish-runner-{triple}",
+                digest.repeat(64)
+            )));
         }
         assert!(workflow
             .content
@@ -725,9 +724,9 @@ mod tests {
             .content
             .contains("\"$RUNNER_TEMP/one-publish-runner.exe\" verify"));
         assert!(workflow.content.contains("sha256sum -c -"));
-        assert!(workflow.content.contains(
-            "ONE_PUBLISH_CI_GITHUB_TOKEN: ${{ secrets.ONE_PUBLISH_CI_GITHUB_TOKEN }}"
-        ));
+        assert!(workflow
+            .content
+            .contains("ONE_PUBLISH_CI_GITHUB_TOKEN: ${{ secrets.ONE_PUBLISH_CI_GITHUB_TOKEN }}"));
         assert!(workflow
             .content
             .contains("verify \".one-publish/automation/runtime/stable.json\""));
@@ -797,9 +796,9 @@ mod tests {
         assert!(workflow
             .content
             .contains("\"version:${ONE_PUBLISH_VERSION}\""));
-        assert!(workflow
-            .content
-            .contains("execute \"$RUNNER_TEMP/prepared-attempt.json\" \"${ONE_PUBLISH_ATTEMPT_ID}\""));
+        assert!(workflow.content.contains(
+            "execute \"$RUNNER_TEMP/prepared-attempt.json\" \"${ONE_PUBLISH_ATTEMPT_ID}\""
+        ));
         assert!(!workflow.content.contains("push:"));
 
         let mut missing_template = binding("stable", "v", "revision-stable");

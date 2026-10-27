@@ -237,10 +237,7 @@ pub(super) fn scan_repository_branches(
     })
 }
 
-pub(super) fn branch_connectivity(
-    repository_root: &Path,
-    requested_branch: Option<&str>,
-) -> bool {
+pub(super) fn branch_connectivity(repository_root: &Path, requested_branch: Option<&str>) -> bool {
     let Some(layout) = resolve_git_layout(repository_root) else {
         return false;
     };
@@ -296,7 +293,10 @@ mod tests {
         let git = repo.join(".git");
 
         write(git.join("HEAD"), "ref: refs/heads/main\n");
-        write(git.join("refs/heads/main"), "1111111111111111111111111111111111111111\n");
+        write(
+            git.join("refs/heads/main"),
+            "1111111111111111111111111111111111111111\n",
+        );
         write(
             git.join("refs/heads/feature/login"),
             "2222222222222222222222222222222222222222\n",
@@ -366,7 +366,10 @@ mod tests {
         let git = repo.join(".git");
 
         write(git.join("HEAD"), "ref: refs/heads/main\n");
-        write(git.join("refs/heads/main"), "5555555555555555555555555555555555555555\n");
+        write(
+            git.join("refs/heads/main"),
+            "5555555555555555555555555555555555555555\n",
+        );
         write(
             git.join("config"),
             "[branch \"main\"]\n\tremote = origin\n\tmerge = refs/heads/main\n",

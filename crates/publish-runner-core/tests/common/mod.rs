@@ -105,10 +105,7 @@ impl RealBuildProvider {
             AdapterSchema::new(1),
             PublishingCapability {
                 provides: vec![Capability::new("artifact-candidate", 1)],
-                requires: vec![CapabilityRequirement::exact(
-                    "structured-plan-execution",
-                    1,
-                )],
+                requires: vec![CapabilityRequirement::exact("structured-plan-execution", 1)],
             },
         )
         .with_allowed_program(program_id);
@@ -152,7 +149,9 @@ impl AdapterContract for RealBuildProvider {
             self.args.clone(),
         )
         .with_artifact_io(Vec::new(), vec!["provider-output:*".to_string()])
-        .with_side_effects(vec![publish_domain::PlanSideEffect::FileSystem])])
+        .with_side_effects(vec![
+            publish_domain::PlanSideEffect::FileSystem,
+        ])])
     }
 
     fn execute_node(
@@ -178,14 +177,12 @@ impl AdapterContract for RealBuildProvider {
         for (key, value) in &self.env {
             command.env(key, value);
         }
-        let status = command
-            .status()
-            .map_err(|e| {
-                PublishError::Execution(format!(
-                    "failed to run {real_program}: {e}",
-                    real_program = self.real_program
-                ))
-            })?;
+        let status = command.status().map_err(|e| {
+            PublishError::Execution(format!(
+                "failed to run {real_program}: {e}",
+                real_program = self.real_program
+            ))
+        })?;
 
         if !status.success() {
             return Err(PublishError::Execution(format!(
@@ -238,18 +235,12 @@ pub fn collect_artifacts(
         let mut files = Vec::new();
         while let Some(directory) = pending.pop() {
             let entries = fs::read_dir(&directory).map_err(|error| PublishError::Io {
-                operation: format!(
-                    "read provider output directory {}",
-                    directory.display()
-                ),
+                operation: format!("read provider output directory {}", directory.display()),
                 message: error.to_string(),
             })?;
             for entry in entries {
                 let entry = entry.map_err(|error| PublishError::Io {
-                    operation: format!(
-                        "read provider output entry in {}",
-                        directory.display()
-                    ),
+                    operation: format!("read provider output entry in {}", directory.display()),
                     message: error.to_string(),
                 })?;
                 let file_type = entry.file_type().map_err(|error| PublishError::Io {
@@ -396,10 +387,7 @@ pub fn classify_tauri(relative: &Path) -> (&'static str, &'static str) {
     if name.ends_with(".sig") {
         return ("updater-signature", "application/octet-stream");
     }
-    if name.ends_with(".app.tar.gz")
-        || name.ends_with(".nsis.zip")
-        || name.ends_with(".msi.zip")
-    {
+    if name.ends_with(".app.tar.gz") || name.ends_with(".nsis.zip") || name.ends_with(".msi.zip") {
         return ("updater-archive", "application/octet-stream");
     }
     ("build-support", "application/octet-stream")
@@ -449,10 +437,7 @@ fn build_local_registry_with_credentials(
         )
         .expect("register local backend");
     registry
-        .register_artifact_store(
-            Arc::new(TemporaryArtifactStore::new(store_dir)),
-            &fixture,
-        )
+        .register_artifact_store(Arc::new(TemporaryArtifactStore::new(store_dir)), &fixture)
         .expect("register temporary store");
     registry
         .register_delivery_destination(
@@ -608,9 +593,7 @@ pub fn run_publish(
 }
 
 /// 断言发布尝试成功且所有必需路线已 Published。
-pub fn assert_published(
-    attempt: &PublishAttemptView,
-) -> &publish_domain::ArtifactManifest {
+pub fn assert_published(attempt: &PublishAttemptView) -> &publish_domain::ArtifactManifest {
     assert_eq!(
         attempt.status,
         PublishAttemptStatus::Published,
@@ -651,10 +634,7 @@ pub fn assert_delivered_file(receipt: &publish_domain::DeliveryReceipt, file_nam
 }
 
 /// 断言产物角色集合包含预期角色。
-pub fn assert_manifest_has_role(
-    manifest: &publish_domain::ArtifactManifest,
-    role: &str,
-) {
+pub fn assert_manifest_has_role(manifest: &publish_domain::ArtifactManifest, role: &str) {
     assert!(
         manifest.artifacts.iter().any(|a| a.role == role),
         "manifest should contain artifact with role '{role}', found roles: {:?}",

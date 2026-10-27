@@ -98,7 +98,11 @@ jobs:
           done
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, llvm-tools-preview
+          components: clippy, rustfmt, llvm-tools-preview
+      - name: Format check
+        run: |
+          cargo fmt --all --check
+          cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |

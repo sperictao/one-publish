@@ -40,7 +40,12 @@ fn routes() -> Vec<PlanRoute> {
 
 fn build_segment() -> Vec<PublishEvent> {
     vec![
-        segment_event("attempt-shard/linux", 1, "project.build-x86_64", "plan_node_started"),
+        segment_event(
+            "attempt-shard/linux",
+            1,
+            "project.build-x86_64",
+            "plan_node_started",
+        ),
         segment_event(
             "attempt-shard/linux",
             2,
@@ -53,7 +58,12 @@ fn build_segment() -> Vec<PublishEvent> {
 fn aggregate_segment() -> Vec<PublishEvent> {
     vec![
         segment_event("attempt-shard/any", 1, "store.persist", "plan_node_started"),
-        segment_event("attempt-shard/any", 2, "store.persist", "plan_node_completed"),
+        segment_event(
+            "attempt-shard/any",
+            2,
+            "store.persist",
+            "plan_node_completed",
+        ),
     ]
 }
 
@@ -106,8 +116,8 @@ fn segment_gaps_and_foreign_attempts_are_rejected() {
     // 段内 sequence 跳号 = 缺失证据，触发补拉而不是继续归约。
     let mut gapped = build_segment();
     gapped.remove(0);
-    let error = reduce_publish_events(&gapped, &routes())
-        .expect_err("a segment gap must be detected");
+    let error =
+        reduce_publish_events(&gapped, &routes()).expect_err("a segment gap must be detected");
     assert!(error.to_string().contains("expected 1"));
 
     let mut foreign = [build_segment(), aggregate_segment()].concat();
@@ -128,8 +138,12 @@ fn manifest_evidence_merges_consistently_across_segments() {
     events.push(sealed);
     reduce_publish_events(&events, &routes()).expect("manifest evidence merges");
 
-    let mut conflicting_manifest =
-        segment_event("attempt-shard/linux", 3, "project.build-x86_64", "manifest_sealed");
+    let mut conflicting_manifest = segment_event(
+        "attempt-shard/linux",
+        3,
+        "project.build-x86_64",
+        "manifest_sealed",
+    );
     conflicting_manifest.payload.insert(
         "manifest_digest".to_string(),
         Value::String("another-manifest".to_string()),
@@ -151,8 +165,7 @@ fn truncated_segments_from_a_hard_cancel_still_reduce() {
         "store.persist",
         "plan_node_started",
     ));
-    let projection =
-        reduce_publish_events(&events, &routes()).expect("truncated segments reduce");
+    let projection = reduce_publish_events(&events, &routes()).expect("truncated segments reduce");
     assert_eq!(
         projection.node_states.get("store.persist"),
         Some(&PlanNodeExecutionState::Started)

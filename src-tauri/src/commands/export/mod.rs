@@ -308,9 +308,8 @@ pub async fn export_handoff_bundle(
     failure_bundle: Option<Value>,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new(
-        "commands::export::export_handoff_bundle",
-    );
+    let _timer =
+        crate::commands::middleware::CommandTimer::new("commands::export::export_handoff_bundle");
     let mut record = record;
     if !record.is_object() {
         return Err(export_error(
@@ -365,8 +364,8 @@ pub async fn export_handoff_bundle(
     let readme = render_handoff_readme(&record, &includes);
 
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-    let options =
-        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
     let mut entries: Vec<(&str, String)> = vec![("README.md", readme)];
     if let Some(snapshot) = snapshot_content.as_deref() {
         entries.push(("snapshot.md", snapshot.to_string()));
@@ -375,18 +374,22 @@ pub async fn export_handoff_bundle(
         entries.push(("failure-groups.md", groups.to_string()));
     }
     for (name, content) in &entries {
-        zip.start_file(*name, options)
-            .map_err(|source| export_source_error("write error", source, "handoff_zip_write_failed"))?;
-        std::io::Write::write_all(&mut zip, content.as_bytes())
-            .map_err(|source| export_source_error("write error", source, "handoff_zip_write_failed"))?;
+        zip.start_file(*name, options).map_err(|source| {
+            export_source_error("write error", source, "handoff_zip_write_failed")
+        })?;
+        std::io::Write::write_all(&mut zip, content.as_bytes()).map_err(|source| {
+            export_source_error("write error", source, "handoff_zip_write_failed")
+        })?;
     }
     let bytes = zip
         .finish()
-        .map_err(|source| export_source_error("write error", source, "handoff_zip_finalize_failed"))?
+        .map_err(|source| {
+            export_source_error("write error", source, "handoff_zip_finalize_failed")
+        })?
         .into_inner();
-    crate::security::write_private_binary_file(Path::new(&file_path), &bytes).map_err(|source| {
-        export_source_error("write error", source, "handoff_bundle_write_failed")
-    })?;
+    crate::security::write_private_binary_file(Path::new(&file_path), &bytes).map_err(
+        |source| export_source_error("write error", source, "handoff_bundle_write_failed"),
+    )?;
     Ok(file_path)
 }
 
@@ -592,7 +595,11 @@ mod tests {
         let out = dir.path().join("handoff.zip");
         let path = tokio::runtime::Runtime::new()
             .expect("runtime")
-            .block_on(export_handoff_bundle(record, Some(failure_bundle), out.to_string_lossy().into_owned()))
+            .block_on(export_handoff_bundle(
+                record,
+                Some(failure_bundle),
+                out.to_string_lossy().into_owned(),
+            ))
             .expect("export handoff bundle");
         assert_eq!(path, out.to_string_lossy());
 
@@ -619,11 +626,17 @@ mod tests {
         assert!(readme.contains("`snapshot.md`"));
         assert!(readme.contains("`failure-groups.md`"));
         // 本地绝对路径必须被遮蔽（脱敏链路经 sanitize_export_value）。
-        assert!(!readme.contains("/Users/secret"), "README 不得泄漏本地路径：{readme}");
+        assert!(
+            !readme.contains("/Users/secret"),
+            "README 不得泄漏本地路径：{readme}"
+        );
 
         let groups = read("failure-groups.md");
         assert!(groups.contains("编译失败"), "失败分组内容应包含分组标题");
-        assert!(!groups.contains("/Users/secret"), "失败分组不得泄漏本地路径");
+        assert!(
+            !groups.contains("/Users/secret"),
+            "失败分组不得泄漏本地路径"
+        );
 
         let snapshot = read("snapshot.md");
         assert!(snapshot.contains("执行快照"));
@@ -648,7 +661,11 @@ mod tests {
         let out = dir.path().join("handoff-minimal.zip");
         tokio::runtime::Runtime::new()
             .expect("runtime")
-            .block_on(export_handoff_bundle(record, None, out.to_string_lossy().into_owned()))
+            .block_on(export_handoff_bundle(
+                record,
+                None,
+                out.to_string_lossy().into_owned(),
+            ))
             .expect("export handoff bundle");
 
         let bytes = std::fs::read(&out).expect("read zip");

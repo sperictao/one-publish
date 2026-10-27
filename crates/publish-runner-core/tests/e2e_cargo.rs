@@ -14,8 +14,8 @@ use std::sync::Arc;
 use common::*;
 use publish_adapters::{AdapterRegistry, FakeSftpServer, StaticCredentialSource};
 use publish_domain::{
-    AdapterBinding, AdapterIdentity, AdapterKind, AdapterSettings, DeliveryRoute,
-    DeliveryStatus, PublishAttemptStatus,
+    AdapterBinding, AdapterIdentity, AdapterKind, AdapterSettings, DeliveryRoute, DeliveryStatus,
+    PublishAttemptStatus,
 };
 use publish_runner_core::PublishRuntime;
 use serde_json::Value;
@@ -267,7 +267,12 @@ fn cargo_05_workspace_member_build() {
         "real-cargo",
         "cargo:build",
         "cargo",
-        vec!["build".to_string(), "--release".to_string(), "-p".to_string(), "cargo-ws-bin".to_string()],
+        vec![
+            "build".to_string(),
+            "--release".to_string(),
+            "-p".to_string(),
+            "cargo-ws-bin".to_string(),
+        ],
         project,
         output_dir,
         classify_cargo,
@@ -332,8 +337,12 @@ fn cargo_07_artifact_promotion() {
     // 第一次发布：构建到 Local
     let provider = cargo_provider("cargo-07", None, &[]);
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    let registry =
-        build_local_registry(provider.clone(), store_dir.path(), delivery_dir.path(), &snapshot);
+    let registry = build_local_registry(
+        provider.clone(),
+        store_dir.path(),
+        delivery_dir.path(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt1 = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cargo-07-1");
@@ -343,7 +352,8 @@ fn cargo_07_artifact_promotion() {
     // 第二次发布：推广到 SFTP（不重新构建）。规划器跳过构建，但仍经已注册的
     // provider 解析能力。
     let sftp = Arc::new(FakeSftpServer::new());
-    let mut snapshot2 = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
+    let mut snapshot2 =
+        build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot2.promoted_manifest_digest = Some(original_digest.clone());
     snapshot2.adapters.delivery_routes = vec![DeliveryRoute::required(sftp_binding())];
 
@@ -442,7 +452,10 @@ fn cargo_08_partial_delivery_recovery() {
     assert_published(&resumed);
 
     // SFTP 远端应有文件
-    assert!(!sftp.paths().is_empty(), "SFTP should have files after resume");
+    assert!(
+        !sftp.paths().is_empty(),
+        "SFTP should have files after resume"
+    );
 }
 
 /// CARGO-09: Custom Command 门禁（计划验证）。
@@ -464,15 +477,21 @@ fn cargo_09_custom_command_gate() {
     let custom_processor = publish_adapters::CustomCommandProcessor::new(["test:gate"]);
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    snapshot.adapters.artifact_processors.push(AdapterBinding::new(
-        "gate",
-        AdapterIdentity::new(AdapterKind::ArtifactProcessor, "custom-command", 1),
-        AdapterSettings::new(1)
-            .with_value("program", Value::String("test:gate".to_string()))
-            .with_value("args", Value::Array(vec![]))
-            .with_value("input_roles", Value::Array(vec![Value::String("build-output".to_string())]))
-            .with_value("output_roles", Value::Array(vec![])),
-    ));
+    snapshot
+        .adapters
+        .artifact_processors
+        .push(AdapterBinding::new(
+            "gate",
+            AdapterIdentity::new(AdapterKind::ArtifactProcessor, "custom-command", 1),
+            AdapterSettings::new(1)
+                .with_value("program", Value::String("test:gate".to_string()))
+                .with_value("args", Value::Array(vec![]))
+                .with_value(
+                    "input_roles",
+                    Value::Array(vec![Value::String("build-output".to_string())]),
+                )
+                .with_value("output_roles", Value::Array(vec![])),
+        ));
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
@@ -480,37 +499,44 @@ fn cargo_09_custom_command_gate() {
         .register_project_provider(provider, &fixture)
         .expect("register provider");
     registry
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
+        .register_artifact_processor(
+            Arc::new(publish_adapters::ChecksumProcessor::new()),
+            &fixture,
+        )
         .expect("register checksum");
     registry
         .register_artifact_processor(Arc::new(custom_processor), &fixture)
         .expect("register custom command");
     registry
         .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new(),
-            ))),
+            Arc::new(
+                publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
+                    StaticCredentialSource::new(),
+                )),
+            ),
             &fixture,
         )
         .expect("register backend");
     registry
         .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
+            Arc::new(publish_adapters::TemporaryArtifactStore::new(
+                store_dir.path(),
+            )),
             &fixture,
         )
         .expect("register store");
     registry
         .register_delivery_destination(
-            Arc::new(publish_adapters::LocalDirectoryDestination::new(delivery_dir.path())),
+            Arc::new(publish_adapters::LocalDirectoryDestination::new(
+                delivery_dir.path(),
+            )),
             &fixture,
         )
         .expect("register local");
     let runtime = PublishRuntime::new(registry);
 
     // 只验证计划：门禁节点应出现在计划中
-    let prepared = runtime
-        .prepare_attempt(&snapshot)
-        .expect("prepare attempt");
+    let prepared = runtime.prepare_attempt(&snapshot).expect("prepare attempt");
 
     let has_gate_node = prepared
         .plan

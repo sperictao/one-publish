@@ -9,12 +9,11 @@ use super::runtime::{
 };
 use super::types::{
     normalize_environment_provider_ids, normalize_execution_history_limit, trim_execution_history,
-    AppState, ConfigProfile, ExecutionRecord, PublishComposition,
-    PublishSelectionRef, Repository, ScopedPublishDraft, CURRENT_SETTINGS_VERSION,
-    PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+    AppState, ConfigProfile, ExecutionRecord, PublishComposition, PublishSelectionRef, Repository,
+    ScopedPublishDraft, CURRENT_SETTINGS_VERSION, PUBLISH_CONFIGURATION_CONTRACT_VERSION,
 };
-use crate::publish_runtime::PublishBaseRevisionRef;
 use crate::errors::AppError;
+use crate::publish_runtime::PublishBaseRevisionRef;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -28,8 +27,7 @@ pub struct ProfileOrderEntry {
 /// 是否按 Windows 路径规则处理（盘符 / 反斜杠 / UNC 前缀）。
 fn is_windows_like_path(path: &str) -> bool {
     let bytes = path.as_bytes();
-    let has_drive_prefix =
-        bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    let has_drive_prefix = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
 
     has_drive_prefix || path.contains('\\') || path.starts_with("\\\\")
 }
@@ -323,8 +321,9 @@ pub async fn update_publish_edit_state(
     repo_id: String,
     update: PublishEditStateUpdate,
 ) -> Result<AppState, AppError> {
-    let _timer =
-        crate::commands::middleware::CommandTimer::new("store::commands::update_publish_edit_state");
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "store::commands::update_publish_edit_state",
+    );
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
@@ -383,26 +382,35 @@ fn upsert_edit_draft(
     base_revision: Option<PublishBaseRevisionRef>,
 ) -> Result<Option<String>, AppError> {
     let mut content = if let Some(base) = &base_revision {
-        let revision = repo.publish_config.profile(&base.configuration_id)
-            .filter(|profile| profile.deleted_at.is_none() && profile.current_revision_id == base.revision_id)
+        let revision = repo
+            .publish_config
+            .profile(&base.configuration_id)
+            .filter(|profile| {
+                profile.deleted_at.is_none() && profile.current_revision_id == base.revision_id
+            })
             .and_then(|profile| profile.current_revision())
             .filter(|revision| revision.provider_id == provider_id)
-            .ok_or_else(|| AppError::validation_with_code(
-                "草稿基准修订已变化，请重新加载配置", "publish_source_draft_conflict"
-            ))?;
+            .ok_or_else(|| {
+                AppError::validation_with_code(
+                    "草稿基准修订已变化，请重新加载配置",
+                    "publish_source_draft_conflict",
+                )
+            })?;
         crate::publish_runtime::source::content_from_revision(revision)
-    } else { crate::publish_runtime::PublishConfigurationContent {
-        provider_id: provider_id.to_string(),
-        contract_version: PUBLISH_CONFIGURATION_CONTRACT_VERSION,
-        provider_version: crate::provider::registry::ProviderRegistry::new()
-            .get(provider_id)
-            .map(|provider| provider.manifest().version.clone())
-            .unwrap_or_else(|_| "unknown".to_string()),
-        settings_version: CURRENT_SETTINGS_VERSION,
-        project_binding: project_binding.clone(),
-        parameters: serde_json::json!({}),
-        composition: PublishComposition::local_default(),
-    }};
+    } else {
+        crate::publish_runtime::PublishConfigurationContent {
+            provider_id: provider_id.to_string(),
+            contract_version: PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+            provider_version: crate::provider::registry::ProviderRegistry::new()
+                .get(provider_id)
+                .map(|provider| provider.manifest().version.clone())
+                .unwrap_or_else(|_| "unknown".to_string()),
+            settings_version: CURRENT_SETTINGS_VERSION,
+            project_binding: project_binding.clone(),
+            parameters: serde_json::json!({}),
+            composition: PublishComposition::local_default(),
+        }
+    };
     content.parameters = parameters;
     content.project_binding = project_binding.or(content.project_binding);
     let project_binding = content.project_binding.clone();
@@ -412,15 +420,10 @@ fn upsert_edit_draft(
         content,
         base_revision,
     };
-    if let Some(existing) = repo
-        .publish_config
-        .drafts
-        .iter_mut()
-        .find(|existing| {
-            existing.provider_id == draft.provider_id
-                && existing.project_binding == draft.project_binding
-        })
-    {
+    if let Some(existing) = repo.publish_config.drafts.iter_mut().find(|existing| {
+        existing.provider_id == draft.provider_id
+            && existing.project_binding == draft.project_binding
+    }) {
         *existing = draft;
     } else {
         repo.publish_config.drafts.push(draft);
@@ -445,20 +448,22 @@ pub(crate) fn repository_project_binding(
                 .filter(|file| !file.trim().is_empty())?;
             let project_path = std::path::Path::new(&project_file);
             let discovery = provider.repository_discovery();
-            let matches_project_file = discovery.project_file_matchers.iter().any(|matcher| {
-                match matcher {
-                    crate::provider::ProviderProjectFileMatcher::Extension(extension) => {
-                        project_path
-                            .extension()
+            let matches_project_file =
+                discovery
+                    .project_file_matchers
+                    .iter()
+                    .any(|matcher| match matcher {
+                        crate::provider::ProviderProjectFileMatcher::Extension(extension) => {
+                            project_path
+                                .extension()
+                                .and_then(|value| value.to_str())
+                                .is_some_and(|value| value.eq_ignore_ascii_case(extension))
+                        }
+                        crate::provider::ProviderProjectFileMatcher::FileName(name) => project_path
+                            .file_name()
                             .and_then(|value| value.to_str())
-                            .is_some_and(|value| value.eq_ignore_ascii_case(extension))
-                    }
-                    crate::provider::ProviderProjectFileMatcher::FileName(name) => project_path
-                        .file_name()
-                        .and_then(|value| value.to_str())
-                        .is_some_and(|value| value.eq_ignore_ascii_case(name)),
-                }
-            });
+                            .is_some_and(|value| value.eq_ignore_ascii_case(name)),
+                    });
             let matches_solution = discovery.solution_file_extensions.iter().any(|extension| {
                 project_path
                     .extension()

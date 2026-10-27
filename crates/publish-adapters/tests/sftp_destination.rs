@@ -1502,12 +1502,7 @@ fn observe_reports_exhausted_receipt_revision_ranges() {
     };
 
     let error = fixture
-        .execute(
-            &nodes[2],
-            &manifest,
-            &staged.envelopes,
-            &[exhausted],
-        )
+        .execute(&nodes[2], &manifest, &staged.envelopes, &[exhausted])
         .expect_err("an exhausted receipt revision cannot advance");
     assert!(matches!(error, PublishError::Execution(_)));
 }
