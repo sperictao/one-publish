@@ -1320,9 +1320,14 @@ mod tests {
             ReleaseAttempt, ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
             PUBLISH_PLAN_VERSION, PUBLISH_RESOURCE_LEASE_VERSION, RELEASE_ATTEMPT_VERSION,
         };
-        use publish_adapters::AdapterRegistry;
+        use publish_adapters::{
+            AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor, FixtureAppProvider,
+            LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore,
+            CHECKSUM_PROCESSOR_ID, FIXTURE_PROVIDER_ID, LOCAL_DESTINATION_ID,
+        };
         use publish_runner_core::{PreparedPublishPlan, PublishRuntime};
         use std::collections::{BTreeMap, BTreeSet};
+        use std::sync::Arc;
 
         fn source_snapshot() -> SourceSnapshot {
             SourceSnapshot {
@@ -1334,10 +1339,10 @@ mod tests {
             }
         }
 
-        fn minimal_binding(slot: &str, kind: AdapterKind) -> AdapterBinding {
+        fn minimal_binding(slot: &str, kind: AdapterKind, id: &str) -> AdapterBinding {
             AdapterBinding::new(
                 slot,
-                AdapterIdentity::new(kind, "fixture-adapter", 1),
+                AdapterIdentity::new(kind, id, 1),
                 AdapterSettings::new(1),
             )
         }
@@ -1369,18 +1374,58 @@ mod tests {
                     external_preconditions: BTreeMap::new(),
                     promoted_manifest_digest: None,
                     adapters: AdapterSelection {
-                        project_provider: minimal_binding("project", AdapterKind::ProjectProvider),
+                        project_provider: AdapterBinding::new(
+                            "project",
+                            AdapterIdentity::new(
+                                AdapterKind::ProjectProvider,
+                                FIXTURE_PROVIDER_ID,
+                                1,
+                            ),
+                            AdapterSettings::new(2).with_value(
+                                "manifest_path",
+                                serde_json::Value::String("fixture-app.json".to_string()),
+                            ),
+                        ),
                         artifact_processors: vec![minimal_binding(
                             "processor",
                             AdapterKind::ArtifactProcessor,
+                            CHECKSUM_PROCESSOR_ID,
                         )],
                         execution_backend: minimal_binding(
                             "backend",
                             AdapterKind::ExecutionBackend,
+                            "local-execution",
                         ),
-                        artifact_store: minimal_binding("store", AdapterKind::ArtifactStore),
+                        artifact_store: AdapterBinding::new(
+                            "store",
+                            AdapterIdentity::new(
+                                AdapterKind::ArtifactStore,
+                                "temporary-artifact-store",
+                                1,
+                            ),
+                            AdapterSettings::new(1)
+                                .with_value(
+                                    "root_directory",
+                                    serde_json::Value::String("/tmp/store".to_string()),
+                                )
+                                .with_value(
+                                    "retention_seconds",
+                                    serde_json::Value::from(3600u64),
+                                ),
+                        ),
                         delivery_routes: vec![publish_domain::DeliveryRoute::required(
-                            minimal_binding("delivery", AdapterKind::DeliveryDestination),
+                            AdapterBinding::new(
+                                "delivery",
+                                AdapterIdentity::new(
+                                    AdapterKind::DeliveryDestination,
+                                    LOCAL_DESTINATION_ID,
+                                    1,
+                                ),
+                                AdapterSettings::new(1).with_value(
+                                    "directory",
+                                    serde_json::Value::String("/tmp/delivery".to_string()),
+                                ),
+                            ),
                         )],
                     },
                 },
@@ -1435,6 +1480,108 @@ mod tests {
                 .write_header(&fixture_header(attempt_id, lease))
                 .expect("seed attempt journal header");
             (journal, repository)
+        }
+
+        fn header_for(
+            prepared: &PreparedPublishPlan,
+            attempt_id: &str,
+            lease: PublishResourceLease,
+        ) -> AttemptJournalHeader {
+            AttemptJournalHeader {
+                prepared: prepared.clone(),
+                attempt: ReleaseAttempt {
+                    version: RELEASE_ATTEMPT_VERSION,
+                    attempt_id: attempt_id.to_string(),
+                    configuration_revision: prepared
+                        .snapshot
+                        .configuration_revision
+                        .clone(),
+                    planning_snapshot_digest: prepared.plan.snapshot_digest.clone(),
+                    plan_version: prepared.plan.version,
+                    plan_digest: prepared.plan.digest.clone(),
+                    release_identity: ReleaseIdentity::new(
+                        "fixture:app",
+                        source_snapshot(),
+                        "1.0.0",
+                        "stable",
+                        None,
+                    ),
+                    execution_backend: prepared.plan.execution_backend.clone(),
+                    runtime_revision: prepared.snapshot.runtime_revision.clone(),
+                    backend_run_id: "run-1".to_string(),
+                    manifest_digest: None,
+                },
+                lease,
+                ..fixture_header(attempt_id, fixture_lease(attempt_id, "lease-1", 100))
+            }
+        }
+
+        struct RuntimeFixture {
+            _journal: tempfile::TempDir,
+            repository: AttemptJournalRepository,
+            runtime: PublishRuntime,
+            prepared: PreparedPublishPlan,
+            _root: tempfile::TempDir,
+            _store: tempfile::TempDir,
+            _delivery: tempfile::TempDir,
+        }
+
+        /// 真实注册表 + 真实 planner：synchronize_attempt 会重放计划比对，
+        /// 伪造 digest 走不通。
+        fn seeded_with_runtime(attempt_id: &str, lease: PublishResourceLease) -> RuntimeFixture {
+            let journal = tempfile::tempdir().expect("create attempt journal root");
+            let repository = AttemptJournalRepository::new(journal.path().to_path_buf());
+            let root = tempfile::tempdir().expect("fixture repository root");
+            let store = tempfile::tempdir().expect("fixture artifact store");
+            let delivery = tempfile::tempdir().expect("fixture delivery root");
+            std::fs::write(
+                root.path().join("fixture-app.json"),
+                br#"{"name":"fixture","version":"1.0.0"}"#,
+            )
+            .expect("write fixture manifest");
+            let header = fixture_header(attempt_id, fixture_lease(attempt_id, "lease-1", 100));
+            let conformance = AdapterConformanceFixture::new(header.prepared.snapshot.clone());
+            let mut registry = AdapterRegistry::new();
+            registry
+                .register_project_provider(
+                    Arc::new(FixtureAppProvider::new(root.path().to_path_buf())),
+                    &conformance,
+                )
+                .expect("register fixture provider");
+            registry
+                .register_artifact_processor(Arc::new(ChecksumProcessor::new()), &conformance)
+                .expect("register checksum processor");
+            registry
+                .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &conformance)
+                .expect("register local backend");
+            registry
+                .register_artifact_store(
+                    Arc::new(TemporaryArtifactStore::new(store.path())),
+                    &conformance,
+                )
+                .expect("register temporary store");
+            registry
+                .register_delivery_destination(
+                    Arc::new(LocalDirectoryDestination::new(delivery.path())),
+                    &conformance,
+                )
+                .expect("register local destination");
+            let runtime = PublishRuntime::new(registry);
+            let prepared = runtime
+                .prepare_attempt(&header.prepared.snapshot)
+                .expect("re-plan the fixture snapshot");
+            repository
+                .write_header(&header_for(&prepared, attempt_id, lease))
+                .expect("seed attempt journal header");
+            RuntimeFixture {
+                _journal: journal,
+                repository,
+                runtime,
+                prepared,
+                _root: root,
+                _store: store,
+                _delivery: delivery,
+            }
         }
 
         #[test]
@@ -1659,25 +1806,22 @@ mod tests {
             }
         }
 
-        fn bound_manifest(file_name: &str) -> ArtifactManifest {
-            ArtifactManifest::seal("snapshot-1", vec![manifest_entry(file_name)])
+        fn bound_manifest(snapshot_digest: &str, file_name: &str) -> ArtifactManifest {
+            ArtifactManifest::seal(snapshot_digest, vec![manifest_entry(file_name)])
                 .expect("seal fixture manifest")
         }
 
-        fn stub_runtime() -> PublishRuntime {
-            // 仅供 guard 臂使用：这些断言在 runtime 介入前就已被拒绝。
-            PublishRuntime::new(AdapterRegistry::new())
-        }
 
         #[test]
         fn synchronize_rejects_manifest_bound_to_a_foreign_snapshot() {
-            let (_journal, repository) =
-                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+            let fixture =
+                seeded_with_runtime("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
             let foreign = ArtifactManifest::seal("other-snapshot", vec![manifest_entry("a.bin")])
                 .expect("seal foreign manifest");
 
-            let error = repository
-                .synchronize(&stub_runtime(), "attempt-1", Vec::new(), Some(foreign), None)
+            let error = fixture
+                .repository
+                .synchronize(&fixture.runtime, "attempt-1", Vec::new(), Some(foreign), None)
                 .expect_err("foreign-snapshot manifest must fail provenance");
             let PublishError::Execution(message) = error else {
                 panic!("expected execution error, got {error:?}")
@@ -1687,23 +1831,31 @@ mod tests {
 
         #[test]
         fn synchronize_rejects_manifest_conflicting_with_seeded_evidence() {
-            let (_journal, repository) =
-                seeded_repository("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
-            repository
+            let fixture =
+                seeded_with_runtime("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+            fixture
+                .repository
                 .append_records(
                     "attempt-1",
                     &[AttemptJournalRecord::Manifest {
-                        manifest: bound_manifest("first.bin"),
+                        manifest: bound_manifest(
+                            &fixture.prepared.plan.snapshot_digest,
+                            "first.bin",
+                        ),
                     }],
                 )
                 .expect("seed manifest evidence");
 
-            let error = repository
+            let error = fixture
+                .repository
                 .synchronize(
-                    &stub_runtime(),
+                    &fixture.runtime,
                     "attempt-1",
                     Vec::new(),
-                    Some(bound_manifest("second.bin")),
+                    Some(bound_manifest(
+                        &fixture.prepared.plan.snapshot_digest,
+                        "second.bin",
+                    )),
                     None,
                 )
                 .expect_err("a different manifest must conflict with seeded evidence");
@@ -1713,8 +1865,81 @@ mod tests {
             assert!(message.contains("already bound to a different artifact manifest"));
         }
 
+        #[test]
+        fn synchronize_reports_missing_sequences_without_persisting() {
+            let fixture =
+                seeded_with_runtime("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
 
+            let report = fixture
+                .repository
+                .synchronize(&fixture.runtime, "attempt-1", Vec::new(), None, Some(5))
+                .expect("a gap report is not an error");
+            assert_eq!(report.accepted, 0);
+            assert!(!report.missing.is_empty());
+        }
 
+        #[test]
+        fn synchronize_rejects_seeded_manifest_without_a_binding_event() {
+            let fixture =
+                seeded_with_runtime("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+            fixture
+                .repository
+                .append_records(
+                    "attempt-1",
+                    &[AttemptJournalRecord::Manifest {
+                        manifest: bound_manifest(
+                            &fixture.prepared.plan.snapshot_digest,
+                            "first.bin",
+                        ),
+                    }],
+                )
+                .expect("seed manifest evidence");
 
+            let error = fixture
+                .repository
+                .synchronize(&fixture.runtime, "attempt-1", Vec::new(), None, None)
+                .expect_err("manifest evidence without a binding event must fail");
+            let PublishError::Execution(message) = error else {
+                panic!("expected execution error, got {error:?}")
+            };
+            assert!(message.contains("manifest evidence without a binding event"));
+        }
+
+        #[test]
+        fn synchronize_rejects_incoming_manifest_when_history_has_no_binding() {
+            let fixture =
+                seeded_with_runtime("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            let error = fixture
+                .repository
+                .synchronize(
+                    &fixture.runtime,
+                    "attempt-1",
+                    Vec::new(),
+                    Some(bound_manifest(
+                        &fixture.prepared.plan.snapshot_digest,
+                        "first.bin",
+                    )),
+                    None,
+                )
+                .expect_err("unbound manifest evidence must fail");
+            let PublishError::Execution(message) = error else {
+                panic!("expected execution error, got {error:?}")
+            };
+            assert!(message.contains("manifest evidence without a binding event"));
+        }
+
+        #[test]
+        fn synchronize_accepts_an_empty_complete_history_as_noop() {
+            let fixture =
+                seeded_with_runtime("attempt-1", fixture_lease("attempt-1", "lease-1", 100));
+
+            let report = fixture
+                .repository
+                .synchronize(&fixture.runtime, "attempt-1", Vec::new(), None, None)
+                .expect("a complete empty history is an inert no-op");
+            assert_eq!(report.accepted, 0);
+            assert!(report.missing.is_empty());
+        }
     }
 }
