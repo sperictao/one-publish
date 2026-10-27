@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 
 use publish_domain::{
     canonical_digest, sha256_hex, validate_automation_runtime_revision_identifier, AdapterBinding,
-    AdapterIdentity, AdapterKind, AdapterSettings, ArtifactManifest, ArtifactManifestEntry,
+    AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema, AdapterSchemaValueType,
+    AdapterSelection, AdapterSettings, ArtifactManifest, ArtifactManifestEntry,
     AutomationRuntimeRevision, Capability, CapabilityRequirement, DeliveryRoute, PlanNodePlatform,
     PlanNodeTemplate, PlanOperation, PlanSideEffect, PlanStage, PublishError, PublishingCapability,
     RuntimeAdapterRevision, RuntimeComponentRevision, ARTIFACT_MANIFEST_VERSION,
@@ -387,4 +388,133 @@ fn canonical_digests_fail_when_contracts_cannot_serialize() {
     let error = canonical_digest(&Unserializable)
         .expect_err("unserializable contracts cannot produce digests");
     assert!(error.to_string().contains("cannot serialize contract"));
+}
+
+#[test]
+fn schema_builders_declare_typed_fields() {
+    let schema = AdapterSchema::new(1)
+        .with_required_string("repository")
+        .with_required_number("port")
+        .with_required_boolean("tls")
+        .with_required_string_list("roles")
+        .with_optional_string_list("tags");
+    for (key, value_type, required) in [
+        ("repository", AdapterSchemaValueType::String, true),
+        ("port", AdapterSchemaValueType::Number, true),
+        ("tls", AdapterSchemaValueType::Boolean, true),
+        ("roles", AdapterSchemaValueType::StringList, true),
+        ("tags", AdapterSchemaValueType::StringList, false),
+    ] {
+        let field = schema.fields.get(key).expect("declared field");
+        assert_eq!(field.value_type, value_type);
+        assert_eq!(field.required, required);
+    }
+}
+
+#[test]
+fn settings_accessors_reject_missing_and_mistyped_values() {
+    let settings = AdapterSettings::new(1)
+        .with_value("port", serde_json::json!("not-a-number"))
+        .with_value("tls", serde_json::json!("not-a-bool"));
+    let adapter = "test-adapter";
+
+    assert!(matches!(
+        settings.string("missing", adapter),
+        Err(PublishError::InvalidAdapterSettings { .. })
+    ));
+    assert!(matches!(
+        settings.unsigned_number("port", adapter),
+        Err(PublishError::InvalidAdapterSettings { .. })
+    ));
+    assert!(matches!(
+        settings.boolean("tls", adapter),
+        Err(PublishError::InvalidAdapterSettings { .. })
+    ));
+}
+
+#[test]
+fn capability_requirements_accept_versions_inside_the_declared_range() {
+    let requirement = CapabilityRequirement {
+        id: "cap".to_string(),
+        minimum_version: 2,
+        maximum_version: 4,
+    };
+    assert!(!requirement.accepts(1));
+    assert!(requirement.accepts(2));
+    assert!(requirement.accepts(4));
+    assert!(!requirement.accepts(5));
+}
+
+#[test]
+fn delivery_routes_carry_required_semantics_and_binding_identity() {
+    let binding = AdapterBinding::new(
+        "route-a",
+        AdapterIdentity::new(AdapterKind::DeliveryDestination, "dest", 1),
+        AdapterSettings::new(1),
+    );
+    let required = DeliveryRoute::required(binding.clone());
+    let optional = DeliveryRoute::optional(binding);
+    assert!(required.required);
+    assert!(!optional.required);
+    assert_eq!(required.route_id(), "route-a");
+    assert_eq!(optional.route_id(), "route-a");
+}
+
+#[test]
+fn selection_orders_bindings_deterministically() {
+    let identity = |kind, id| AdapterIdentity::new(kind, id, 1);
+    let binding =
+        |id: &str, kind| AdapterBinding::new(id.to_string(), kind, AdapterSettings::new(1));
+    let selection = AdapterSelection {
+        project_provider: binding("provider", identity(AdapterKind::ProjectProvider, "p")),
+        artifact_processors: vec![binding(
+            "proc",
+            identity(AdapterKind::ArtifactProcessor, "a"),
+        )],
+        execution_backend: binding("backend", identity(AdapterKind::ExecutionBackend, "e")),
+        artifact_store: binding("store", identity(AdapterKind::ArtifactStore, "s")),
+        delivery_routes: vec![
+            DeliveryRoute::required(binding(
+                "route-1",
+                identity(AdapterKind::DeliveryDestination, "d1"),
+            )),
+            DeliveryRoute::optional(binding(
+                "route-2",
+                identity(AdapterKind::DeliveryDestination, "d2"),
+            )),
+        ],
+    };
+    let ids: Vec<&str> = selection
+        .ordered_bindings()
+        .iter()
+        .map(|binding| binding.binding_id.as_str())
+        .collect();
+    assert_eq!(
+        ids,
+        ["provider", "proc", "backend", "store", "route-1", "route-2"]
+    );
+}
+
+#[test]
+fn descriptor_identity_round_trips_kind_id_and_version() {
+    let descriptor = AdapterDescriptor::new(
+        AdapterKind::DeliveryDestination,
+        "dest",
+        7,
+        AdapterSchema::new(1),
+        PublishingCapability {
+            provides: vec![],
+            requires: vec![],
+        },
+    )
+    .with_allowed_program("dest:ship");
+    assert!(descriptor.allowed_programs.contains("dest:ship"));
+    let identity = descriptor.identity();
+    assert_eq!(identity.kind, AdapterKind::DeliveryDestination);
+    assert_eq!(identity.id, "dest");
+    assert_eq!(identity.version, 7);
+    assert_eq!(
+        descriptor.contract_version,
+        publish_domain::ADAPTER_CONTRACT_VERSION
+    );
 }
