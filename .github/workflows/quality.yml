@@ -48,11 +48,21 @@ jobs:
           node-version: "20"
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Cache apt package archives
+        uses: actions/cache@v5
+        with:
+          # .deb 归档缓存：命中时 install 走本地文件、零下载（镜像偶发
+          # 挂死反复打挂本 job）。包版本漂移时旧 .deb 被 apt 忽略、只补
+          # 下载差异部分——hashFiles 变化时整体换键。
+          path: ~/apt-pkg-cache
+          key: apt-pkgs-${{ hashFiles('.github/workflows/quality.yml') }}
+          restore-keys: apt-pkgs-
       - name: Install Linux dependencies
         timeout-minutes: 20
         run: |
           # apt mirror 偶发挂死或持续慢速：Acquire 超时 + timeout 包裹 + 重试。
-          # install 需拉取 ~200MB 依赖，慢镜像下单次尝试可能接近 8 分钟。
+          # install 需拉取 ~200MB 依赖；Dir::Cache 重定向到上面的缓存目录，
+          # 命中时跳过下载。慢镜像下单次尝试可能接近 8 分钟。
           APT_OPTS="-o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=2"
           for attempt in 1 2 3; do
             if timeout 180 sudo apt-get $APT_OPTS update; then
@@ -65,8 +75,12 @@ jobs:
             echo "apt-get update timed out (attempt $attempt); retrying"
             sleep 10
           done
+          # Dir::Cache 自定义目录要求 archives/partial 预存在（apt 不自建）。
+          mkdir -p /home/runner/apt-pkg-cache/archives/partial
           for attempt in 1 2 3; do
-            if timeout 480 sudo apt-get $APT_OPTS install -y \
+            if timeout 480 sudo apt-get $APT_OPTS \
+              -o Dir::Cache=/home/runner/apt-pkg-cache \
+              install -y \
               libwebkit2gtk-4.1-dev \
               libgtk-3-dev \
               libappindicator3-dev \
