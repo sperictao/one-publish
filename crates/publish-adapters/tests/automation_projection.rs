@@ -24,7 +24,7 @@ fn binding_projection(binding_id: &str, revision_id: &str) -> AutomationBindingP
         },
         release_namespace: "tag:v*".to_string(),
         delivery_destination_namespaces: vec!["github-release:repository".to_string()],
-        runtime_revision: runtime_revision().into(),
+        runtime_revision: runtime_revision(),
         projection: AutomationProjection {
             public_settings: BTreeMap::from([(
                 "configuration".to_string(),

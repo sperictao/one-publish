@@ -85,11 +85,17 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            crates
       - name: Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Workspace clippy (crates/*)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Workspace tests (crates/*)
+        run: cargo test --workspace
       - name: Contracts drift check
         run: pnpm check:contracts
       - name: Install cargo-audit
