@@ -84,7 +84,7 @@ jobs:
           done
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -98,6 +98,17 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Workspace tests (crates/*)
         run: cargo test --workspace
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Workspace coverage report
+        run: cargo llvm-cov --workspace --html --output-dir coverage-rust
+      - name: Upload Rust coverage report
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: rust-coverage
+          path: coverage-rust/
+          retention-days: 14
       - name: Contracts drift check
         run: pnpm check:contracts
       - name: Install cargo-audit
