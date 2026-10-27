@@ -49,6 +49,7 @@ import {
   handleOpenRepoDirectoryRuntime,
   handleRefreshRepoBranchesRuntime,
   handleRemoveRepoRuntime,
+  handleScanProjectCandidatesRuntime,
 } from "@/features/repository/useRepositoryActions.runtime";
 import en from "@/i18n/en.json";
 import zh from "@/i18n/zh.json";
@@ -753,5 +754,336 @@ describe("invoke 失败按界面语言本地化 toast 描述", () => {
         description: "未知存储错误 | EIO",
       }
     );
+  });
+});
+
+describe("handleOpenRepoDirectoryRuntime", () => {
+  it("rejects an empty repository path", async () => {
+    const result = await handleOpenRepoDirectoryRuntime({
+      appT: en.app,
+      translations: en,
+      repo: existingRepo({ path: "   " }),
+    });
+
+    expect(result).toBeUndefined();
+    expect(mocks.openDirectory).not.toHaveBeenCalled();
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Project root path is required"
+    );
+  });
+
+  it("opens the trimmed path and toasts the resolved location", async () => {
+    mocks.openDirectory.mockResolvedValue("/tmp/demo-repo");
+
+    await handleOpenRepoDirectoryRuntime({
+      appT: en.app,
+      translations: en,
+      repo: existingRepo({ path: "  /tmp/demo-repo  " }),
+    });
+
+    expect(mocks.openDirectory).toHaveBeenCalledWith("/tmp/demo-repo");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Repository directory opened",
+      { description: "/tmp/demo-repo" }
+    );
+  });
+
+  it("toasts the localized failure when opening fails", async () => {
+    mocks.openDirectory.mockRejectedValue({
+      code: "denied",
+      message: "denied io",
+    });
+
+    await handleOpenRepoDirectoryRuntime({
+      appT: en.app,
+      translations: en,
+      repo: existingRepo(),
+    });
+
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Failed to open repository directory",
+      { description: expect.stringContaining("denied io") }
+    );
+  });
+});
+
+describe("handleEditRepoRuntime", () => {
+  const baseParams = () => ({
+    appT: en.app,
+    translations: en,
+    repo: existingRepo(),
+    repositories: [existingRepo()],
+    selectedRepoId: null as string | null,
+    applySelectedRepositoryProvider: vi.fn(),
+    updateRepository: vi.fn().mockResolvedValue(undefined),
+  });
+
+  it("errors when the edited repo is not in the store", async () => {
+    const params = baseParams();
+    params.repositories = [];
+
+    const result = await handleEditRepoRuntime(params);
+
+    expect(result).toBe(false);
+    expect(mocks.toastError).toHaveBeenCalledWith("Repository not found");
+  });
+
+  it("rejects blank name or path", async () => {
+    const params = baseParams();
+    params.repo = existingRepo({ name: "  " });
+    params.repositories = [params.repo];
+
+    const result = await handleEditRepoRuntime(params);
+
+    expect(result).toBe(false);
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Repository name and path are required"
+    );
+    expect(params.updateRepository).not.toHaveBeenCalled();
+  });
+
+  it("normalizes fields, remaps the project file, and applies a selected provider", async () => {
+    const params = baseParams();
+    params.repo = existingRepo({
+      name: " renamed ",
+      path: " /tmp/moved ",
+      projectFile: "/tmp/demo-repo/src/App.csproj",
+      providerId: " dotnet ",
+    });
+    params.repositories = [existingRepo()];
+    params.selectedRepoId = "repo-existing";
+
+    const result = await handleEditRepoRuntime(params);
+
+    expect(result).toBe(true);
+    expect(params.updateRepository).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "renamed",
+        path: "/tmp/moved",
+        projectFile: "/tmp/moved/src/App.csproj",
+        providerId: "dotnet",
+      })
+    );
+    expect(params.applySelectedRepositoryProvider).toHaveBeenCalledWith(
+      "dotnet"
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Repository info updated", {
+      description: "renamed",
+    });
+  });
+
+  it("skips provider application when the repo is not selected", async () => {
+    const params = baseParams();
+
+    await handleEditRepoRuntime(params);
+
+    expect(params.applySelectedRepositoryProvider).not.toHaveBeenCalled();
+  });
+
+  it("maps a repository_exists failure to the dedicated copy", async () => {
+    const params = baseParams();
+    params.updateRepository.mockRejectedValue({
+      code: "repository_exists",
+      message: "dup",
+    });
+
+    const result = await handleEditRepoRuntime(params);
+
+    expect(result).toBe(false);
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Failed to update repository",
+      { description: "This directory is already a repository" }
+    );
+  });
+});
+
+describe("handleDetectRepoProviderRuntime", () => {
+  it("rejects an empty path", async () => {
+    const result = await handleDetectRepoProviderRuntime({
+      appT: en.app,
+      translations: en,
+      path: "  ",
+    });
+
+    expect(result).toBeNull();
+    expect(mocks.detectRepositoryProvider).not.toHaveBeenCalled();
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Project root path is required"
+    );
+  });
+
+  it("toasts the detected provider plus alternatives on success", async () => {
+    mocks.detectRepositoryProvider.mockResolvedValue({
+      providerId: "dotnet",
+      candidates: [
+        { providerId: "dotnet", matchedMarkers: ["*.csproj"] },
+        { providerId: "java", matchedMarkers: ["build.gradle"] },
+      ],
+    });
+
+    const result = await handleDetectRepoProviderRuntime({
+      appT: en.app,
+      translations: en,
+      path: "/tmp/repo",
+    });
+
+    expect(result).toBe("dotnet");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Provider detected", {
+      description: expect.stringContaining("dotnet"),
+    });
+  });
+
+  it("suppresses the success toast when silentSuccess is set", async () => {
+    mocks.detectRepositoryProvider.mockResolvedValue({
+      providerId: "dotnet",
+      candidates: [],
+    });
+
+    const result = await handleDetectRepoProviderRuntime({
+      appT: en.app,
+      translations: en,
+      path: "/tmp/repo",
+      options: { silentSuccess: true },
+    });
+
+    expect(result).toBe("dotnet");
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("swallows failures when silentFailure is set", async () => {
+    mocks.detectRepositoryProvider.mockRejectedValue(new Error("boom"));
+
+    const result = await handleDetectRepoProviderRuntime({
+      appT: en.app,
+      translations: en,
+      path: "/tmp/repo",
+      options: { silentFailure: true },
+    });
+
+    expect(result).toBeNull();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("resolves a typed failure to dedicated copy", async () => {
+    mocks.detectRepositoryProvider.mockRejectedValue({
+      code: "path_not_found",
+      message: "gone",
+    });
+
+    const result = await handleDetectRepoProviderRuntime({
+      appT: en.app,
+      translations: en,
+      path: "/tmp/repo",
+    });
+
+    expect(result).toBeNull();
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Project root path not found",
+      {
+        description: "Ensure the project root path exists and is accessible.",
+      }
+    );
+  });
+});
+
+describe("handleScanProjectCandidatesRuntime", () => {
+  it("returns null for empty paths, scan failures, and passes results through", async () => {
+    expect(await handleScanProjectCandidatesRuntime("   ")).toBeNull();
+    expect(mocks.scanProjectCandidates).not.toHaveBeenCalled();
+
+    mocks.scanProjectCandidates.mockRejectedValue(new Error("io"));
+    expect(await handleScanProjectCandidatesRuntime("/tmp/repo")).toBeNull();
+
+    const candidates = { rootPath: "/tmp/repo", projectFiles: [] };
+    mocks.scanProjectCandidates.mockResolvedValue(candidates);
+    expect(
+      await handleScanProjectCandidatesRuntime("/tmp/repo", "dotnet")
+    ).toBe(candidates);
+    expect(mocks.scanProjectCandidates).toHaveBeenLastCalledWith(
+      "/tmp/repo",
+      "dotnet"
+    );
+  });
+});
+
+describe("handleRefreshRepoBranchesRuntime", () => {
+  const runRefresh = (overrides = {}) =>
+    handleRefreshRepoBranchesRuntime({
+      appT: en.app,
+      translations: en,
+      path: "/tmp/repo",
+      ...overrides,
+    });
+
+  it("rejects an empty path", async () => {
+    expect(await runRefresh({ path: " " })).toBeNull();
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Project root path is required"
+    );
+  });
+
+  it("returns the refreshed branches and toasts the count", async () => {
+    mocks.scanRepositoryBranches.mockResolvedValue({
+      current_branch: "main",
+      branches: [
+        {
+          name: "main",
+          isMain: true,
+          isCurrent: true,
+          path: "/tmp/repo",
+          commitCount: 12,
+        },
+      ],
+    });
+
+    const result = await runRefresh();
+
+    expect(result).toEqual({
+      currentBranch: "main",
+      branches: [expect.objectContaining({ name: "main", commitCount: 12 })],
+    });
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Branches refreshed", {
+      description: "1 branches",
+    });
+  });
+
+  it("suppresses the success toast when silentSuccess is set", async () => {
+    mocks.scanRepositoryBranches.mockResolvedValue({
+      current_branch: "main",
+      branches: [],
+    });
+
+    await runRefresh({ options: { silentSuccess: true } });
+
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["path_not_found", "Repository path not found"],
+    ["not_directory", "Repository path is not a directory"],
+    ["git_missing", "Git command is not available"],
+    ["cannot_connect_repo", "Unable to connect to Git repository"],
+    ["not_git_repo", "Target path is not a Git repository"],
+    ["permission_denied", "Insufficient repository permissions"],
+    ["dubious_ownership", "Git ownership validation failed"],
+    ["no_branches", "No branches were found"],
+  ])("maps %s failures to dedicated copy", async (code, title) => {
+    mocks.scanRepositoryBranches.mockRejectedValue({ code, message: "x" });
+
+    expect(await runRefresh()).toBeNull();
+    expect(mocks.toastError).toHaveBeenCalledWith(title, {
+      description: expect.any(String),
+    });
+  });
+
+  it("falls back to localized copy for unknown failures", async () => {
+    mocks.scanRepositoryBranches.mockRejectedValue(
+      new Error("network exploded")
+    );
+
+    expect(await runRefresh()).toBeNull();
+    expect(mocks.toastError).toHaveBeenCalledWith("Failed to pull branches", {
+      description: expect.stringContaining("network exploded"),
+    });
   });
 });
