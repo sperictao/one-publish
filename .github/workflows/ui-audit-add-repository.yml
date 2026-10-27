@@ -20,11 +20,11 @@ jobs:
   capture:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: "10.10.0"
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: pnpm
@@ -37,7 +37,7 @@ jobs:
           UI_AUDIT_CAPTURE: "1"
           UI_AUDIT_PHASE: ${{ inputs.phase || 'baseline' }}
       - name: Upload recording artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ui-audit-add-repository-${{ inputs.phase || 'baseline' }}
           path: test-results/ui-audit/add-repository/
