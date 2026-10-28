@@ -266,6 +266,51 @@ test.describe("Automation bindings — seeded view", () => {
       page.getByTestId("automation-remote-cancel-e2e-expired")
     ).toHaveCount(0);
   });
+
+  test("missing-segments and failed evidence render their markers", async ({
+    page,
+  }) => {
+    const evidence: RemoteAttemptEvidenceView[] = [
+      {
+        attemptId: "e2e-failed",
+        bindingId: "binding-1",
+        runId: 9,
+        state: {
+          kind: "archived",
+          status: "failed",
+          error: "upload step timed out",
+        },
+      },
+      {
+        attemptId: "e2e-missing",
+        bindingId: "binding-1",
+        runId: 10,
+        state: { kind: "missingSegments", missing: ["receipt", "manifest"] },
+      },
+    ];
+    await gotoApp(page, {
+      automationBindings: SEEDED_BINDINGS,
+      remoteEvidence: evidence,
+    });
+    await page
+      .getByTestId("automation-remote-evidence")
+      .getByRole("button", { name: /同步远端证据/ })
+      .click();
+    const failedRow = page.getByTestId("automation-remote-attempt-e2e-failed");
+    await expect(failedRow).toBeVisible({ timeout: 10000 });
+    const missingRow = page.getByTestId(
+      "automation-remote-attempt-e2e-missing"
+    );
+    await expect(missingRow).toBeVisible();
+    await expect(missingRow).toContainText("证据缺失");
+    await expect(missingRow).toContainText("receipt");
+    await expect(
+      page.getByTestId("automation-remote-cancel-e2e-failed")
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId("automation-remote-cancel-e2e-missing")
+    ).toHaveCount(0);
+  });
 });
 
 test.describe("Automation bindings — change flows", () => {
