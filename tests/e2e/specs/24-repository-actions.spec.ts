@@ -88,6 +88,46 @@ test.describe("Repository actions", () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
+  test("pubxml preset「查看配置」opens viewer via read_project_publish_profile", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    const row = page.locator("[data-list-item-id='pubxml:FolderProfile']");
+    await expect(row).toBeVisible({ timeout: 15000 });
+    await row.hover();
+    await row.getByRole("button", { name: "更多操作: FolderProfile" }).click();
+    await page.getByRole("menuitem", { name: "查看配置" }).click();
+
+    // 查看器对话框打开，经 read_project_publish_profile 拉取 pubxml 内容。
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              (entry as { cmd?: string }).cmd ===
+                "read_project_publish_profile" &&
+              ((
+                entry as {
+                  args?: { profileName?: string; profile_name?: string };
+                }
+              ).args?.profileName ??
+                (
+                  entry as {
+                    args?: { profileName?: string; profile_name?: string };
+                  }
+                ).args?.profile_name ??
+                "") === "FolderProfile"
+          )
+        )
+      )
+      .toBe(true);
+  });
+
   test("composition editor rebinds the project candidate", async ({ page }) => {
     await gotoApp(page);
     const row = page.locator(

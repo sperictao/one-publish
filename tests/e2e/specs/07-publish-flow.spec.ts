@@ -79,7 +79,8 @@ test.describe("Full Publish Flow — Happy Path", () => {
     ).toBeVisible({ timeout: 10000 });
 
     // 6. 钉住发布命令链契约：环境/输出预检 → 启动运行时 → 快照导出
-    // → 执行记录落账。
+    // → 执行记录落账 → 最近使用回写（pubxml 由后端在 prepare 中
+    // 投影解析，不经前端 read_project_publish_profile）。
     await expect
       .poll(async () =>
         page.evaluate(() => {
@@ -92,6 +93,7 @@ test.describe("Full Publish Flow — Happy Path", () => {
             "start_publish_runtime",
             "export_execution_snapshot",
             "add_execution_record",
+            "push_recent_publish_config",
           ].every((cmd) => invocations.includes(cmd));
         })
       )
