@@ -36,7 +36,7 @@ const MARKER_SUFFIX: &str = " -->";
 
 /// GitHub Release 正文中的产物清单标记：让远端交付携带自己的 Manifest digest，
 /// 幂等探测据此区分"同一份发布"与"占用同名标签的另一份内容"（ADR-0051）。
-pub fn release_body_marker(manifest_digest: &str) -> String {
+fn release_body_marker(manifest_digest: &str) -> String {
     format!("{MARKER_PREFIX}{manifest_digest}{MARKER_SUFFIX}")
 }
 

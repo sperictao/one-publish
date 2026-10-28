@@ -162,7 +162,7 @@ mod termination {
     static CANCELLATION: OnceLock<CancellationSignal> = OnceLock::new();
     static RECEIVED: AtomicI32 = AtomicI32::new(0);
 
-    pub fn install() -> CancellationSignal {
+    pub(crate) fn install() -> CancellationSignal {
         // 先初始化信号再挂处理器：处理器只读取已就位的 OnceLock。
         let cancellation = CANCELLATION.get_or_init(CancellationSignal::new).clone();
         for signal in SIGNALS {
@@ -175,7 +175,7 @@ mod termination {
     }
 
     /// 首个终止信号的编号；未收到时为 `None`。
-    pub fn received() -> Option<u8> {
+    pub(crate) fn received() -> Option<u8> {
         u8::try_from(RECEIVED.load(Ordering::SeqCst))
             .ok()
             .filter(|signal| *signal != 0)

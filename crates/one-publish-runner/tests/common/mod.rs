@@ -27,7 +27,7 @@ fn run_git(dir: &Path, args: &[&str]) {
 }
 
 /// 全部文件已提交的干净 checkout；`files` 为 README 之外追加的相对路径与内容。
-pub fn fixture_checkout(files: &[(&str, &str)]) -> tempfile::TempDir {
+pub(crate) fn fixture_checkout(files: &[(&str, &str)]) -> tempfile::TempDir {
     let temp = tempfile::tempdir().expect("temp checkout");
     run_git(temp.path(), &["init", "--quiet", "-b", "main"]);
     run_git(temp.path(), &["config", "user.name", "One Publish Tests"]);
@@ -46,7 +46,7 @@ pub fn fixture_checkout(files: &[(&str, &str)]) -> tempfile::TempDir {
     temp
 }
 
-pub fn fixture_projection() -> RunnerProjection {
+pub(crate) fn fixture_projection() -> RunnerProjection {
     let adapters = AdapterSelection {
         project_provider: AdapterBinding::new(
             "project",
