@@ -143,20 +143,36 @@ assertContains(
   "Upload bundles 未启用 if-no-files-found: error，可能掩盖产物缺失。"
 );
 assertContains("pnpm build:updater --", "构建步骤仍未切到 build:updater。");
-assertContains(
-  'node-version: "20"',
-  "Setup Node 仍未升级到兼容 Vite 7 的版本。"
-);
-assertContains(
-  "uses: actions/checkout@v5",
+// 版本断言用主版本下限而非字面量：阻止回退到不兼容的旧主版本，
+// 同时允许 dependabot 升级（v6/v7+）不致误报。
+const assertActionMinMajor = (actionRef, minMajor, message) => {
+  const match = content.match(
+    new RegExp(`uses: ${actionRef.replaceAll("/", "\\/")}@v(\\d+)`)
+  );
+  if (!match || Number(match[1]) < minMajor) {
+    throw new Error(`复现成功：${message}`);
+  }
+};
+
+const nodeVersionMatch = content.match(/node-version:\s*"?(\d+)/);
+if (!nodeVersionMatch || Number(nodeVersionMatch[1]) < 20) {
+  throw new Error(
+    `复现成功：Setup Node 版本低于 Vite 7 兼容下限 Node 20（当前 ${nodeVersionMatch?.[1] ?? "未配置"}）。`
+  );
+}
+assertActionMinMajor(
+  "actions/checkout",
+  5,
   "workflow 仍在使用不支持 Node 24 的 actions/checkout 主版本。"
 );
-assertContains(
-  "uses: actions/setup-node@v5",
+assertActionMinMajor(
+  "actions/setup-node",
+  5,
   "workflow 仍在使用不支持 Node 24 的 actions/setup-node 主版本。"
 );
-assertContains(
-  "uses: pnpm/action-setup@v5",
+assertActionMinMajor(
+  "pnpm/action-setup",
+  5,
   "workflow 仍在使用不支持 Node 24 的 pnpm/action-setup 主版本。"
 );
 assertContains(

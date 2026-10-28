@@ -156,6 +156,11 @@ jobs:
         run: pnpm check:contracts
       - name: E2E mock command parity
         run: pnpm check:e2e-mock
+      - name: Release script gates
+        run: |
+          pnpm test:workflow
+          pnpm test:updater
+          pnpm test:release
       - name: Install cargo-audit
         uses: taiki-e/install-action@cargo-audit
       - name: Audit Rust dependencies
