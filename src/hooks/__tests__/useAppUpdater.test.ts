@@ -165,6 +165,32 @@ describe("useAppUpdater", () => {
     expect(result.current.updaterState.updaterHelpPaths).toBeNull();
   });
 
+  it("falls back to info.currentVersion when getCurrentVersion rejects", async () => {
+    setTauri(true);
+    mocks.getCurrentVersion.mockRejectedValue(new Error("no bundle info"));
+    const { result } = renderHook(() => useAppUpdater());
+
+    // 版本解析失败不得中断检查链：updateInfo 仍落账，
+    // currentVersion 回落到 checkUpdate 返回的 info.currentVersion。
+    await waitFor(() =>
+      expect(result.current.updaterState.updateInfo).toEqual(updateInfo)
+    );
+    expect(mocks.checkUpdate).toHaveBeenCalled();
+    expect(result.current.updaterState.currentVersion).toBe("1.0.0");
+  });
+
+  it("prefers resolvedCurrentVersion over info.currentVersion", async () => {
+    setTauri(true);
+    mocks.getCurrentVersion.mockResolvedValue("9.9.9");
+    const { result } = renderHook(() => useAppUpdater());
+
+    await waitFor(() =>
+      expect(result.current.updaterState.updateInfo).toEqual(updateInfo)
+    );
+    // 优先级：resolvedCurrentVersion > info.currentVersion > prev。
+    expect(result.current.updaterState.currentVersion).toBe("9.9.9");
+  });
+
   it("exposes the localized error message on check failure", async () => {
     setTauri(true);
     mocks.checkUpdate.mockRejectedValue({
