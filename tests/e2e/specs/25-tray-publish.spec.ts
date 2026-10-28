@@ -93,6 +93,40 @@ test.describe("Tray publish request", () => {
       .toBe(true);
   });
 
+  test("output-dir open failure surfaces a system error notification", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: true,
+      errors: { open_output_directory: "permission denied" },
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "userprofile:profile-tauri",
+    });
+
+    // 发布成功 → open_output_directory 抛错 → notifyFeedback 经 system
+    // 模式发出「打开输出目录失败」通知。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("open_output_directory")
+      )
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "show_system_notification"
+        )) as { title?: string }[];
+        return args.some((arg) =>
+          (arg?.title ?? "").includes("打开输出目录失败")
+        );
+      })
+      .toBe(true);
+  });
+
   test("invalid tray config key reports failure via tray status", async ({
     page,
   }) => {
