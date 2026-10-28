@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   preparePublishRuntime: vi.fn(),
   resumePublishRuntime: vi.fn(),
   synchronizePublishRuntime: vi.fn(),
+  startPublishRuntime: vi.fn(),
+  cancelPublishRuntime: vi.fn(),
   exportExecutionSnapshot: vi.fn(),
   toast: { error: vi.fn(), message: vi.fn(), success: vi.fn() },
 }));
@@ -33,6 +35,8 @@ vi.mock("@/features/publish/publishRuntime", async () => ({
   preparePublishRuntime: mocks.preparePublishRuntime,
   resumePublishRuntime: mocks.resumePublishRuntime,
   synchronizePublishRuntime: mocks.synchronizePublishRuntime,
+  startPublishRuntime: mocks.startPublishRuntime,
+  cancelPublishRuntime: mocks.cancelPublishRuntime,
 }));
 
 import { usePublishExecute } from "@/features/publish/usePublishExecute";
@@ -217,6 +221,308 @@ describe("usePublishExecute invoke 失败本地化", () => {
           promotedManifestDigest: undefined,
         }),
       })
+    );
+  });
+});
+
+describe("usePublishExecute 守卫与恢复流", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.i18n.translations = en;
+    mocks.exportExecutionSnapshot.mockResolvedValue(null);
+    mocks.synchronizePublishRuntime.mockResolvedValue({ result: null });
+    usePublishStore.getState().setIsPublishing(false);
+    usePublishStore.getState().setIsCancellingPublish(false);
+    validate.getPublishStartBlocker = () => null;
+    validate.preparedRuntime = null;
+  });
+
+  afterEach(() => {
+    usePublishStore.getState().setIsPublishing(false);
+    usePublishStore.getState().setIsCancellingPublish(false);
+  });
+
+  it("startPublish：缺失仓库时提示先选择仓库", async () => {
+    validate.getPublishStartBlocker = () => "missing-repository";
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("请先选择仓库");
+    expect(mocks.preparePublishRuntime).not.toHaveBeenCalled();
+  });
+
+  it("startPublish：缺失项目绑定时提示先绑定项目", async () => {
+    validate.getPublishStartBlocker = () => "missing-project";
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("请先在仓库设置中绑定项目");
+  });
+
+  it("startPublish：runtime 阻塞时提示配置不可执行", async () => {
+    validate.getPublishStartBlocker = () => "runtime-blocked";
+    validate.preparedRuntime = null;
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("当前发布配置不可执行", {
+      description: "本地发布计划存在阻塞项",
+    });
+  });
+
+  it("startPublish：请求解析为空时不进入准备", async () => {
+    vi.mocked(validate.resolvePublishRequest).mockResolvedValue(null);
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.preparePublishRuntime).not.toHaveBeenCalled();
+  });
+
+  it("startPublish：解析出的请求进入发布流程", async () => {
+    const source = { kind: "empty", providerId: "dotnet" };
+    vi.mocked(validate.resolvePublishRequest).mockResolvedValue({
+      source,
+    } as never);
+    mocks.preparePublishRuntime.mockResolvedValue({
+      status: "ready",
+      runtimeToken: "rt",
+      resolvedSpec: { provider_id: "dotnet" },
+      command: "dotnet publish",
+    });
+    vi.mocked(validate.runPublishPreflight).mockResolvedValue(false);
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.preparePublishRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ source })
+    );
+  });
+
+  it("输出授权获批后二次准备并继续流程", async () => {
+    mocks.preparePublishRuntime
+      .mockResolvedValueOnce({
+        status: "blocked",
+        outputPreflight: { accessStatus: "denied" },
+        diagnostics: [
+          { code: "publish_output_access_denied", message: "denied" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        status: "ready",
+        runtimeToken: "rt",
+        resolvedSpec: { provider_id: "dotnet" },
+        command: "dotnet publish",
+      });
+    vi.mocked(validate.requestRuntimeOutputAccess).mockResolvedValue(true);
+    vi.mocked(validate.runPublishPreflight).mockResolvedValue(false);
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await act(async () => {
+      await result.current.runPublishSpec({
+        kind: "empty",
+        providerId: "dotnet",
+      } as Parameters<typeof result.current.runPublishSpec>[0]);
+    });
+
+    expect(validate.requestRuntimeOutputAccess).toHaveBeenCalled();
+    expect(mocks.preparePublishRuntime).toHaveBeenCalledTimes(2);
+  });
+
+  it("resume 返回运行中 attempt 时重绑活动 run", async () => {
+    mocks.synchronizePublishRuntime.mockResolvedValue({
+      result: { attempt: { status: "running", attemptId: "attempt-1" } },
+    });
+    mocks.resumePublishRuntime.mockResolvedValue({
+      attempt: { status: "running", attemptId: "attempt-2" },
+    });
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await waitFor(() =>
+      expect(result.current.runtimeResult?.attempt.status).toBe("running")
+    );
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    await waitFor(() =>
+      expect(result.current.runtimeResult?.attempt.attemptId).toBe("attempt-2")
+    );
+    expect(mocks.resumePublishRuntime).toHaveBeenCalledWith({
+      attemptId: "attempt-1",
+    });
+  });
+
+  it("cancelPublish：无运行任务时直接返回", async () => {
+    const { result } = renderHook(() => usePublishExecute(params));
+
+    await act(async () => {
+      await result.current.cancelPublish();
+    });
+
+    expect(mocks.cancelPublishRuntime).not.toHaveBeenCalled();
+    expect(mocks.toast.message).not.toHaveBeenCalled();
+  });
+
+  it("cancelPublish：后端无运行任务时给出提示", async () => {
+    mocks.synchronizePublishRuntime.mockResolvedValue({
+      result: { attempt: { status: "running", attemptId: "attempt-1" } },
+    });
+    mocks.cancelPublishRuntime.mockResolvedValue(false);
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await waitFor(() =>
+      expect(result.current.runtimeResult?.attempt.status).toBe("running")
+    );
+
+    await act(async () => {
+      await result.current.cancelPublish();
+    });
+
+    expect(mocks.cancelPublishRuntime).toHaveBeenCalledWith({
+      attemptId: "attempt-1",
+    });
+    expect(mocks.toast.message).toHaveBeenCalledWith(
+      "当前没有运行中的发布任务"
+    );
+  });
+
+  it("cancelPublish：取消失败经延迟加载给出本地化反馈", async () => {
+    mocks.synchronizePublishRuntime.mockResolvedValue({
+      result: { attempt: { status: "running", attemptId: "attempt-1" } },
+    });
+    mocks.cancelPublishRuntime.mockRejectedValue({
+      code: "publish_cancel_failed",
+      message: "backend refused",
+    });
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await waitFor(() =>
+      expect(result.current.runtimeResult?.attempt.status).toBe("running")
+    );
+
+    await act(async () => {
+      await result.current.cancelPublish();
+    });
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("取消发布失败", {
+      description: "取消发送失败，请检查进程状态后重试。",
+    });
+  });
+
+  it("attempt 不确定时经同步恢复并挂起运行", async () => {
+    mocks.preparePublishRuntime.mockResolvedValue({
+      status: "ready",
+      runtimeToken: "rt",
+      configurationRevisionId: "cfg-1",
+      resolvedSpec: { provider_id: "dotnet" },
+      command: "dotnet publish",
+    });
+    vi.mocked(validate.runPublishPreflight).mockResolvedValue(true);
+    mocks.startPublishRuntime.mockRejectedValue({
+      code: "publish_runtime_attempt_uncertain",
+      message: "attempt uncertain",
+      details: "attempt-r",
+    });
+    mocks.synchronizePublishRuntime
+      .mockResolvedValueOnce({ result: null })
+      .mockResolvedValue({
+        result: { attempt: { status: "running", attemptId: "attempt-r" } },
+      });
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await act(async () => {
+      await result.current.runPublishSpec({
+        kind: "empty",
+        providerId: "dotnet",
+      } as Parameters<typeof result.current.runPublishSpec>[0]);
+    });
+
+    expect(mocks.synchronizePublishRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repositoryPath: "/repo",
+        configurationRevisionId: "cfg-1",
+        attemptId: "attempt-r",
+      })
+    );
+    expect(result.current.runtimeResult?.attempt.attemptId).toBe("attempt-r");
+  });
+
+  it("attempt 不确定且恢复同步失败时提示恢复失败", async () => {
+    mocks.preparePublishRuntime.mockResolvedValue({
+      status: "ready",
+      runtimeToken: "rt",
+      configurationRevisionId: "cfg-1",
+      resolvedSpec: { provider_id: "dotnet" },
+      command: "dotnet publish",
+    });
+    vi.mocked(validate.runPublishPreflight).mockResolvedValue(true);
+    mocks.startPublishRuntime.mockRejectedValue({
+      code: "publish_runtime_attempt_uncertain",
+      message: "attempt uncertain",
+      details: "attempt-r",
+    });
+    mocks.synchronizePublishRuntime
+      .mockResolvedValueOnce({ result: null })
+      .mockRejectedValue(new Error("sync exploded"));
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await act(async () => {
+      await result.current.runPublishSpec({
+        kind: "empty",
+        providerId: "dotnet",
+      } as Parameters<typeof result.current.runPublishSpec>[0]);
+    });
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("恢复发布状态失败", {
+      description: expect.any(String),
+    });
+  });
+
+  it("运行完成但缺少 provider 结果时进入失败反馈", async () => {
+    mocks.preparePublishRuntime.mockResolvedValue({
+      status: "ready",
+      runtimeToken: "rt",
+      resolvedSpec: { provider_id: "dotnet" },
+      command: "dotnet publish",
+    });
+    vi.mocked(validate.runPublishPreflight).mockResolvedValue(true);
+    mocks.startPublishRuntime.mockResolvedValue({
+      attempt: { status: "succeeded", attemptId: "a-1" },
+      publishResult: null,
+    });
+    const failed: PublishFailedEvent[] = [];
+    const unsubscribe = on<PublishFailedEvent>("publish:failed", (event) => {
+      failed.push(event);
+    });
+
+    const { result } = renderHook(() => usePublishExecute(params));
+    await act(async () => {
+      await result.current.runPublishSpec({
+        kind: "empty",
+        providerId: "dotnet",
+      } as Parameters<typeof result.current.runPublishSpec>[0]);
+    });
+    unsubscribe();
+
+    expect(failed).toHaveLength(1);
+    expect(failed[0].error).toContain(
+      "PublishRuntime completed without a provider result"
     );
   });
 });
