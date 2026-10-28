@@ -398,7 +398,7 @@ test.describe("Full Publish Flow — Error Paths", () => {
           {
             severity: "warning",
             provider_id: "dotnet",
-            issue_type: "version_mismatch",
+            issue_type: "outdated_version",
             description: "dotnet SDK is older than recommended",
             current_value: "8.0.100",
             expected_value: ">=8.0.300",
