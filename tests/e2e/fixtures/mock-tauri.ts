@@ -401,6 +401,15 @@ export interface MockTauriOptions {
   providers?: ProviderCatalogEntry[];
   /** Override `run_environment_check` 返回的环境检查快照。 */
   envCheck?: EnvironmentCheckResult;
+  /**
+   * 覆写 `preflight_publish_output` 的 validation/access 状态，
+   * 用于构造 incompatible 路径或受保护目录拒绝臂。
+   */
+  preflightOutput?: {
+    validationStatus?: "not_applicable" | "incompatible" | "valid";
+    validationIssue?: string | null;
+    accessStatus?: "granted" | "denied";
+  };
   /** Map of Tauri command name → error message to inject for testing error paths.
    * `prepare_publish_runtime` 支持 `blocked:` 前缀：返回 blocked 结果而非抛错。 */
   errors?: Record<string, string>;
@@ -464,6 +473,7 @@ export async function installMockTauri(
     repositories,
     providers,
     envCheck,
+    preflightOutput,
     errors,
     dialogOpenPath,
     dialogSavePath,
@@ -1933,14 +1943,28 @@ export async function installMockTauri(
                       args.spec as Record<string, Record<string, string>>
                     ).parameters?.outputDir?.toString()
                   : "") || "/tmp/publish-output";
+              const seededPreflight = (opts.preflightOutput ?? null) as {
+                validationStatus?: string;
+                validationIssue?: string | null;
+                accessStatus?: string;
+              } | null;
               return {
                 output_dir: outputDir,
                 configured_output_dir: outputDir || null,
-                validation: { status: "not_applicable", issue: null },
+                validation: {
+                  status: seededPreflight?.validationStatus ?? "not_applicable",
+                  issue: seededPreflight?.validationIssue ?? null,
+                },
                 access: {
-                  status: "granted",
-                  protectedLocation: null,
-                  protectedRoot: null,
+                  status: seededPreflight?.accessStatus ?? "granted",
+                  protectedLocation:
+                    seededPreflight?.accessStatus === "denied"
+                      ? "documents"
+                      : null,
+                  protectedRoot:
+                    seededPreflight?.accessStatus === "denied"
+                      ? outputDir
+                      : null,
                   probeDirectory: outputDir,
                   detail: null,
                 },
@@ -2231,6 +2255,7 @@ export async function installMockTauri(
       providers: clone(effectiveProviders),
       dotnetSchema: clone(DOTNET_SCHEMA),
       envCheck: clone(envCheck ?? DEFAULT_ENV_CHECK),
+      preflightOutput: clone(preflightOutput ?? null),
       errors: clone(errors ?? {}),
       dialogOpenPath: dialogOpenPath ?? null,
       dialogSavePath: dialogSavePath ?? null,

@@ -284,6 +284,70 @@ test.describe("Full Publish Flow — Error Paths", () => {
       .toBe(false);
   });
 
+  test("incompatible output path aborts with validation feedback", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      preflightOutput: {
+        validationStatus: "incompatible",
+        validationIssue: "windows_drive_root_missing",
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // validation.status=incompatible → abort 并呈现分类标题「发布目录无效」。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布目录无效" })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
+  test("denied protected-directory access aborts after picker cancel", async ({
+    page,
+  }) => {
+    // access.status=denied → 受保护目录授权流程；dialogOpenPath 缺省
+    // null 表示用户在选择器中取消 → 仍 denied → abort toast。
+    await gotoApp(page, {
+      preflightOutput: { accessStatus: "denied" },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    await expect(
+      page.locator("[data-sonner-toast]", {
+        hasText: "受保护目录访问权限",
+      })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
   test("blocked prepare result surfaces diagnostics and prevents publish", async ({
     page,
   }) => {
