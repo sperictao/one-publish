@@ -555,6 +555,103 @@ test.describe("Full Publish Flow — Error Paths", () => {
     await expect(publishBtn).not.toBeDisabled({ timeout: 10000 });
   });
 
+  test("uncertain start attempt recovers via synchronize_publish_runtime", async ({
+    page,
+  }) => {
+    // start_publish_runtime 抛结构化错误 {code:attempt_uncertain,
+    // details:attemptId} → 前端用 synchronize_publish_runtime 恢复；
+    // 同步结果 attempt.status=running → 运行继续呈现（不落入失败）。
+    await gotoApp(page, {
+      errors: {
+        start_publish_runtime: JSON.stringify({
+          code: "publish_runtime_attempt_uncertain",
+          details: "attempt-uncertain-1",
+        }),
+      },
+      synchronizeResult: {
+        attempt: {
+          attemptId: "attempt-uncertain-1",
+          backendRunId: "backend-uncertain-1",
+          configurationRevisionId: "mock-draft-revision",
+          planDigest: "plan-uncertain",
+          executionBackend: "local-execution",
+          status: "running",
+          manifestDigest: null,
+          manifest: null,
+          receipts: [],
+          routes: [],
+          warnings: [],
+          events: [],
+          error: null,
+        },
+        publishResult: null,
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // 恢复同步以 attemptId 发出，运行面板保持运行态而非失败。
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              (entry as { cmd?: string }).cmd ===
+                "synchronize_publish_runtime" &&
+              ((entry as { args?: { request?: { attemptId?: string } } }).args
+                ?.request?.attemptId ?? "") === "attempt-uncertain-1"
+          )
+        )
+      )
+      .toBe(true);
+    await expect(
+      page.locator("[data-testid='publish-status-panel']")
+    ).toContainText("发布中", { timeout: 10000 });
+  });
+
+  test("uncertain attempt without recovery result falls back to failure", async ({
+    page,
+  }) => {
+    // 同一不确定错误臂但 synchronize 无恢复结果 → 走常规失败归类。
+    await gotoApp(page, {
+      errors: {
+        start_publish_runtime: JSON.stringify({
+          code: "publish_runtime_attempt_uncertain",
+          details: "attempt-uncertain-2",
+        }),
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("synchronize_publish_runtime")
+        )
+      )
+      .toBe(true);
+    await expect(
+      page.locator("[data-testid='publish-status-panel']")
+    ).toContainText("失败", { timeout: 10000 });
+  });
+
   test("warning environment issue warns but still publishes", async ({
     page,
   }) => {

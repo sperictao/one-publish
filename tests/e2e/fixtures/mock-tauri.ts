@@ -410,6 +410,11 @@ export interface MockTauriOptions {
     validationIssue?: string | null;
     accessStatus?: "granted" | "denied";
   };
+  /** `synchronize_publish_runtime` 返回的 result 负载
+   * （PublishRuntimeResult 形状：{attempt, publishResult}）。
+   * 默认 null——用于 attempt_uncertain 恢复臂：attempt.status
+   * 为 running 时前端认定运行仍存活并继续呈现运行态。 */
+  synchronizeResult?: Record<string, unknown> | null;
   /** 二次 `preflight_publish_output` 返回值（授权重试臂）：
    * denied → 目录选择器授权后会再跑一次 preflight，此键给出第 2 次起的结果。
    * 与 preflightOutput:{accessStatus:"denied"} 组合可覆盖"授权后放行"臂。 */
@@ -483,6 +488,7 @@ export async function installMockTauri(
     envCheck,
     preflightOutput,
     preflightOutputAfterPick,
+    synchronizeResult,
     errors,
     dialogOpenPath,
     dialogSavePath,
@@ -817,6 +823,12 @@ export async function installMockTauri(
               ? injectedError.slice("blocked:".length).trim()
               : null;
           if (injectedError && !blockedMessage) {
+            // `{...}` JSON 负载建模带 code/details 的结构化 invoke 错误
+            // （extractInvokeErrorCode/extractInvokeErrorDetails 可读），
+            // 其余按普通 Error 抛出。
+            if (injectedError.trimStart().startsWith("{")) {
+              throw JSON.parse(injectedError) as unknown;
+            }
             throw new Error(injectedError);
           }
 
@@ -1952,7 +1964,7 @@ export async function installMockTauri(
                 acceptedEvents: request?.events?.length || 0,
                 duplicateEvents: 0,
                 missingRanges: [],
-                result: null,
+                result: clone(opts.synchronizeResult ?? null),
               };
             }
 
@@ -2288,6 +2300,7 @@ export async function installMockTauri(
       envCheck: clone(envCheck ?? DEFAULT_ENV_CHECK),
       preflightOutput: clone(preflightOutput ?? null),
       preflightOutputAfterPick: clone(preflightOutputAfterPick ?? null),
+      synchronizeResult: clone(synchronizeResult ?? null),
       errors: clone(errors ?? {}),
       dialogOpenPath: dialogOpenPath ?? null,
       dialogSavePath: dialogSavePath ?? null,
