@@ -38,6 +38,27 @@ test.describe("添加仓库", () => {
     await expect(toast(page)).toContainText("仓库已添加");
   });
 
+  test("取消目录选择时静默返回，不产生 toast 或新增", async ({ page }) => {
+    // dialogOpenPath 缺省 null → open() 返回 null → cancelled 短路。
+    await gotoApp(page);
+
+    await addButton(page).click();
+
+    await expect(repoRows(page)).toHaveCount(2);
+    await expect(toast(page)).toHaveCount(0);
+  });
+
+  test("目录选择器自身失败时给出可读 toast", async ({ page }) => {
+    await gotoApp(page, {
+      errors: { "plugin:dialog|open": "dialog service unavailable" },
+    });
+
+    await addButton(page).click();
+
+    await expect(toast(page)).toContainText("无法打开目录选择器");
+    await expect(repoRows(page)).toHaveCount(2);
+  });
+
   test("重复路径提示可读文案，不泄漏原始错误", async ({ page }) => {
     await gotoApp(page, { dialogOpenPath: "/workspace/alpha-service" });
 
