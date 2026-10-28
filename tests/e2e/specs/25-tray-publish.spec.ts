@@ -229,6 +229,58 @@ test.describe("Tray publish request", () => {
     ).toBe(true);
   });
 
+  test("cancel during tray publish resets tray status to idle", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: true,
+      publishRuntimeLatch: true,
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "userprofile:profile-tauri",
+    });
+
+    // 运行中（闩锁挂起）→ 取消 → publish:cancelled：托盘归位 idle
+    // 且取消记录照常落账。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("start_publish_runtime")
+      )
+      .toBe(true);
+    const cancelBtn = page.getByRole("button", { name: "取消发布" });
+    await expect(cancelBtn).toBeVisible({ timeout: 15000 });
+    await cancelBtn.click();
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("cancel_publish_runtime")
+      )
+      .toBe(true);
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          __MOCK_RESOLVE_PUBLISH_RUNTIME__: () => void;
+        }
+      ).__MOCK_RESOLVE_PUBLISH_RUNTIME__();
+    });
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "set_tray_publish_status"
+        )) as { status?: string }[];
+        return args.some((arg) => arg?.status === "idle");
+      })
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("add_execution_record")
+      )
+      .toBe(true);
+  });
+
   test("publish session events stream log chunks into the output view", async ({
     page,
   }) => {
