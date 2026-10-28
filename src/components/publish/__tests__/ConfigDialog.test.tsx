@@ -456,6 +456,42 @@ describe("ConfigManagementContent", () => {
     });
   });
 
+  it("选择覆盖策略时按 overwrite 提交导入", async () => {
+    renderConfigManagementContent({ profiles: [savedProfile("Release")] });
+
+    await openImportPreview([importedProfile("Release", "dotnet")]);
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: "覆盖（现有配置更新为导入内容）" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
+
+    await waitFor(() => {
+      expect(mocks.applyImportedProfiles).toHaveBeenCalledWith(
+        [expect.objectContaining({ name: "Release" })],
+        "overwrite"
+      );
+    });
+  });
+
+  it("选择重命名策略时按 rename 提交导入", async () => {
+    renderConfigManagementContent({ profiles: [savedProfile("Release")] });
+
+    await openImportPreview([importedProfile("Release", "dotnet")]);
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: "重命名（以“名称 (2)”导入）" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
+
+    await waitFor(() => {
+      expect(mocks.applyImportedProfiles).toHaveBeenCalledWith(
+        [expect.objectContaining({ name: "Release" })],
+        "rename"
+      );
+    });
+  });
+
   it("导入文件内同名配置：仅首条可导入，其余按同名处理", async () => {
     renderConfigManagementContent();
 
