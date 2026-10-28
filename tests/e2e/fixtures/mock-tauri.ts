@@ -16,6 +16,7 @@ import { expect, type Page } from "@playwright/test";
 
 import type {
   AppState,
+  AutomationBindingsView,
   Branch,
   ConfigProfile,
   EnvironmentCheckResult,
@@ -24,6 +25,7 @@ import type {
   PublishSelectionRef,
   PublishSpec,
   ProviderCatalogEntry,
+  RemoteAttemptEvidenceView,
   Repository,
   ScopedPublishDraft,
 } from "@/generated/tauri-contracts";
@@ -404,6 +406,10 @@ export interface MockTauriOptions {
   dialogSavePath?: string | null;
   /** Whether to log all invoke calls to console (for debugging) */
   debug?: boolean;
+  /** View returned by `list_automation_bindings`（默认空视图 `{bindings:[],drift:[]}`）。 */
+  automationBindings?: AutomationBindingsView;
+  /** Evidence returned by `synchronize_remote_publish_evidence`（默认 `[]`）。 */
+  remoteEvidence?: RemoteAttemptEvidenceView[];
 }
 
 export async function installMockTauri(
@@ -418,6 +424,8 @@ export async function installMockTauri(
     dialogOpenPath,
     dialogSavePath,
     debug,
+    automationBindings,
+    remoteEvidence,
   } = options;
 
   const clone = <T>(v: T): T =>
@@ -545,6 +553,12 @@ export async function installMockTauri(
       const dialogOpen = (opts.dialogOpenPath ?? null) as string | null;
       const dialogSave = (opts.dialogSavePath ?? null) as string | null;
       const d = (opts.debug ?? false) as boolean;
+      const automationView = (opts.automationBindings ?? null) as {
+        bindings: unknown[];
+        drift: unknown[];
+      } | null;
+      const seededRemoteEvidence = (opts.remoteEvidence ?? null) as
+        unknown[] | null;
 
       // 后端 PublishConfigStore::default()（configuration 恒为 Release）。
 
@@ -990,9 +1004,8 @@ export async function installMockTauri(
 
             case "synchronize_remote_publish_evidence":
               // 与 remote_evidence#synchronize_remote_publish_evidence 对齐：
-              // 默认无远端运行记录（spec 可经 mockState.initialState 或
-              // __MOCK_INVOCATIONS__ 断言调用发生）。
-              return [];
+              // 默认无远端运行记录；spec 可经 remoteEvidence 选项播种归档证据。
+              return clone(seededRemoteEvidence ?? []);
 
             case "update_profile":
             case "delete_profile":
@@ -1696,7 +1709,7 @@ export async function installMockTauri(
             // Automation bindings: no seeded bindings → empty view; preview/apply
             // fail loudly so a spec that drives the mutation flow must model it.
             case "list_automation_bindings":
-              return { bindings: [], drift: [] };
+              return clone(automationView ?? { bindings: [], drift: [] });
 
             case "preview_automation_change":
             case "apply_automation_change":
@@ -1726,6 +1739,8 @@ export async function installMockTauri(
       dialogOpenPath: dialogOpenPath ?? null,
       dialogSavePath: dialogSavePath ?? null,
       debug,
+      automationBindings: clone(automationBindings ?? null),
+      remoteEvidence: clone(remoteEvidence ?? null),
     } as unknown as Record<string, unknown>
   );
 }
