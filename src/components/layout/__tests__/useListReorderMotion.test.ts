@@ -75,6 +75,45 @@ describe("useListReorderMotion", () => {
     expect(nodeA.el.animate).toHaveBeenCalledTimes(1);
   });
 
+  it("maps travel distance through the sqrt-normalized duration curve", () => {
+    const nodeA = makeNode(0);
+    const nodeB = makeNode(40);
+    const { result, rerender } = renderReorder();
+
+    result.current.setItemRef("a")(nodeA.el);
+    result.current.setItemRef("b")(nodeB.el);
+    seedBaselineRects(rerender);
+    nodeB.pos.top = 0;
+    nodeA.pos.top = 40;
+    rerender({ orderedIds: ["b", "a"], draggingItemId: null });
+
+    const expected = Math.round(150 + (230 - 150) * Math.sqrt(40 / 140));
+    for (const node of [nodeA, nodeB]) {
+      const options = (node.el.animate as ReturnType<typeof vi.fn>).mock
+        .calls[0][1] as KeyframeAnimationOptions;
+      expect(options.duration).toBe(expected);
+    }
+  });
+
+  it("clamps the reorder duration at moveMax for overshoot distances", () => {
+    const nodeA = makeNode(0);
+    const nodeB = makeNode(500);
+    const { result, rerender } = renderReorder();
+
+    result.current.setItemRef("a")(nodeA.el);
+    result.current.setItemRef("b")(nodeB.el);
+    seedBaselineRects(rerender);
+    nodeB.pos.top = 0;
+    nodeA.pos.top = 500;
+    rerender({ orderedIds: ["b", "a"], draggingItemId: null });
+
+    for (const node of [nodeA, nodeB]) {
+      const options = (node.el.animate as ReturnType<typeof vi.fn>).mock
+        .calls[0][1] as KeyframeAnimationOptions;
+      expect(options.duration).toBe(230);
+    }
+  });
+
   it("clears the animation ref once the active animation finishes", () => {
     const nodeA = makeNode(0);
     const nodeB = makeNode(40);
