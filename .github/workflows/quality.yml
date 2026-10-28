@@ -154,6 +154,8 @@ jobs:
           retention-days: 14
       - name: Contracts drift check
         run: pnpm check:contracts
+      - name: E2E mock command parity
+        run: pnpm check:e2e-mock
       - name: Install cargo-audit
         uses: taiki-e/install-action@cargo-audit
       - name: Audit Rust dependencies
