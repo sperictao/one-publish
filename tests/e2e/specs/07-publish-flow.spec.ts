@@ -402,6 +402,39 @@ test.describe("Full Publish Flow — Error Paths", () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
+  test("protected-directory picker failure aborts with request-failed feedback", async ({
+    page,
+  }) => {
+    // access.status=denied → 授权选择器自身抛错（plugin:dialog|open 注错）
+    // →「申请目录访问权限失败」abort toast，不进运行态。
+    await gotoApp(page, {
+      preflightOutput: { accessStatus: "denied" },
+      errors: { "plugin:dialog|open": "dialog backend unavailable" },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    await expect(
+      page.locator("[data-sonner-toast]", {
+        hasText: "申请目录访问权限失败",
+      })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
   test("blocked prepare result surfaces diagnostics and prevents publish", async ({
     page,
   }) => {
