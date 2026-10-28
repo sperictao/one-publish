@@ -10,3 +10,6 @@ publish-domain = { path = "../publish-domain" }
 
 [dev-dependencies]
 serde_json.workspace = true
+
+[lints]
+workspace = true

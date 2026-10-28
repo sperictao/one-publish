@@ -25,3 +25,6 @@ e2e-real-java = []
 e2e-real-tauri = []
 e2e-real-sftp = []
 e2e-real-github = []
+
+[lints]
+workspace = true
