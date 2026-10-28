@@ -15,6 +15,7 @@ jobs:
   draft:
     name: Draft the runner release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -46,6 +47,7 @@ jobs:
           - runner: windows-latest
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     env:
       RUNNER_TARGET: ${{ matrix.target }}
     steps:
@@ -78,6 +80,7 @@ jobs:
     name: Publish the immutable release
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
