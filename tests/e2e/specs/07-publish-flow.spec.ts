@@ -380,6 +380,57 @@ test.describe("Full Publish Flow — Error Paths", () => {
       .toBe(false);
   });
 
+  test("warning environment issue warns but still publishes", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      envCheck: {
+        is_ready: true,
+        providers: [
+          {
+            provider_id: "dotnet",
+            installed: true,
+            version: "8.0.403",
+            path: "/usr/local/share/dotnet/dotnet",
+          },
+        ],
+        issues: [
+          {
+            severity: "warning",
+            provider_id: "dotnet",
+            issue_type: "version_mismatch",
+            description: "dotnet SDK is older than recommended",
+            current_value: "8.0.100",
+            expected_value: ">=8.0.300",
+            fixes: [],
+          },
+        ],
+        checked_at: new Date().toISOString(),
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // warning 仅提示不阻断——发布照常进入运行态。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "环境存在警告" })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(true);
+  });
+
   test("provider schema fetch failure is handled gracefully", async ({
     page,
   }) => {
