@@ -633,6 +633,26 @@ test("live preview drag bubble feels correct across repository and config lists"
     "recent:userprofile:alpha-profile"
   );
   await page.mouse.up();
+  await page.waitForTimeout(40);
+  // 最近配置落笔提交 reorder_recent_publish_configs。
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as typeof window & {
+            __ONE_PUBLISH_E2E_MOCK__: {
+              commandLog: Array<{
+                cmd: string;
+                args: { configKeys?: string[] };
+              }>;
+            };
+          }
+        ).__ONE_PUBLISH_E2E_MOCK__.commandLog
+          .filter((entry) => entry.cmd === "reorder_recent_publish_configs")
+          .map((entry) => entry.args.configKeys ?? [])
+      )
+    )
+    .toContainEqual(["userprofile:beta-profile", "userprofile:alpha-profile"]);
 
   const projectOrder = page.locator("[data-list-item-id^='pubxml:']");
   const projectThresholdY = await getBubbleThresholdPointerY(
@@ -774,4 +794,23 @@ test("live preview drag bubble feels correct across repository and config lists"
       { name: "alpha-profile", profileGroup: "Group B" },
       { name: "gamma-profile", profileGroup: "Group B" },
     ]);
+  // 用户配置落笔提交 reorder_profiles，携带同组序位。
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as typeof window & {
+            __ONE_PUBLISH_E2E_MOCK__: {
+              commandLog: Array<{
+                cmd: string;
+                args: { profiles?: Array<{ id: string }> };
+              }>;
+            };
+          }
+        ).__ONE_PUBLISH_E2E_MOCK__.commandLog
+          .filter((entry) => entry.cmd === "reorder_profiles")
+          .map((entry) => (entry.args.profiles ?? []).map((p) => p.id))
+      )
+    )
+    .toContainEqual(["beta-profile", "alpha-profile", "gamma-profile"]);
 });
