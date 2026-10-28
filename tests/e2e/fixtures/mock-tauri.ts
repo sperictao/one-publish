@@ -418,6 +418,23 @@ export interface MockTauriOptions {
   automationPreview?: AutomationProjectionPreview;
   /** `apply_automation_change` 返回的应用结果；缺省时保持显式未实现错误。 */
   automationApplyResult?: AutomationApplyResult;
+  /** `check_update` 返回的更新信息；缺省为无更新（has_update:false）。 */
+  updateInfo?: {
+    current_version: string;
+    available_version: string | null;
+    has_update: boolean;
+    release_notes: string | null;
+    message: string | null;
+  };
+  /** `install_update` 返回的消息；缺省为需要重启的提示文案。 */
+  installUpdateMessage?: string;
+  /** `get_updater_config_health` 返回的配置健康度；缺省为未配置。 */
+  updaterConfigHealth?: { configured: boolean; message: string | null };
+  /**
+   * 置 `window.isTauri = true`，解锁 `isTauri()` 门控路径（如
+   * updater 手动/自动检查）。缺省为 false，保持浏览器降级行为。
+   */
+  simulateTauri?: boolean;
 }
 
 export async function installMockTauri(
@@ -437,6 +454,10 @@ export async function installMockTauri(
     seedTauriProfile,
     automationPreview,
     automationApplyResult,
+    updateInfo,
+    installUpdateMessage,
+    updaterConfigHealth,
+    simulateTauri,
   } = options;
 
   const clone = <T>(v: T): T =>
@@ -578,6 +599,17 @@ export async function installMockTauri(
       > | null;
       const automationApplyResultView = (opts.automationApplyResult ??
         null) as Record<string, unknown> | null;
+      const seededUpdateInfo = (opts.updateInfo ?? null) as Record<
+        string,
+        unknown
+      > | null;
+      const seededInstallUpdateMessage = (opts.installUpdateMessage ?? null) as
+        string | null;
+      const seededUpdaterConfigHealth = (opts.updaterConfigHealth ?? null) as {
+        configured: boolean;
+        message: string | null;
+      } | null;
+      const shouldSimulateTauri = opts.simulateTauri === true;
 
       // 自动化安装流夹具：给带 publishConfig 的仓库追加一个 tauri provider
       // 配置（github-actions 后端 + releaseSettings，满足安装向导守卫）。
@@ -651,7 +683,40 @@ export async function installMockTauri(
         args?: Record<string, unknown>;
       }[];
 
+      const callbackRegistry: Record<number, (data?: unknown) => void> = {};
+      let callbackSeq = 0;
+
+      // isTauri=true 时 listen/unlisten 的清理路径读取该插件内部面。
+      win.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+        unregisterListener: (_event: string, _eventId: number) => {},
+      };
+
       win.__TAURI_INTERNALS__ = {
+        // isTauri=true 时插件 API 会读取的运行时结构。
+        metadata: {
+          currentWindow: { label: "main" },
+          currentWebview: { windowLabel: "main", label: "main" },
+        },
+        transformCallback: (
+          callback: (data?: unknown) => void,
+          once?: boolean
+        ) => {
+          const id = ++callbackSeq;
+          callbackRegistry[id] = once
+            ? (data?: unknown) => {
+                delete callbackRegistry[id];
+                callback(data);
+              }
+            : callback;
+          return id;
+        },
+        unregisterCallback: (id: number) => {
+          delete callbackRegistry[id];
+        },
+        runCallback: (id: number, data?: unknown) => {
+          callbackRegistry[id]?.(data);
+        },
+        convertFileSrc: (filePath: string) => filePath,
         invoke: async (cmd: string, args?: Record<string, unknown>) => {
           log("invoke:", cmd, args);
           (win.__MOCK_INVOCATIONS__ as string[]).push(cmd);
@@ -1910,13 +1975,15 @@ export async function installMockTauri(
 
             // ── Updater ──
             case "check_update":
-              return {
-                current_version: "0.6.3",
-                available_version: null,
-                has_update: false,
-                release_notes: null,
-                message: null,
-              };
+              return clone(
+                seededUpdateInfo ?? {
+                  current_version: "0.6.3",
+                  available_version: null,
+                  has_update: false,
+                  release_notes: null,
+                  message: null,
+                }
+              );
 
             case "get_current_version":
               return "0.6.3";
@@ -1925,13 +1992,20 @@ export async function installMockTauri(
               return [{ key: "Ctrl+P", description: "Publish" }];
 
             case "get_updater_config_health":
-              return { configured: false, message: "No updater configured" };
+              return clone(
+                seededUpdaterConfigHealth ?? {
+                  configured: false,
+                  message: "No updater configured",
+                }
+              );
 
             case "get_updater_help_paths":
               return { docsPath: "/docs", templatePath: "/template" };
 
             case "install_update":
-              return null;
+              // 与 installUpdate 的 Promise<string> 契约对齐——消息
+              // 文案驱动 isRestartRequired 判定（含"重启"/restart）。
+              return seededInstallUpdateMessage ?? "更新已安装，重启后生效";
 
             case "open_updater_help":
               return "ok";
@@ -2018,8 +2092,9 @@ export async function installMockTauri(
         },
       };
 
-      // indicate mocked environment
-      win.isTauri = false;
+      // indicate mocked environment；simulateTauri 显式开启时模拟
+      // 真实运行时标志以解锁 isTauri() 门控路径。
+      win.isTauri = shouldSimulateTauri;
     },
     {
       appState: clone(effectiveState),
@@ -2035,6 +2110,10 @@ export async function installMockTauri(
       seedTauriProfile: seedTauriProfile ?? false,
       automationPreview: clone(automationPreview ?? null),
       automationApplyResult: clone(automationApplyResult ?? null),
+      updateInfo: clone(updateInfo ?? null),
+      installUpdateMessage: installUpdateMessage ?? null,
+      updaterConfigHealth: clone(updaterConfigHealth ?? null),
+      simulateTauri: simulateTauri ?? false,
     } as unknown as Record<string, unknown>
   );
 }
