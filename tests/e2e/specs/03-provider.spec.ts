@@ -79,6 +79,61 @@ test.describe("Provider Catalog", () => {
       page.getByText("/workspace/alpha-service/App.csproj")
     ).toBeVisible();
   });
+
+  test("execution record opens its snapshot and persists the path", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      initialState: {
+        executionHistory: [
+          {
+            id: "history-boot-1",
+            repoId: "repo-a",
+            configurationId: null,
+            configurationRevisionId: null,
+            providerId: "dotnet",
+            projectPath: "/workspace/alpha-service/App.csproj",
+            startedAt: "2026-04-02T10:00:00.000Z",
+            finishedAt: "2026-04-02T10:00:03.000Z",
+            success: true,
+            cancelled: false,
+            outputDir: "/workspace/alpha-service/bin/Release",
+            error: null,
+            commandLine: "$ dotnet publish /workspace/alpha-service/App.csproj",
+            snapshotPath: null,
+            failureSignature: null,
+            outputExcerpt: null,
+            spec: null,
+            fileCount: 2,
+            warnings: null,
+          },
+        ],
+      },
+    });
+
+    await page.getByRole("button", { name: "历史记录" }).click();
+    await page.getByRole("button", { name: "打开快照" }).click();
+
+    await expect(page.getByText("已打开执行快照")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const calls =
+            (
+              window as unknown as {
+                __MOCK_INVOCATIONS__: string[];
+              }
+            ).__MOCK_INVOCATIONS__ ?? [];
+          return (
+            calls.includes("open_execution_snapshot") &&
+            calls.includes("set_execution_record_snapshot")
+          );
+        })
+      )
+      .toBe(true);
+  });
 });
 
 test.describe("Multiple Providers", () => {

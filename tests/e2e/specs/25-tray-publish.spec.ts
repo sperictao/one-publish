@@ -73,6 +73,12 @@ test.describe("Tray publish request", () => {
         (await mockInvocations(page)).includes("set_tray_publish_status")
       )
       .toBe(true);
+    // openOutputDirOnSuccess:true —— 成功后打开输出目录。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("open_output_directory")
+      )
+      .toBe(true);
   });
 
   test("invalid tray config key reports failure via tray status", async ({
