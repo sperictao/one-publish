@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - "tests/e2e/capture-edit-repository.spec.ts"
+      - "tests/e2e/specs/24-repository-actions.spec.ts"
       - "tests/e2e/fixtures/mock-tauri.ts"
       - "src/components/layout/EditRepositoryDialog.tsx"
       - "src/components/layout/editRepositoryProjectBinding.ts"
