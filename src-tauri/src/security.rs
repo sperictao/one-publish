@@ -39,6 +39,8 @@ pub(crate) fn is_sensitive_key(key: &str) -> bool {
 fn is_path_like_key(key: &str) -> bool {
     let normalized = normalize_key(key);
     normalized.contains("path")
+        || normalized.contains("directory")
+        || normalized.contains("folder")
         || normalized.ends_with("dir")
         || normalized == "output"
         || normalized == "outputdir"
@@ -378,7 +380,7 @@ pub(crate) fn write_private_binary_file(path: &Path, bytes: &[u8]) -> io::Result
 #[cfg(test)]
 mod tests {
     use super::{
-        is_sensitive_key, sanitize_evidence_json_map, sanitize_export_value,
+        is_path_like_key, is_sensitive_key, sanitize_evidence_json_map, sanitize_export_value,
         sanitize_freeform_text, sanitize_secrets_in_text,
     };
     use serde_json::json;
@@ -400,6 +402,24 @@ mod tests {
         }
         for key in ["output", "projectFile", "credentialId", "authorizationUrl"] {
             assert!(!is_sensitive_key(key), "{key} should stay readable");
+        }
+    }
+
+    #[test]
+    fn path_like_key_covers_directory_and_folder_suffixes() {
+        for key in [
+            "projectPath",
+            "outputDir",
+            "resolvedOutputDirectory",
+            "delivery_directory",
+            "workingDirectory",
+            "packageFolders",
+            "workFolder",
+        ] {
+            assert!(is_path_like_key(key), "{key} should be path-like");
+        }
+        for key in ["retryCount", "verbosity", "configuration"] {
+            assert!(!is_path_like_key(key), "{key} should stay readable");
         }
     }
 
