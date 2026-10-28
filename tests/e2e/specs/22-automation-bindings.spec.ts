@@ -7,6 +7,7 @@
 import { test, expect } from "@playwright/test";
 import type {
   AutomationBindingsView,
+  AutomationProjectionPreview,
   RemoteAttemptEvidenceView,
 } from "@/generated/tauri-contracts";
 import { gotoApp } from "../fixtures/mock-tauri";
@@ -44,6 +45,46 @@ const RUNNING_EVIDENCE: RemoteAttemptEvidenceView[] = [
     state: { kind: "archived", status: "running", error: null },
   },
 ];
+
+const RUNTIME_PROJECTION_PATH = ".github/automation/runtime/release.json";
+
+const SEEDED_PREVIEW: AutomationProjectionPreview = {
+  change: {
+    kind: "install",
+    configurationId: "profile-tauri",
+    triggerPolicy: { type: "tagPush", tagPrefix: "v" },
+    bindingId: null,
+    confirmedConflictPaths: [],
+  },
+  confirmationDigest: "e2e-digest",
+  changes: [
+    {
+      path: ".github/workflows/deploy.yml",
+      kind: "added",
+      currentContent: null,
+      expectedContent: "name: deploy",
+      conflictReleaseNamespace: null,
+      conflictDeliveryDestinationNamespace: null,
+    },
+    {
+      path: RUNTIME_PROJECTION_PATH,
+      kind: "added",
+      currentContent: null,
+      expectedContent: JSON.stringify({
+        runtime_revision: {
+          version: 1,
+          digest: "rev-digest",
+          runner: {
+            version: "0.1.0",
+            binary_digests: { "x86_64-linux": "sha256-abcdef" },
+          },
+        },
+      }),
+      conflictReleaseNamespace: null,
+      conflictDeliveryDestinationNamespace: null,
+    },
+  ],
+};
 
 test.describe("Automation bindings section", () => {
   test("renders for the selected repository", async ({ page }) => {
@@ -224,5 +265,59 @@ test.describe("Automation bindings — seeded view", () => {
     await expect(
       page.getByTestId("automation-remote-cancel-e2e-expired")
     ).toHaveCount(0);
+  });
+});
+
+test.describe("Automation bindings — install flow", () => {
+  test("preview renders runtime section and apply echoes the digest", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      seedTauriProfile: true,
+      automationPreview: SEEDED_PREVIEW,
+      automationApplyResult: {
+        commitSha: "abc123",
+        pushedBranch: "main",
+        bindings: [],
+      },
+    });
+
+    const installButton = page.getByRole("button", { name: "绑定自动化" });
+    await expect(installButton).toBeEnabled({ timeout: 10000 });
+    await installButton.click();
+    await page.getByRole("button", { name: "预览投影差异" }).click();
+
+    await expect(page.getByTestId("automation-preview-changes")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(
+      page.getByTestId(`automation-runtime-section-${RUNTIME_PROJECTION_PATH}`)
+    ).toBeVisible();
+
+    await page.getByTestId("automation-confirm-apply").click();
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "自动化投影已应用" })
+    ).toBeVisible({ timeout: 10000 });
+
+    const calls = await page.evaluate(() => {
+      const entries = (
+        window as unknown as {
+          __MOCK_INVOKE_ARGS__: {
+            cmd: string;
+            args?: Record<string, unknown>;
+          }[];
+        }
+      ).__MOCK_INVOKE_ARGS__;
+      return {
+        previewCalled: entries.some(
+          (entry) => entry.cmd === "preview_automation_change"
+        ),
+        applyArgs: entries.find(
+          (entry) => entry.cmd === "apply_automation_change"
+        )?.args,
+      };
+    });
+    expect(calls.previewCalled).toBe(true);
+    expect(calls.applyArgs?.confirmedDigest).toBe("e2e-digest");
   });
 });

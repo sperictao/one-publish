@@ -16,7 +16,9 @@ import { expect, type Page } from "@playwright/test";
 
 import type {
   AppState,
+  AutomationApplyResult,
   AutomationBindingsView,
+  AutomationProjectionPreview,
   Branch,
   ConfigProfile,
   EnvironmentCheckResult,
@@ -410,6 +412,12 @@ export interface MockTauriOptions {
   automationBindings?: AutomationBindingsView;
   /** Evidence returned by `synchronize_remote_publish_evidence`（默认 `[]`）。 */
   remoteEvidence?: RemoteAttemptEvidenceView[];
+  /** 在带 publishConfig 的仓库中追加一个 tauri provider 配置，启用自动化安装流。 */
+  seedTauriProfile?: boolean;
+  /** `preview_automation_change` 返回的投影预览；缺省时保持显式未实现错误。 */
+  automationPreview?: AutomationProjectionPreview;
+  /** `apply_automation_change` 返回的应用结果；缺省时保持显式未实现错误。 */
+  automationApplyResult?: AutomationApplyResult;
 }
 
 export async function installMockTauri(
@@ -426,6 +434,9 @@ export async function installMockTauri(
     debug,
     automationBindings,
     remoteEvidence,
+    seedTauriProfile,
+    automationPreview,
+    automationApplyResult,
   } = options;
 
   const clone = <T>(v: T): T =>
@@ -559,6 +570,45 @@ export async function installMockTauri(
       } | null;
       const seededRemoteEvidence = (opts.remoteEvidence ?? null) as
         unknown[] | null;
+      const shouldSeedTauriProfile = (opts.seedTauriProfile ??
+        false) as boolean;
+      const automationPreviewView = (opts.automationPreview ?? null) as Record<
+        string,
+        unknown
+      > | null;
+      const automationApplyResultView = (opts.automationApplyResult ??
+        null) as Record<string, unknown> | null;
+
+      // 自动化安装流夹具：给带 publishConfig 的仓库追加一个 tauri provider
+      // 配置（github-actions 后端 + releaseSettings，满足安装向导守卫）。
+      if (shouldSeedTauriProfile) {
+        for (const repo of appState.repositories ?? []) {
+          const repoProfiles = repo.publishConfig?.profiles;
+          if (
+            !repoProfiles ||
+            repoProfiles.some((profile) => profile.id === "profile-tauri")
+          ) {
+            continue;
+          }
+          const tauriProfile = createConfigProfile(
+            "profile-tauri",
+            "TauriRelease",
+            "2025-01-03T00:00:00Z"
+          );
+          const tauriRevision = tauriProfile.revisions[0];
+          if (tauriRevision) {
+            tauriRevision.providerId = "tauri";
+            tauriRevision.parameters = {
+              releaseSettings: { bundleTargets: "all", tagPrefix: "v" },
+            };
+            const backend = tauriRevision.composition?.executionBackend;
+            if (backend) {
+              backend.adapterId = "github-actions";
+            }
+          }
+          repoProfiles.push(tauriProfile);
+        }
+      }
 
       // 后端 PublishConfigStore::default()（configuration 恒为 Release）。
 
@@ -1712,7 +1762,19 @@ export async function installMockTauri(
               return clone(automationView ?? { bindings: [], drift: [] });
 
             case "preview_automation_change":
+              if (automationPreviewView) {
+                return clone(automationPreviewView);
+              }
+              throw {
+                code: "automation_not_mocked",
+                message:
+                  "automation change flow is not implemented in the e2e mock",
+              };
+
             case "apply_automation_change":
+              if (automationApplyResultView) {
+                return clone(automationApplyResultView);
+              }
               throw {
                 code: "automation_not_mocked",
                 message:
@@ -1741,6 +1803,9 @@ export async function installMockTauri(
       debug,
       automationBindings: clone(automationBindings ?? null),
       remoteEvidence: clone(remoteEvidence ?? null),
+      seedTauriProfile: seedTauriProfile ?? false,
+      automationPreview: clone(automationPreview ?? null),
+      automationApplyResult: clone(automationApplyResult ?? null),
     } as unknown as Record<string, unknown>
   );
 }
