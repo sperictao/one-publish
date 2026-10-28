@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { gotoApp } from "../fixtures/mock-tauri";
+import { DEFAULT_REPOSITORIES, gotoApp } from "../fixtures/mock-tauri";
 
 /**
  * 状态栏托盘发布流：真实 Tauri 运行时中托盘菜单发出
@@ -85,6 +85,46 @@ test.describe("Tray publish request", () => {
         (await mockInvocations(page)).includes("add_execution_record")
       )
       .toBe(true);
+    // feedbackMode:"system" —— 完成反馈走系统通知而非 toast。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("show_system_notification")
+      )
+      .toBe(true);
+  });
+
+  test("output-dir open failure surfaces a system error notification", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: true,
+      errors: { open_output_directory: "permission denied" },
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "userprofile:profile-tauri",
+    });
+
+    // 发布成功 → open_output_directory 抛错 → notifyFeedback 经 system
+    // 模式发出「打开输出目录失败」通知。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("open_output_directory")
+      )
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "show_system_notification"
+        )) as { title?: string }[];
+        return args.some((arg) =>
+          (arg?.title ?? "").includes("打开输出目录失败")
+        );
+      })
+      .toBe(true);
   });
 
   test("invalid tray config key reports failure via tray status", async ({
@@ -113,6 +153,189 @@ test.describe("Tray publish request", () => {
     expect(
       (await mockInvocations(page)).includes("start_publish_runtime")
     ).toBe(false);
+    // 系统通知送达（缺省 true）→ 不回落主窗口恢复。
+    expect(
+      (await mockInvocations(page)).includes("show_system_notification")
+    ).toBe(true);
+    expect((await mockInvocations(page)).includes("show_main_window")).toBe(
+      false
+    );
+  });
+
+  test("runtime failure reports via tray status and system notification", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: true,
+      errors: { start_publish_runtime: "backend crashed" },
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "userprofile:profile-tauri",
+    });
+
+    // 解析成功但运行期失败 → publish:failed：托盘 failure 状态 +
+    // system 反馈走 show_system_notification + 失败记录落账。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("start_publish_runtime")
+      )
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "set_tray_publish_status"
+        )) as { status?: string }[];
+        return args.some((arg) => arg?.status === "failure");
+      })
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("show_system_notification")
+      )
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("add_execution_record")
+      )
+      .toBe(true);
+  });
+
+  test("pubxml key without bound provider fails resolution", async ({
+    page,
+  }) => {
+    const repoWithoutProvider = {
+      ...DEFAULT_REPOSITORIES[0],
+      providerId: undefined,
+    } as unknown as (typeof DEFAULT_REPOSITORIES)[number];
+    await gotoApp(page, {
+      simulateTauri: true,
+      repositories: [repoWithoutProvider, ...DEFAULT_REPOSITORIES.slice(1)],
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "pubxml:FolderProfile",
+    });
+
+    // 项目配置键要求仓库已绑定 Provider（ADR-0044）——缺失即解析失败。
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "set_tray_publish_status"
+        )) as { status?: string }[];
+        return args.some((arg) => arg?.status === "failure");
+      })
+      .toBe(true);
+    expect(
+      (await mockInvocations(page)).includes("start_publish_runtime")
+    ).toBe(false);
+  });
+
+  test("blocked profile fails resolution before runtime", async ({ page }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: { blockedReason: "manual gate required" },
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "userprofile:profile-tauri",
+    });
+
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "set_tray_publish_status"
+        )) as { status?: string }[];
+        return args.some((arg) => arg?.status === "failure");
+      })
+      .toBe(true);
+    expect(
+      (await mockInvocations(page)).includes("start_publish_runtime")
+    ).toBe(false);
+  });
+
+  test("notification failure falls back to restoring the main window", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: true,
+      errors: { show_system_notification: "notification permission denied" },
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "not-a-valid-key",
+    });
+
+    // 通知失败 → showSystemNotification 回落 false → showMainWindow 恢复。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("show_main_window")
+      )
+      .toBe(true);
+    expect(
+      (await mockInvocations(page)).includes("set_tray_publish_status")
+    ).toBe(true);
+  });
+
+  test("cancel during tray publish resets tray status to idle", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: true,
+      publishRuntimeLatch: true,
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "userprofile:profile-tauri",
+    });
+
+    // 运行中（闩锁挂起）→ 取消 → publish:cancelled：托盘归位 idle
+    // 且取消记录照常落账。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("start_publish_runtime")
+      )
+      .toBe(true);
+    const cancelBtn = page.getByRole("button", { name: "取消发布" });
+    await expect(cancelBtn).toBeVisible({ timeout: 15000 });
+    await cancelBtn.click();
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("cancel_publish_runtime")
+      )
+      .toBe(true);
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          __MOCK_RESOLVE_PUBLISH_RUNTIME__: () => void;
+        }
+      ).__MOCK_RESOLVE_PUBLISH_RUNTIME__();
+    });
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "set_tray_publish_status"
+        )) as { status?: string }[];
+        return args.some((arg) => arg?.status === "idle");
+      })
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("add_execution_record")
+      )
+      .toBe(true);
   });
 
   test("publish session events stream log chunks into the output view", async ({

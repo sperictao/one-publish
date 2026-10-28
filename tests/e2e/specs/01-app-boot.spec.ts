@@ -70,6 +70,36 @@ test.describe("App Boot", () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
+  test("drag region issues window drag commands", async ({ page }) => {
+    await gotoApp(page, { simulateTauri: true });
+
+    // 单击 drag region（buttons=1, detail=1）→ startDragging；
+    // 双击（detail=2）→ toggleMaximize。命令经 plugin:window 发出。
+    const region = page.locator("[data-tauri-drag-region]").first();
+    await expect(region).toBeVisible({ timeout: 15000 });
+
+    const invocations = async () =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __MOCK_INVOCATIONS__: string[] })
+            .__MOCK_INVOCATIONS__
+      );
+
+    await region.dispatchEvent("mousedown", { buttons: 1, detail: 1 });
+    await expect
+      .poll(async () =>
+        (await invocations()).includes("plugin:window|start_dragging")
+      )
+      .toBe(true);
+
+    await region.dispatchEvent("mousedown", { buttons: 1, detail: 2 });
+    await expect
+      .poll(async () =>
+        (await invocations()).includes("plugin:window|toggle_maximize")
+      )
+      .toBe(true);
+  });
+
   test("app is functional with mocked Tauri backend", async ({ page }) => {
     // Install mock Tauri layer and navigate
     await installMockTauri(page);

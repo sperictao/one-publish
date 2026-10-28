@@ -97,6 +97,22 @@ test.describe("Settings dialog", () => {
         )
       )
       .toBe(true);
+
+    // 点击重启 → plugin-process relaunch → plugin:process|restart 调用；
+    // mock 下 relaunch 保持 pending 语义，按钮定格为「重启中…」。
+    await page.getByRole("button", { name: "重启应用" }).click();
+    await expect(page.getByRole("button", { name: "重启中…" })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("plugin:process|restart")
+        )
+      )
+      .toBe(true);
   });
 
   test("下载进度事件在安装期间驱动进度条", async ({ page }) => {
