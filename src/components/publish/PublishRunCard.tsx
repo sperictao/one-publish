@@ -1,4 +1,4 @@
-import { useCallback, memo, useRef, useState } from "react";
+import { useCallback, memo, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Collapse } from "@/components/ui/collapse";
@@ -108,17 +108,22 @@ export const PublishRunCard = memo(function PublishRunCard({
     runtimePreparationError: currentRuntimePreparationError,
   });
 
-  if (!isRefreshing) {
-    frozenDisplayRef.current = {
-      outputLog: currentOutputLog,
-      publishResult: currentPublishResult,
-      publishActions: currentPublishActions,
-      preparedRuntime: currentPreparedRuntime,
-      activeRuntime: currentActiveRuntime,
-      runtimeResult: currentRuntimeResult,
-      runtimePreparationError: currentRuntimePreparationError,
-    };
-  }
+  // 冻结快照只在提交后更新：render 期写 ref 在并发渲染下可能写入未提交的
+  // props（react-doctor/no-ref-current-in-render），effect 写入保证冻结值
+  // 始终对应已提交的 props。
+  useEffect(() => {
+    if (!isRefreshing) {
+      frozenDisplayRef.current = {
+        outputLog: currentOutputLog,
+        publishResult: currentPublishResult,
+        publishActions: currentPublishActions,
+        preparedRuntime: currentPreparedRuntime,
+        activeRuntime: currentActiveRuntime,
+        runtimeResult: currentRuntimeResult,
+        runtimePreparationError: currentRuntimePreparationError,
+      };
+    }
+  });
 
   const outputLog = isRefreshing
     ? frozenDisplayRef.current.outputLog
