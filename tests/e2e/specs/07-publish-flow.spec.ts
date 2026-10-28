@@ -284,6 +284,38 @@ test.describe("Full Publish Flow — Error Paths", () => {
       .toBe(false);
   });
 
+  test("blocked prepare result surfaces diagnostics and prevents publish", async ({
+    page,
+  }) => {
+    // blocked: 前缀建模 prepare_publish_runtime 的阻塞结果（非抛错）。
+    await gotoApp(page, {
+      errors: {
+        prepare_publish_runtime: "blocked:provider binding is required",
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+
+    // 预览期 prepare 已返回 blocked → run card 渲染诊断、执行钮禁用，
+    // 发布根本不可发起。
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).toBeDisabled({ timeout: 10000 });
+    await expect(page.getByText("provider binding is required")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
   test("provider schema fetch failure is handled gracefully", async ({
     page,
   }) => {
