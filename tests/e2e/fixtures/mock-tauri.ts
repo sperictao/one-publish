@@ -413,7 +413,11 @@ export interface MockTauriOptions {
   /** Evidence returned by `synchronize_remote_publish_evidence`（默认 `[]`）。 */
   remoteEvidence?: RemoteAttemptEvidenceView[];
   /** 在带 publishConfig 的仓库中追加一个 tauri provider 配置，启用自动化安装流。 */
-  seedTauriProfile?: boolean;
+  /**
+   * 为带 publishConfig 的仓库追加一个 tauri provider 配置；
+   * 传对象可覆写种子属性（如 blockedReason 构造守卫失败臂）。
+   */
+  seedTauriProfile?: boolean | { blockedReason?: string | null };
   /** `preview_automation_change` 返回的投影预览；缺省时保持显式未实现错误。 */
   automationPreview?: AutomationProjectionPreview;
   /** `apply_automation_change` 返回的应用结果；缺省时保持显式未实现错误。 */
@@ -605,8 +609,9 @@ export async function installMockTauri(
       } | null;
       const seededRemoteEvidence = (opts.remoteEvidence ?? null) as
         unknown[] | null;
-      const shouldSeedTauriProfile = (opts.seedTauriProfile ??
-        false) as boolean;
+      const seededTauriProfileOpt = (opts.seedTauriProfile ?? false) as
+        boolean | { blockedReason?: string | null };
+      const shouldSeedTauriProfile = Boolean(seededTauriProfileOpt);
       const automationPreviewView = (opts.automationPreview ?? null) as Record<
         string,
         unknown
@@ -645,6 +650,10 @@ export async function installMockTauri(
             "TauriRelease",
             "2025-01-03T00:00:00Z"
           );
+          if (typeof seededTauriProfileOpt === "object") {
+            tauriProfile.blockedReason =
+              seededTauriProfileOpt.blockedReason ?? null;
+          }
           const tauriRevision = tauriProfile.revisions[0];
           if (tauriRevision) {
             tauriRevision.providerId = "tauri";

@@ -236,6 +236,31 @@ test.describe("Tray publish request", () => {
     ).toBe(false);
   });
 
+  test("blocked profile fails resolution before runtime", async ({ page }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: { blockedReason: "manual gate required" },
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "userprofile:profile-tauri",
+    });
+
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "set_tray_publish_status"
+        )) as { status?: string }[];
+        return args.some((arg) => arg?.status === "failure");
+      })
+      .toBe(true);
+    expect(
+      (await mockInvocations(page)).includes("start_publish_runtime")
+    ).toBe(false);
+  });
+
   test("notification failure falls back to restoring the main window", async ({
     page,
   }) => {
