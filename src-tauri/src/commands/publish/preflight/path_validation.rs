@@ -147,3 +147,144 @@ pub(super) fn windows_absolute_root(path: &Path) -> Option<PathBuf> {
     root.push(std::path::MAIN_SEPARATOR.to_string());
     Some(root)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::{PublishOutputValidationIssue, PublishOutputValidationStatus};
+    use super::*;
+
+    #[test]
+    fn normalize_lexical_path_collapses_dot_and_parent_segments() {
+        assert_eq!(
+            normalize_lexical_path(Path::new("/a/./b/../c")),
+            PathBuf::from("/a/c")
+        );
+        assert_eq!(
+            normalize_lexical_path(Path::new("a/../b")),
+            PathBuf::from("b")
+        );
+        assert_eq!(
+            normalize_lexical_path(Path::new("/a/../../b")),
+            PathBuf::from("/b")
+        );
+    }
+
+    #[test]
+    fn normalize_lexical_path_drops_unresolvable_parent_prefix() {
+        assert_eq!(
+            normalize_lexical_path(Path::new("../x")),
+            PathBuf::from("x")
+        );
+        assert_eq!(normalize_lexical_path(Path::new("./x")), PathBuf::from("x"));
+    }
+
+    #[test]
+    fn unc_path_detection_covers_backslash_and_forward_slash_forms() {
+        for path in ["\\\\srv\\sh", "//srv/sh", "  //srv/sh  "] {
+            assert!(looks_like_unc_path(path), "{path:?}");
+        }
+        for path in ["", "/single", "C:\\x", "relative\\x"] {
+            assert!(!looks_like_unc_path(path), "{path:?}");
+        }
+    }
+
+    #[test]
+    fn windows_path_detection_covers_drive_and_backslash_forms() {
+        for path in ["C:\\out", "C:/out", "z:\\x", "nested\\dir", "  C:\\out  "] {
+            assert!(looks_like_windows_path(path), "{path:?}");
+        }
+    }
+
+    #[test]
+    fn windows_path_detection_rejects_posix_relative_and_unc_forms() {
+        for path in [
+            "",
+            "   ",
+            "/posix/out",
+            "D:",
+            "C:x",
+            "\\\\srv\\sh",
+            "//srv/sh",
+        ] {
+            assert!(!looks_like_windows_path(path), "{path:?}");
+        }
+    }
+
+    #[test]
+    fn windows_absolute_path_requires_drive_root_or_unc_backslashes() {
+        for path in ["C:\\out", "C:/out", "\\\\srv\\sh"] {
+            assert!(looks_like_windows_absolute_path(path), "{path:?}");
+        }
+        for path in ["", "   ", "nested\\dir", "//srv/sh", "/posix/out", "C:x"] {
+            assert!(!looks_like_windows_absolute_path(path), "{path:?}");
+        }
+    }
+
+    #[test]
+    fn posix_absolute_path_excludes_forward_slash_unc() {
+        for path in ["/abs", "/a/b/", " /spaced "] {
+            assert!(looks_like_posix_absolute_path(path), "{path:?}");
+        }
+        for path in ["", "//remote", "relative", "\\\\srv"] {
+            assert!(!looks_like_posix_absolute_path(path), "{path:?}");
+        }
+    }
+
+    #[test]
+    fn evaluate_validation_is_not_applicable_for_blank_output_dir() {
+        assert_eq!(
+            evaluate_publish_output_validation(None, "   ").status,
+            PublishOutputValidationStatus::NotApplicable
+        );
+        // A blank configured dir overrides the inferred dir entirely.
+        assert_eq!(
+            evaluate_publish_output_validation(Some("  "), "/inferred/out").status,
+            PublishOutputValidationStatus::NotApplicable
+        );
+    }
+
+    #[test]
+    fn evaluate_validation_prefers_configured_output_dir() {
+        let result = evaluate_publish_output_validation(Some("/conf/out"), "/inferred");
+        assert_eq!(result.status, PublishOutputValidationStatus::Compatible);
+        assert_eq!(result.issue, None);
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let result = evaluate_publish_output_validation(Some("C:\\out"), "/inferred");
+            assert_eq!(result.status, PublishOutputValidationStatus::Incompatible);
+            assert_eq!(
+                result.issue,
+                Some(PublishOutputValidationIssue::WindowsStylePathOnPosix)
+            );
+        }
+    }
+
+    #[test]
+    fn evaluate_validation_accepts_remote_targets_without_local_checks() {
+        for output_dir in ["\\\\nas\\share", "s3://bucket/prefix"] {
+            let result = evaluate_publish_output_validation(None, output_dir);
+            assert_eq!(
+                result.status,
+                PublishOutputValidationStatus::Compatible,
+                "{output_dir:?}"
+            );
+            assert_eq!(result.issue, None);
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn non_windows_detect_flags_windows_style_paths_only() {
+        assert_eq!(
+            detect_output_path_validation_issue("C:\\out"),
+            Some(PublishOutputValidationIssue::WindowsStylePathOnPosix)
+        );
+        assert_eq!(
+            detect_output_path_validation_issue("nested\\dir"),
+            Some(PublishOutputValidationIssue::WindowsStylePathOnPosix)
+        );
+        assert_eq!(detect_output_path_validation_issue("/posix/out"), None);
+        assert_eq!(detect_output_path_validation_issue("relative/out"), None);
+    }
+}
