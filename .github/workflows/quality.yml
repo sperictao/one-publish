@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
 
+# 同一 ref 上的新推送取消过期运行（PR 上快速连推时不再堆叠排队）；
+# main 上的 push 运行不取消，保证落地提交始终有完整验证。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 permissions:
   contents: read
 
