@@ -514,6 +514,47 @@ test.describe("Full Publish Flow — Error Paths", () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
+  test("authorize-at-start picker cancel silently aborts publish", async ({
+    page,
+  }) => {
+    // blocked + denied → 开始发布先走授权选择器；dialogOpenPath 缺省 null
+    // 表示用户取消 → authorized=false → 静默中止（无 toast、不进运行态）。
+    await gotoApp(page, {
+      errors: {
+        prepare_publish_runtime: "blocked:输出目录位于受保护位置",
+      },
+      preflightOutput: { accessStatus: "denied" },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled({ timeout: 10000 });
+    await publishBtn.click();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("plugin:dialog|open")
+        )
+      )
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+    // 中止后回到可再次发起的状态。
+    await expect(publishBtn).not.toBeDisabled({ timeout: 10000 });
+  });
+
   test("warning environment issue warns but still publishes", async ({
     page,
   }) => {
