@@ -50,13 +50,28 @@ function readLocale(file) {
 }
 
 function flattenLocaleKeys(value, prefix = "") {
+  return flattenLocaleEntries(value, prefix).map(([path]) => path);
+}
+
+function flattenLocaleEntries(value, prefix = "") {
   return Object.entries(value).flatMap(([key, child]) => {
     const path = prefix ? `${prefix}.${key}` : key;
     if (child && typeof child === "object" && !Array.isArray(child)) {
-      return flattenLocaleKeys(child, path);
+      return flattenLocaleEntries(child, path);
     }
-    return [path];
+    return [[path, child]];
   });
+}
+
+function extractPlaceholders(value) {
+  if (typeof value !== "string") {
+    return new Set();
+  }
+  return new Set(
+    [...value.matchAll(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g)].map(
+      (match) => match[1]
+    )
+  );
 }
 
 function getSourceFiles() {
@@ -316,6 +331,10 @@ const localeKeySets = LOCALE_FILES.map((file) => ({
   file,
   keys: new Set(flattenLocaleKeys(readLocale(file))),
 }));
+const localeValueMaps = LOCALE_FILES.map((file) => ({
+  file,
+  values: new Map(flattenLocaleEntries(readLocale(file))),
+}));
 const canonicalKeys = localeKeySets[0].keys;
 const problems = [];
 
@@ -333,6 +352,32 @@ for (const locale of localeKeySets) {
       `${locale.file} has ${extra.length} extra keys:\n${extra.join("\n")}`
     );
   }
+}
+
+// Interpolation placeholder parity: a key whose placeholders differ across
+// locales renders raw {{var}} text in the drifted locale even though the key
+// itself exists. Compare each locale's placeholder set against the
+// canonical locale for every shared key.
+const canonicalValues = localeValueMaps[0].values;
+const placeholderMismatches = [];
+for (const key of canonicalKeys) {
+  const expected = extractPlaceholders(canonicalValues.get(key));
+  for (const { file, values } of localeValueMaps.slice(1)) {
+    const actual = extractPlaceholders(values.get(key));
+    if (
+      expected.size !== actual.size ||
+      [...expected].some((name) => !actual.has(name))
+    ) {
+      placeholderMismatches.push(
+        `${key}: ${localeValueMaps[0].file}={${[...expected].sort().join(",")}} ${file}={${[...actual].sort().join(",")}}`
+      );
+    }
+  }
+}
+if (placeholderMismatches.length > 0) {
+  problems.push(
+    `${placeholderMismatches.length} keys have mismatched {{placeholders}} across locales:\n${placeholderMismatches.join("\n")}`
+  );
 }
 
 const allKeys = new Set([...canonicalKeys]);
