@@ -1688,6 +1688,24 @@ export async function installMockTauri(
             case "plugin:dialog|message":
               return null;
 
+            // Tray / window host actions — no-ops in the browser harness.
+            case "show_main_window":
+            case "set_tray_publish_status":
+              return true;
+
+            // Automation bindings: no seeded bindings → empty view; preview/apply
+            // fail loudly so a spec that drives the mutation flow must model it.
+            case "list_automation_bindings":
+              return { bindings: [], drift: [] };
+
+            case "preview_automation_change":
+            case "apply_automation_change":
+              throw {
+                code: "automation_not_mocked",
+                message:
+                  "automation change flow is not implemented in the e2e mock",
+              };
+
             default:
               log("UNHANDLED COMMAND:", cmd);
               // Return null for unknown commands rather than throwing
