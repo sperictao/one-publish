@@ -79,10 +79,8 @@ export default tseslint.config(
     },
   },
   {
-    // 残留 1 处（useTrayRecentPublish.ts）：标准修法 Error cause 需要 tsconfig lib >= ES2022，
-    // 超出 lint 清理范围。tsconfig 升级后修复该处并删除本条降级。
     rules: {
-      "preserve-caught-error": "warn",
+      "preserve-caught-error": "error",
     },
   },
   // 关闭与 prettier 冲突的纯风格规则（必须放最后）
