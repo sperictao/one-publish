@@ -16,6 +16,9 @@ import { expect, type Page } from "@playwright/test";
 
 import type {
   AppState,
+  AutomationApplyResult,
+  AutomationBindingsView,
+  AutomationProjectionPreview,
   Branch,
   ConfigProfile,
   EnvironmentCheckResult,
@@ -24,6 +27,7 @@ import type {
   PublishSelectionRef,
   PublishSpec,
   ProviderCatalogEntry,
+  RemoteAttemptEvidenceView,
   Repository,
   ScopedPublishDraft,
 } from "@/generated/tauri-contracts";
@@ -404,6 +408,16 @@ export interface MockTauriOptions {
   dialogSavePath?: string | null;
   /** Whether to log all invoke calls to console (for debugging) */
   debug?: boolean;
+  /** View returned by `list_automation_bindings`（默认空视图 `{bindings:[],drift:[]}`）。 */
+  automationBindings?: AutomationBindingsView;
+  /** Evidence returned by `synchronize_remote_publish_evidence`（默认 `[]`）。 */
+  remoteEvidence?: RemoteAttemptEvidenceView[];
+  /** 在带 publishConfig 的仓库中追加一个 tauri provider 配置，启用自动化安装流。 */
+  seedTauriProfile?: boolean;
+  /** `preview_automation_change` 返回的投影预览；缺省时保持显式未实现错误。 */
+  automationPreview?: AutomationProjectionPreview;
+  /** `apply_automation_change` 返回的应用结果；缺省时保持显式未实现错误。 */
+  automationApplyResult?: AutomationApplyResult;
 }
 
 export async function installMockTauri(
@@ -418,6 +432,11 @@ export async function installMockTauri(
     dialogOpenPath,
     dialogSavePath,
     debug,
+    automationBindings,
+    remoteEvidence,
+    seedTauriProfile,
+    automationPreview,
+    automationApplyResult,
   } = options;
 
   const clone = <T>(v: T): T =>
@@ -545,6 +564,73 @@ export async function installMockTauri(
       const dialogOpen = (opts.dialogOpenPath ?? null) as string | null;
       const dialogSave = (opts.dialogSavePath ?? null) as string | null;
       const d = (opts.debug ?? false) as boolean;
+      const automationView = (opts.automationBindings ?? null) as {
+        bindings: unknown[];
+        drift: unknown[];
+      } | null;
+      const seededRemoteEvidence = (opts.remoteEvidence ?? null) as
+        unknown[] | null;
+      const shouldSeedTauriProfile = (opts.seedTauriProfile ??
+        false) as boolean;
+      const automationPreviewView = (opts.automationPreview ?? null) as Record<
+        string,
+        unknown
+      > | null;
+      const automationApplyResultView = (opts.automationApplyResult ??
+        null) as Record<string, unknown> | null;
+
+      // 自动化安装流夹具：给带 publishConfig 的仓库追加一个 tauri provider
+      // 配置（github-actions 后端 + releaseSettings，满足安装向导守卫）。
+      if (shouldSeedTauriProfile) {
+        for (const repo of appState.repositories ?? []) {
+          const repoProfiles = repo.publishConfig?.profiles;
+          if (
+            !repoProfiles ||
+            repoProfiles.some((profile) => profile.id === "profile-tauri")
+          ) {
+            continue;
+          }
+          const tauriProfile = createConfigProfile(
+            "profile-tauri",
+            "TauriRelease",
+            "2025-01-03T00:00:00Z"
+          );
+          const tauriRevision = tauriProfile.revisions[0];
+          if (tauriRevision) {
+            tauriRevision.providerId = "tauri";
+            // 与 load_release_settings_draft 的默认草稿同形：表单
+            // normalize 对每个字段取值，缺键会在保存前抛错。
+            tauriRevision.parameters = {
+              releaseSettings: {
+                appConfigPath: "src-tauri/tauri.conf.json",
+                appName: "mock-app",
+                buildDriver: "pnpm",
+                enabledTargets: ["macos_arm64"],
+                releaseAssetPatterns: ["release/${version}/**"],
+                updater: {
+                  enabled: false,
+                  endpoint: null,
+                  publicKey: null,
+                  privateKeySecretName: null,
+                },
+                allowUnsignedRelease: false,
+                requiredActionsSecretNames: [],
+                actionsSecretEnvironment: {},
+                tagPrefix: "v",
+                releaseGates: [],
+                localDeliveryDir: "release/local",
+                versionMirrors: [],
+                managedWorkflowVersion: 1,
+              },
+            };
+            const backend = tauriRevision.composition?.executionBackend;
+            if (backend) {
+              backend.adapterId = "github-actions";
+            }
+          }
+          repoProfiles.push(tauriProfile);
+        }
+      }
 
       // 后端 PublishConfigStore::default()（configuration 恒为 Release）。
 
@@ -671,8 +757,19 @@ export async function installMockTauri(
               return clone(appState);
             }
 
-            case "update_ui_state":
-              return null;
+            case "update_ui_state": {
+              // 与 store/commands.rs#update_ui_state 对齐：面板宽度与
+              // 选中仓库回落到 appState，返回新 AppState。
+              if (typeof args?.leftPanelWidth === "number")
+                appState.leftPanelWidth = args.leftPanelWidth as number;
+              if (typeof args?.middlePanelWidth === "number")
+                appState.middlePanelWidth = args.middlePanelWidth as number;
+              if (typeof args?.selectedRepoId === "string")
+                appState.selectedRepoId = args.selectedRepoId as string;
+              if (args?.clearSelectedRepoId === true)
+                appState.selectedRepoId = null;
+              return clone({ ...appState, executionHistory: [] });
+            }
 
             case "update_preferences": {
               if (args?.language) appState.language = args.language as string;
@@ -683,7 +780,7 @@ export async function installMockTauri(
               if (typeof args?.executionHistoryLimit === "number")
                 appState.executionHistoryLimit =
                   args.executionHistoryLimit as number;
-              return null;
+              return clone({ ...appState, executionHistory: [] });
             }
 
             // ── Provider ──
@@ -739,8 +836,34 @@ export async function installMockTauri(
               );
             }
 
-            case "remove_repository":
-            case "reorder_repositories":
+            case "remove_repository": {
+              // 与 store/commands.rs#remove_repository 对齐：移除仓库；
+              // 选中项被删时回落到首个剩余仓库，返回新 AppState。
+              const repoId = args?.repoId as string;
+              appState.repositories = (appState.repositories ?? []).filter(
+                (r: Repository) => r.id !== repoId
+              );
+              if (appState.selectedRepoId === repoId) {
+                appState.selectedRepoId = appState.repositories[0]?.id ?? null;
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "reorder_repositories": {
+              // 与 store/commands.rs#reorder_repositories 对齐：按 repoIds
+              // 顺序重排仓库列表，未提及的仓库保持相对顺序附后。
+              const order = (args?.repoIds as string[]) ?? [];
+              const rank = new Map(
+                order.map((id, index) => [id, index] as const)
+              );
+              appState.repositories = [...(appState.repositories ?? [])].sort(
+                (a: Repository, b: Repository) =>
+                  (rank.get(a.id) ?? order.length) -
+                  (rank.get(b.id) ?? order.length)
+              );
+              return clone({ ...appState, executionHistory: [] });
+            }
+
             case "save_profile": {
               // 与 store/commands.rs#save_profile 对齐：在目标仓库追加配置
               // 并返回新 AppState（前端保存后按名称回读新配置身份）。
@@ -990,17 +1113,169 @@ export async function installMockTauri(
 
             case "synchronize_remote_publish_evidence":
               // 与 remote_evidence#synchronize_remote_publish_evidence 对齐：
-              // 默认无远端运行记录（spec 可经 mockState.initialState 或
-              // __MOCK_INVOCATIONS__ 断言调用发生）。
-              return [];
+              // 默认无远端运行记录；spec 可经 remoteEvidence 选项播种归档证据。
+              return clone(seededRemoteEvidence ?? []);
 
-            case "update_profile":
-            case "delete_profile":
-            case "remove_recent_publish_config":
-            case "reorder_recent_publish_configs":
-            case "reorder_profiles":
-            case "replace_recent_publish_config_key":
-              return null;
+            case "update_profile": {
+              // 与 store/commands.rs#update_profile 对齐：编辑把
+              // name/parameters/composition 写入新修订并切为当前修订，
+              // 返回新 AppState（前端 normalizeAppState 依赖非空返回）。
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === (args?.repoId as string)
+              );
+              const profile = repo?.publishConfig.profiles?.find(
+                (p: ConfigProfile) => p.id === (args?.profileId as string)
+              );
+              const current = profile?.revisions?.find(
+                (r) => r.id === profile.currentRevisionId
+              );
+              if (!repo || !profile || !current) {
+                throw { code: "profile_not_found", message: "配置不存在" };
+              }
+              const nextSequence =
+                Math.max(...profile.revisions.map((r) => r.sequence ?? 0)) + 1;
+              const nextRevision = {
+                ...clone(current),
+                id: `${profile.id}-revision-${nextSequence}`,
+                sequence: nextSequence,
+                createdAt: new Date().toISOString(),
+                providerId:
+                  (args?.providerId as string | undefined) ??
+                  current.providerId,
+                parameters: clone(
+                  (args?.parameters as Record<string, unknown> | undefined) ??
+                    current.parameters
+                ),
+                composition:
+                  args?.composition !== undefined
+                    ? clone(args.composition)
+                    : current.composition,
+              };
+              profile.revisions.push(nextRevision);
+              profile.currentRevisionId = nextRevision.id;
+              if (typeof args?.name === "string" && args.name.trim()) {
+                profile.name = args.name;
+              }
+              if (args?.profileGroup !== undefined) {
+                profile.profileGroup =
+                  (args.profileGroup as string | null) ?? null;
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "delete_profile": {
+              // 与 store/types.rs#PublishConfigStore::delete_profile 对齐：
+              // 绑定引用与系统默认是硬错误；软删除 deletedAt 并清 selection。
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === (args?.repoId as string)
+              );
+              const config = repo?.publishConfig;
+              if (
+                config?.bindings?.some(
+                  (binding: { configurationId?: string }) =>
+                    binding.configurationId === (args?.profileId as string)
+                )
+              ) {
+                throw {
+                  code: "profile_delete_blocked_by_binding",
+                  message:
+                    "配置仍被外部自动化绑定引用，请先通过更新配置入口解除绑定",
+                };
+              }
+              const profile = config?.profiles?.find(
+                (p: ConfigProfile) =>
+                  p.id === (args?.profileId as string) && !p.deletedAt
+              );
+              if (!repo || !profile) {
+                throw { code: "profile_not_found", message: "配置不存在" };
+              }
+              if (profile.isSystemDefault) {
+                throw {
+                  code: "system_profile_immutable",
+                  message: "不能删除系统默认配置文件",
+                };
+              }
+              profile.deletedAt = new Date().toISOString();
+              if (
+                config?.selection?.kind === "revision" &&
+                config.selection.configurationId === profile.id
+              ) {
+                config.selection = undefined;
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "remove_recent_publish_config": {
+              // 与 store/commands.rs 对齐：从仓库最近键列表中移除 configKey。
+              const repoId = args?.repoId as string;
+              const configKey = args?.configKey as string;
+              const keys = appState.recentConfigKeysByRepo?.[repoId] ?? [];
+              if (appState.recentConfigKeysByRepo) {
+                appState.recentConfigKeysByRepo[repoId] = keys.filter(
+                  (key: string) => key !== configKey
+                );
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "replace_recent_publish_config_key": {
+              // 与 store/commands.rs 对齐：previousKey 原位替换为 nextKey。
+              const repoId = args?.repoId as string;
+              const previousKey = args?.previousKey as string;
+              const nextKey = args?.nextKey as string;
+              const keys = appState.recentConfigKeysByRepo?.[repoId] ?? [];
+              if (appState.recentConfigKeysByRepo) {
+                appState.recentConfigKeysByRepo[repoId] = keys.map(
+                  (key: string) => (key === previousKey ? nextKey : key)
+                );
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "reorder_recent_publish_configs": {
+              // 与 store/commands.rs 对齐：最近键列表整体替换为传入顺序。
+              const repoId = args?.repoId as string;
+              const configKeys = (args?.configKeys as string[]) ?? [];
+              if (appState.recentConfigKeysByRepo) {
+                appState.recentConfigKeysByRepo[repoId] = configKeys;
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "reorder_profiles": {
+              // 与 store/commands.rs 对齐：按 {id, profileGroup} 顺序重排
+              // 配置并回写 profileGroup；未提及的配置保持相对顺序附后。
+              const repoId = args?.repoId as string;
+              const order =
+                (args?.profiles as {
+                  id: string;
+                  profileGroup: string | null;
+                }[]) ?? [];
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === repoId
+              );
+              if (repo?.publishConfig?.profiles) {
+                const rank = new Map(
+                  order.map((entry, index) => [entry.id, index] as const)
+                );
+                const groupBy = new Map(
+                  order.map((entry) => [entry.id, entry.profileGroup] as const)
+                );
+                repo.publishConfig.profiles = [
+                  ...repo.publishConfig.profiles,
+                ].sort(
+                  (a: ConfigProfile, b: ConfigProfile) =>
+                    (rank.get(a.id) ?? order.length) -
+                    (rank.get(b.id) ?? order.length)
+                );
+                for (const profile of repo.publishConfig.profiles) {
+                  if (groupBy.has(profile.id)) {
+                    profile.profileGroup = groupBy.get(profile.id) ?? null;
+                  }
+                }
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
 
             case "update_repository": {
               // 与 store/commands.rs#update_repository 对齐：找不到仓库报
@@ -1696,10 +1971,22 @@ export async function installMockTauri(
             // Automation bindings: no seeded bindings → empty view; preview/apply
             // fail loudly so a spec that drives the mutation flow must model it.
             case "list_automation_bindings":
-              return { bindings: [], drift: [] };
+              return clone(automationView ?? { bindings: [], drift: [] });
 
             case "preview_automation_change":
+              if (automationPreviewView) {
+                return clone(automationPreviewView);
+              }
+              throw {
+                code: "automation_not_mocked",
+                message:
+                  "automation change flow is not implemented in the e2e mock",
+              };
+
             case "apply_automation_change":
+              if (automationApplyResultView) {
+                return clone(automationApplyResultView);
+              }
               throw {
                 code: "automation_not_mocked",
                 message:
@@ -1726,6 +2013,11 @@ export async function installMockTauri(
       dialogOpenPath: dialogOpenPath ?? null,
       dialogSavePath: dialogSavePath ?? null,
       debug,
+      automationBindings: clone(automationBindings ?? null),
+      remoteEvidence: clone(remoteEvidence ?? null),
+      seedTauriProfile: seedTauriProfile ?? false,
+      automationPreview: clone(automationPreview ?? null),
+      automationApplyResult: clone(automationApplyResult ?? null),
     } as unknown as Record<string, unknown>
   );
 }
