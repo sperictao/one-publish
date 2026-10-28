@@ -152,6 +152,33 @@ test.describe("Repository actions", () => {
       .toBe(true);
   });
 
+  test("repo row selection persists via update_ui_state", async ({ page }) => {
+    await gotoApp(page);
+    const row = page.locator("[data-list-item-id='repo-b']");
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.getByText("beta-worker").first().click();
+
+    // 选中经 setUIState 500ms 防抖后调用 update_ui_state 持久化。
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() =>
+            (
+              window as unknown as {
+                __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+              }
+            ).__MOCK_INVOKE_ARGS__.some(
+              (entry) =>
+                (entry as { cmd?: string }).cmd === "update_ui_state" &&
+                (entry as { args?: { selectedRepoId?: string } }).args
+                  ?.selectedRepoId === "repo-b"
+            )
+          ),
+        { timeout: 10000 }
+      )
+      .toBe(true);
+  });
+
   test("recent config row removes via remove_recent_publish_config", async ({
     page,
   }) => {
