@@ -67,6 +67,78 @@ test.describe("Release checklist", () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
+  test("package → sign artifact chain after publish success", async ({
+    page,
+  }) => {
+    await gotoAppWithPublishConfig(page, {
+      dialogSavePath: "/tmp/artifact.zip",
+    });
+
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+    await expect(
+      page.locator("[data-testid='publish-status-panel']")
+    ).toContainText("成功", { timeout: 15000 });
+
+    // 打包：dialog|save 返回种子路径 → package_artifact → 成功反馈。
+    await page.getByRole("button", { name: "打包 ZIP" }).click();
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("package_artifact")
+        )
+      )
+      .toBe(true);
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "打包完成" })
+    ).toBeVisible({ timeout: 10000 });
+
+    // 打包成功后签名按钮可用 → sign_artifact → 成功反馈。
+    const signBtn = page.getByRole("button", { name: "签名" });
+    await expect(signBtn).not.toBeDisabled({ timeout: 10000 });
+    await signBtn.click();
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("sign_artifact")
+        )
+      )
+      .toBe(true);
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "签名完成" })
+    ).toBeVisible({ timeout: 10000 });
+  });
+
+  test("package picker cancel skips packaging silently", async ({ page }) => {
+    await gotoAppWithPublishConfig(page);
+
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+    await expect(
+      page.locator("[data-testid='publish-status-panel']")
+    ).toContainText("成功", { timeout: 15000 });
+
+    // dialogSavePath 缺省 null → 保存框取消 → 不发 package_artifact，
+    // 签名按钮保持不可用。
+    await page.getByRole("button", { name: "打包 ZIP" }).click();
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("package_artifact")
+        )
+      )
+      .toBe(false);
+    await expect(page.getByRole("button", { name: "签名" })).toBeDisabled();
+  });
+
   test("export cancel leaves dialog open without export", async ({ page }) => {
     await gotoAppWithPublishConfig(page);
 
