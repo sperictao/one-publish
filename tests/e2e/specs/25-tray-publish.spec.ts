@@ -346,9 +346,18 @@ test.describe("Tray publish request", () => {
       seedTauriProfile: true,
     });
 
-    // 后端在 spawn 前发出会话开始事件，chunk 监听据此锁存会话。
+    // 后端在 spawn 前发出会话开始事件，chunk 监听据此锁存会话；
+    // 未匹配会话的 chunk 与锁存前的 chunk 一律丢弃。
+    await emitEvent(page, "provider-publish-log", {
+      sessionId: "session-e2e-1",
+      line: "[stale] pre-session chunk must not render\n",
+    });
     await emitEvent(page, "provider-publish-session-started", {
       sessionId: "session-e2e-1",
+    });
+    await emitEvent(page, "provider-publish-log", {
+      sessionId: "session-other",
+      line: "[other] foreign session chunk must not render\n",
     });
     await emitEvent(page, "provider-publish-log", {
       sessionId: "session-e2e-1",
@@ -365,5 +374,11 @@ test.describe("Tray publish request", () => {
     await expect(page.getByText(/finished in 3\.2s/)).toBeVisible({
       timeout: 10000,
     });
+    await expect(
+      page.getByText(/pre-session chunk must not render/)
+    ).toHaveCount(0);
+    await expect(
+      page.getByText(/foreign session chunk must not render/)
+    ).toHaveCount(0);
   });
 });
