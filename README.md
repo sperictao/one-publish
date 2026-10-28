@@ -247,18 +247,18 @@ OnePublish supports **简体中文** and **English** out of the box. Switch in-a
 // Values: 'zh' (default) or 'en'
 ```
 
-Translation files: `src/i18n/zh.json` | `src/i18n/en.json` (~776 keys each, organized by feature domain).
+Translation files: `src/i18n/zh.json` | `src/i18n/en.json` (key parity enforced by `pnpm check:i18n`, organized by feature domain).
 
 ---
 
 ## 🧪 Testing
 
-| Layer         | Tool                                  | Coverage                                                                                                           |
-| ------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Frontend unit | Vitest + Testing Library              | Components, hooks, stores, lib                                                                                     |
-| Backend unit  | Rust `#[cfg(test)]`                   | Provider compilation, store migrations, plan generation                                                            |
-| E2E           | Playwright (12 specs)                 | App boot, repo panel, provider selection, publish presets, custom config, preflight, publish flow, contracts smoke |
-| Quality gates | TypeScript strict + `ts-rs` contracts | Enforced at build & CI                                                                                             |
+| Layer         | Tool                                  | Coverage                                                                                                                                                                                                                                                                    |
+| ------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend unit | Vitest + Testing Library              | Components, hooks, stores, lib                                                                                                                                                                                                                                              |
+| Backend unit  | Rust `#[cfg(test)]`                   | Provider compilation, store migrations, plan generation                                                                                                                                                                                                                     |
+| E2E           | Playwright                            | App boot, repository lifecycle, provider operations, publish presets/custom/preflight/flow, config import/export/conflicts, favorites, automation bindings, handoff & promotion, diagnostics, tray publish, environment check, settings, release checklist, contracts smoke |
+| Quality gates | TypeScript strict + `ts-rs` contracts | Enforced at build & CI                                                                                                                                                                                                                                                      |
 
 ---
 
