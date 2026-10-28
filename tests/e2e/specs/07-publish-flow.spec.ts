@@ -159,6 +159,35 @@ test.describe("Full Publish Flow — Error Paths", () => {
     const statusPanel = page.locator("[data-testid='publish-status-panel']");
     // Error state or cancelled state should appear
     await expect(statusPanel).toBeVisible({ timeout: 10000 });
+    // publish:failed → notifyFeedback(toast) —— 用户可见错误反馈；
+    // 未归类的进程错误走默认标题「发布执行错误」。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布执行错误" })
+    ).toBeVisible({ timeout: 10000 });
+  });
+
+  test("classified spawn failure shows localized tool-missing feedback", async ({
+    page,
+  }) => {
+    // "failed to spawn + os error 2" → tool_missing 归类 →
+    // getPublishFailureFeedback 返回「缺少构建命令」标题。
+    await gotoApp(page, {
+      errors: {
+        start_publish_runtime:
+          "failed to spawn dotnet: No such file or directory (os error 2)",
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "缺少构建命令" })
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("preflight failure prevents publish", async ({ page }) => {
