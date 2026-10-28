@@ -249,3 +249,251 @@ pub(super) fn build_probe_file_path(directory: &Path) -> PathBuf {
         timestamp
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::PublishOutputAccessStatus;
+    use super::*;
+
+    fn protected_root(location: ProtectedDirectoryLocation, path: &Path) -> ProtectedRoot {
+        ProtectedRoot {
+            location,
+            path: path.to_path_buf(),
+        }
+    }
+
+    #[test]
+    fn evaluate_returns_not_applicable_for_blank_output_dir() {
+        for output_dir in ["", "   "] {
+            let access = evaluate_publish_output_access_for_roots(
+                output_dir,
+                PublishOutputAccessIntent::WriteOutput,
+                &[],
+                |_| panic!("probe must not run for blank output dir"),
+            );
+            assert_eq!(access.status, PublishOutputAccessStatus::NotApplicable);
+            assert_eq!(access.protected_location, None);
+            assert_eq!(access.probe_directory, None);
+        }
+    }
+
+    #[test]
+    fn evaluate_returns_not_applicable_outside_protected_roots() {
+        let roots = [protected_root(
+            ProtectedDirectoryLocation::Downloads,
+            Path::new("/protected-root"),
+        )];
+        let probed = std::cell::Cell::new(false);
+        let access = evaluate_publish_output_access_for_roots(
+            "/elsewhere/output",
+            PublishOutputAccessIntent::WriteOutput,
+            &roots,
+            |_| {
+                probed.set(true);
+                Ok(())
+            },
+        );
+        assert_eq!(access.status, PublishOutputAccessStatus::NotApplicable);
+        assert!(!probed.get());
+    }
+
+    #[test]
+    fn evaluate_grants_access_when_probe_succeeds() {
+        let tmp = tempfile::tempdir().unwrap();
+        let protected = tmp.path().join("protected");
+        std::fs::create_dir(&protected).unwrap();
+        let roots = [protected_root(
+            ProtectedDirectoryLocation::Documents,
+            &protected,
+        )];
+        let output_dir = protected.join("site");
+
+        let access = evaluate_publish_output_access_for_roots(
+            output_dir.to_str().unwrap(),
+            PublishOutputAccessIntent::WriteOutput,
+            &roots,
+            |_| Ok(()),
+        );
+
+        assert_eq!(access.status, PublishOutputAccessStatus::Granted);
+        assert_eq!(
+            access.protected_location,
+            Some(ProtectedDirectoryLocation::Documents)
+        );
+        assert_eq!(access.protected_root.as_deref(), protected.to_str());
+        assert_eq!(access.probe_directory.as_deref(), protected.to_str());
+        assert_eq!(access.detail, None);
+    }
+
+    #[test]
+    fn evaluate_denies_access_with_probe_error_detail() {
+        let tmp = tempfile::tempdir().unwrap();
+        let protected = tmp.path().join("prot");
+        std::fs::create_dir(&protected).unwrap();
+        let roots = [protected_root(
+            ProtectedDirectoryLocation::Desktop,
+            &protected,
+        )];
+
+        let access = evaluate_publish_output_access_for_roots(
+            protected.to_str().unwrap(),
+            PublishOutputAccessIntent::WriteOutput,
+            &roots,
+            |_| {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "tcc denied",
+                ))
+            },
+        );
+
+        assert_eq!(access.status, PublishOutputAccessStatus::Denied);
+        assert_eq!(
+            access.protected_location,
+            Some(ProtectedDirectoryLocation::Desktop)
+        );
+        assert_eq!(access.probe_directory.as_deref(), protected.to_str());
+        assert_eq!(access.detail.as_deref(), Some("tcc denied"));
+    }
+
+    #[test]
+    fn probe_directory_is_the_directory_itself_for_write_output() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(
+            resolve_probe_directory(
+                tmp.path(),
+                Path::new("/fallback"),
+                PublishOutputAccessIntent::WriteOutput
+            ),
+            normalize_lexical_path(tmp.path())
+        );
+    }
+
+    #[test]
+    fn probe_directory_uses_file_parent_for_write_output() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("output.txt");
+        std::fs::write(&file, "x").unwrap();
+        assert_eq!(
+            resolve_probe_directory(
+                &file,
+                Path::new("/fallback"),
+                PublishOutputAccessIntent::WriteOutput
+            ),
+            normalize_lexical_path(tmp.path())
+        );
+    }
+
+    #[test]
+    fn probe_directory_walks_to_nearest_existing_ancestor() {
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("a/b/c");
+        assert_eq!(
+            resolve_probe_directory(
+                &missing,
+                Path::new("/fallback"),
+                PublishOutputAccessIntent::WriteOutput
+            ),
+            normalize_lexical_path(tmp.path())
+        );
+    }
+
+    #[test]
+    fn probe_directory_falls_back_when_no_ancestor_exists() {
+        let resolved = resolve_probe_directory(
+            Path::new(".probe-test-missing-dir/deeper"),
+            Path::new("/protected-root"),
+            PublishOutputAccessIntent::WriteOutput,
+        );
+        assert_eq!(resolved, PathBuf::from("/protected-root"));
+    }
+
+    #[test]
+    fn clean_output_intent_probes_parent_inside_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root_dir = tmp.path().join("root");
+        let output = root_dir.join("site");
+        std::fs::create_dir_all(&output).unwrap();
+        assert_eq!(
+            resolve_probe_directory(
+                &output,
+                &root_dir,
+                PublishOutputAccessIntent::CleanExistingOutput
+            ),
+            normalize_lexical_path(&root_dir)
+        );
+    }
+
+    #[test]
+    fn write_parent_intent_probes_parent_inside_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root_dir = tmp.path().join("root");
+        let output = root_dir.join("site");
+        std::fs::create_dir_all(&output).unwrap();
+        assert_eq!(
+            resolve_probe_directory(
+                &output,
+                &root_dir,
+                PublishOutputAccessIntent::WriteOutputParent
+            ),
+            normalize_lexical_path(&root_dir)
+        );
+    }
+
+    #[test]
+    fn clean_intent_on_root_itself_stays_at_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root_dir = tmp.path().join("root");
+        std::fs::create_dir(&root_dir).unwrap();
+        assert_eq!(
+            resolve_probe_directory(
+                &root_dir,
+                &root_dir,
+                PublishOutputAccessIntent::CleanExistingOutput
+            ),
+            normalize_lexical_path(&root_dir)
+        );
+    }
+
+    #[test]
+    fn existing_probe_directory_matches_write_output_intent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("f.txt");
+        std::fs::write(&file, "x").unwrap();
+        assert_eq!(
+            resolve_existing_probe_directory(&file, Path::new("/fallback")),
+            normalize_lexical_path(tmp.path())
+        );
+    }
+
+    #[test]
+    fn find_protected_root_matches_descendant_path() {
+        let roots = [
+            protected_root(ProtectedDirectoryLocation::Downloads, Path::new("/dl")),
+            protected_root(ProtectedDirectoryLocation::Documents, Path::new("/docs")),
+        ];
+        let found = find_protected_root_for_path(Path::new("/docs/sub/site"), &roots).unwrap();
+        assert_eq!(found.location, ProtectedDirectoryLocation::Documents);
+        assert!(find_protected_root_for_path(Path::new("/elsewhere"), &roots).is_none());
+    }
+
+    #[test]
+    fn protected_root_path_requires_exact_match() {
+        let roots = [protected_root(
+            ProtectedDirectoryLocation::Downloads,
+            Path::new("/prot"),
+        )];
+        assert!(is_protected_root_path(Path::new("/prot"), &roots));
+        assert!(!is_protected_root_path(Path::new("/prot/child"), &roots));
+        assert!(!is_protected_root_path(Path::new("/other"), &roots));
+    }
+
+    #[test]
+    fn platform_protected_root_queries_return_defaults_for_unprotected_dirs() {
+        assert_eq!(protected_location_for_output_dir("   "), None);
+        assert_eq!(protected_location_for_output_dir(""), None);
+        assert_eq!(protected_location_for_output_dir("/anywhere"), None);
+        assert!(!is_protected_root_output_dir("/anywhere"));
+        assert!(!is_protected_root_output_dir(""));
+    }
+}
