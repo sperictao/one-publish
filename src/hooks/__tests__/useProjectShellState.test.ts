@@ -31,7 +31,6 @@ type HookProps = {
   selectedRepoId: string | null;
   selectedRepoPath?: string;
   selectedRepoProjectFile?: string;
-  activeProviderId: string;
 };
 
 function createProjectInfo(rootPath: string): ProjectInfo {
@@ -76,7 +75,6 @@ describe("useProjectShellState", () => {
           selectedRepoId: "repo-a",
           selectedRepoPath: "/repo-a",
           selectedRepoProjectFile: undefined,
-          activeProviderId: "dotnet",
         },
       }
     );
@@ -85,7 +83,6 @@ describe("useProjectShellState", () => {
       selectedRepoId: "repo-b",
       selectedRepoPath: "/repo-b",
       selectedRepoProjectFile: undefined,
-      activeProviderId: "dotnet",
     });
 
     await act(async () => {
@@ -124,7 +121,6 @@ describe("useProjectShellState", () => {
           selectedRepoId: "repo-a",
           selectedRepoPath: "/repo-a",
           selectedRepoProjectFile: undefined,
-          activeProviderId: "dotnet",
         },
       }
     );
@@ -148,7 +144,6 @@ describe("useProjectShellState", () => {
       selectedRepoId: "repo-b",
       selectedRepoPath: "/repo-b",
       selectedRepoProjectFile: undefined,
-      activeProviderId: "dotnet",
     });
 
     await waitFor(() => {
@@ -188,7 +183,6 @@ describe("useProjectShellState", () => {
           selectedRepoId: "repo-a",
           selectedRepoPath: "/repo-a",
           selectedRepoProjectFile: undefined,
-          activeProviderId: "dotnet",
         },
       }
     );
@@ -207,7 +201,6 @@ describe("useProjectShellState", () => {
       selectedRepoId: "repo-b",
       selectedRepoPath: "/repo-b",
       selectedRepoProjectFile: undefined,
-      activeProviderId: "dotnet",
     });
 
     await act(async () => {
@@ -224,7 +217,6 @@ describe("useProjectShellState", () => {
       selectedRepoId: "repo-a",
       selectedRepoPath: "/repo-a",
       selectedRepoProjectFile: undefined,
-      activeProviderId: "dotnet",
     });
 
     expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
@@ -267,7 +259,6 @@ describe("useProjectShellState", () => {
           selectedRepoId: "repo-a",
           selectedRepoPath: "/repo-a",
           selectedRepoProjectFile: undefined,
-          activeProviderId: "dotnet",
         },
       }
     );
@@ -286,7 +277,6 @@ describe("useProjectShellState", () => {
       selectedRepoId: "repo-b",
       selectedRepoPath: "/repo-b",
       selectedRepoProjectFile: undefined,
-      activeProviderId: "dotnet",
     });
 
     await act(async () => {
@@ -303,7 +293,6 @@ describe("useProjectShellState", () => {
       selectedRepoId: "repo-a",
       selectedRepoPath: "/repo-a",
       selectedRepoProjectFile: undefined,
-      activeProviderId: "dotnet",
     });
 
     expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
@@ -327,18 +316,17 @@ describe("useProjectShellState", () => {
 
   it("仓库被清空时会立即清除当前项目信息", async () => {
     mocks.scanProject.mockResolvedValue(createProjectInfo("/repo-a"));
-    const initialProps: Omit<HookProps, "activeProviderId"> = {
+    const initialProps: HookProps = {
       selectedRepoId: "repo-a",
       selectedRepoPath: "/repo-a",
       selectedRepoProjectFile: undefined,
     };
 
     const { result, rerender } = renderHook(
-      (props: Omit<HookProps, "activeProviderId">) =>
+      (props: HookProps) =>
         useProjectShellState({
           appT: {},
           isStateLoading: false,
-          activeProviderId: "dotnet",
           ...props,
         }),
       {
@@ -356,7 +344,7 @@ describe("useProjectShellState", () => {
       selectedRepoId: null,
       selectedRepoPath: undefined,
       selectedRepoProjectFile: undefined,
-    } satisfies Omit<HookProps, "activeProviderId">);
+    } satisfies HookProps);
 
     expect(result.current.projectInfo).toBeNull();
   });
@@ -380,7 +368,6 @@ describe("useProjectShellState", () => {
           selectedRepoId: "repo-a",
           selectedRepoPath: "/repo-a",
           selectedRepoProjectFile: projectFile,
-          activeProviderId: providerId,
         })
       );
 
@@ -405,7 +392,6 @@ describe("useProjectShellState", () => {
         selectedRepoId: "repo-a",
         selectedRepoPath: "/repo-a",
         selectedRepoProjectFile: "/repo-a/App.sln",
-        activeProviderId: "dotnet",
       })
     );
 
@@ -429,7 +415,6 @@ describe("useProjectShellState", () => {
         isStateLoading: false,
         selectedRepoId: "repo-a",
         selectedRepoPath: "/repo-a",
-        activeProviderId: "cargo",
         activeProviderUsesProjectFile: false,
       })
     );
@@ -464,7 +449,6 @@ describe("useProjectShellState", () => {
         isStateLoading: false,
         selectedRepoId: "repo-a",
         selectedRepoPath: "/repo-a",
-        activeProviderId: "dotnet",
       })
     );
 
@@ -505,7 +489,6 @@ describe("useProjectShellState", () => {
         selectedRepoId: "repo-a",
         selectedRepoPath: "/repo-a",
         selectedRepoProjectFile: "/repo-a/App.csproj",
-        activeProviderId: "dotnet",
       })
     );
 

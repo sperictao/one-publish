@@ -86,7 +86,6 @@ export function useProjectShellState(params: {
   selectedRepoPath?: string;
   selectedRepoProjectFile?: string;
   isStateLoading: boolean;
-  activeProviderId?: string;
   activeProviderUsesProjectFile?: boolean;
 }) {
   const providerUsesProjectFile = params.activeProviderUsesProjectFile ?? true;
