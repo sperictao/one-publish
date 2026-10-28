@@ -1960,8 +1960,25 @@ export async function installMockTauri(
             case "plugin:dialog|ask":
               return true;
 
-            case "plugin:dialog|message":
-              return null;
+            case "plugin:dialog|message": {
+              // 与 plugin-dialog 的 messageCommand 契约对齐：返回被点击
+              // 按钮的标签——ask/confirm 据此比较 okLabel 得出 boolean。
+              // buttonsToRust 的线格式：{OkCustom}|{OkCancelCustom:[ok,cancel]}
+              // |{YesNoCancelCustom:[yes,no,cancel]}|"YesNo"|"OkCancel"。
+              const buttons = args?.buttons as
+                string | Record<string, string | string[]> | undefined;
+              if (typeof buttons === "object" && buttons !== null) {
+                const custom =
+                  buttons.OkCancelCustom ?? buttons.YesNoCancelCustom;
+                if (Array.isArray(custom)) return custom[0];
+                if (typeof buttons.OkCustom === "string")
+                  return buttons.OkCustom;
+                return "Ok";
+              }
+              if (buttons === "YesNo") return "Yes";
+              if (buttons === "OkCancel") return "Ok";
+              return "Ok";
+            }
 
             // Tray / window host actions — no-ops in the browser harness.
             case "show_main_window":
