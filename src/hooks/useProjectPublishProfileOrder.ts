@@ -95,16 +95,16 @@ export function useProjectPublishProfileOrder(params: {
         orderedNames
       );
 
-      setStoredOrderMap((prev) => {
-        const next = {
-          ...prev,
-          [scopeKey]: normalizedOrder,
-        };
-        persistStoredOrderMap(next);
-        return next;
-      });
+      // 持久化副作用必须在 updater 之外执行：StrictMode/并发渲染会重复调用
+      // updater，副作用放里面会重复写 localStorage（react-doctor 规则）。
+      const next = {
+        ...storedOrderMap,
+        [scopeKey]: normalizedOrder,
+      };
+      persistStoredOrderMap(next);
+      setStoredOrderMap(next);
     },
-    [projectPublishProfiles, scopeKey]
+    [projectPublishProfiles, scopeKey, storedOrderMap]
   );
 
   return {

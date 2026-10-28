@@ -135,11 +135,16 @@ export function useI18n() {
   useEffect(() => {
     let isMounted = true;
 
-    loadTranslations(language).then((nextTranslations) => {
-      if (isMounted) {
-        setTranslations(nextTranslations);
-      }
-    });
+    loadTranslations(language)
+      .then((nextTranslations) => {
+        if (isMounted) {
+          setTranslations(nextTranslations);
+        }
+      })
+      .catch((error) => {
+        // 翻译块加载失败不阻塞界面：保留当前缓存/空树，t() 回落到键名。
+        console.warn("failed to load translations", { language, error });
+      });
 
     return () => {
       isMounted = false;
