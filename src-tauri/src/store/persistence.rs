@@ -533,9 +533,11 @@ mod tests {
         let temp = TempDir::new().expect("temp dir");
         let path = temp.path().join("config.json");
 
-        let mut state = AppState::default();
-        state.language = "zh-CN".to_string();
-        state.theme = "dark".to_string();
+        let mut state = AppState {
+            language: "zh-CN".to_string(),
+            theme: "dark".to_string(),
+            ..AppState::default()
+        };
         state.repositories.push(super::super::types::Repository {
             id: "r1".to_string(),
             name: "Repo".to_string(),
