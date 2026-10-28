@@ -29,6 +29,8 @@ pub(crate) fn is_sensitive_key(key: &str) -> bool {
         "accesskey",
         "clientsecret",
         "privatekey",
+        "signingkey",
+        "passphrase",
     ]
     .iter()
     .any(|pattern| normalized.contains(pattern))
@@ -376,11 +378,30 @@ pub(crate) fn write_private_binary_file(path: &Path, bytes: &[u8]) -> io::Result
 #[cfg(test)]
 mod tests {
     use super::{
-        sanitize_evidence_json_map, sanitize_export_value, sanitize_freeform_text,
-        sanitize_secrets_in_text,
+        is_sensitive_key, sanitize_evidence_json_map, sanitize_export_value,
+        sanitize_freeform_text, sanitize_secrets_in_text,
     };
     use serde_json::json;
     use std::collections::BTreeMap;
+
+    #[test]
+    fn sensitive_key_matches_secret_value_names_across_casing() {
+        for key in [
+            "password",
+            "apiToken",
+            "client_secret",
+            "privateKey",
+            "signingKey",
+            "signing_key",
+            "sshPassphrase",
+            "KEY_PASSPHRASE",
+        ] {
+            assert!(is_sensitive_key(key), "{key} should be sensitive");
+        }
+        for key in ["output", "projectFile", "credentialId", "authorizationUrl"] {
+            assert!(!is_sensitive_key(key), "{key} should stay readable");
+        }
+    }
 
     #[test]
     fn secrets_in_text_redacts_assignments_but_preserves_paths() {
