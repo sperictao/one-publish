@@ -2114,8 +2114,10 @@ export async function installMockTauri(
               return "ok";
 
             // ── Notification ──
+            // 契约是 boolean（前端按真值判断 notified→否则回落
+            // show_main_window）；缺省 true 表示通知送达。
             case "show_system_notification":
-              return null;
+              return true;
 
             // ── Listeners (events) ──
             case "plugin:event|listen": {

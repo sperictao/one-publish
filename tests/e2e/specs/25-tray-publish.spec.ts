@@ -85,6 +85,12 @@ test.describe("Tray publish request", () => {
         (await mockInvocations(page)).includes("add_execution_record")
       )
       .toBe(true);
+    // feedbackMode:"system" —— 完成反馈走系统通知而非 toast。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("show_system_notification")
+      )
+      .toBe(true);
   });
 
   test("invalid tray config key reports failure via tray status", async ({
@@ -113,6 +119,80 @@ test.describe("Tray publish request", () => {
     expect(
       (await mockInvocations(page)).includes("start_publish_runtime")
     ).toBe(false);
+    // 系统通知送达（缺省 true）→ 不回落主窗口恢复。
+    expect(
+      (await mockInvocations(page)).includes("show_system_notification")
+    ).toBe(true);
+    expect((await mockInvocations(page)).includes("show_main_window")).toBe(
+      false
+    );
+  });
+
+  test("runtime failure reports via tray status and system notification", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: true,
+      errors: { start_publish_runtime: "backend crashed" },
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "userprofile:profile-tauri",
+    });
+
+    // 解析成功但运行期失败 → publish:failed：托盘 failure 状态 +
+    // system 反馈走 show_system_notification + 失败记录落账。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("start_publish_runtime")
+      )
+      .toBe(true);
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "set_tray_publish_status"
+        )) as { status?: string }[];
+        return args.some((arg) => arg?.status === "failure");
+      })
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("show_system_notification")
+      )
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("add_execution_record")
+      )
+      .toBe(true);
+  });
+
+  test("notification failure falls back to restoring the main window", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: true,
+      errors: { show_system_notification: "notification permission denied" },
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "not-a-valid-key",
+    });
+
+    // 通知失败 → showSystemNotification 回落 false → showMainWindow 恢复。
+    await expect
+      .poll(async () =>
+        (await mockInvocations(page)).includes("show_main_window")
+      )
+      .toBe(true);
+    expect(
+      (await mockInvocations(page)).includes("set_tray_publish_status")
+    ).toBe(true);
   });
 
   test("publish session events stream log chunks into the output view", async ({
