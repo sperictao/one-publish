@@ -757,8 +757,19 @@ export async function installMockTauri(
               return clone(appState);
             }
 
-            case "update_ui_state":
-              return null;
+            case "update_ui_state": {
+              // 与 store/commands.rs#update_ui_state 对齐：面板宽度与
+              // 选中仓库回落到 appState，返回新 AppState。
+              if (typeof args?.leftPanelWidth === "number")
+                appState.leftPanelWidth = args.leftPanelWidth as number;
+              if (typeof args?.middlePanelWidth === "number")
+                appState.middlePanelWidth = args.middlePanelWidth as number;
+              if (typeof args?.selectedRepoId === "string")
+                appState.selectedRepoId = args.selectedRepoId as string;
+              if (args?.clearSelectedRepoId === true)
+                appState.selectedRepoId = null;
+              return clone({ ...appState, executionHistory: [] });
+            }
 
             case "update_preferences": {
               if (args?.language) appState.language = args.language as string;
@@ -769,7 +780,7 @@ export async function installMockTauri(
               if (typeof args?.executionHistoryLimit === "number")
                 appState.executionHistoryLimit =
                   args.executionHistoryLimit as number;
-              return null;
+              return clone({ ...appState, executionHistory: [] });
             }
 
             // ── Provider ──
@@ -825,8 +836,34 @@ export async function installMockTauri(
               );
             }
 
-            case "remove_repository":
-            case "reorder_repositories":
+            case "remove_repository": {
+              // 与 store/commands.rs#remove_repository 对齐：移除仓库；
+              // 选中项被删时回落到首个剩余仓库，返回新 AppState。
+              const repoId = args?.repoId as string;
+              appState.repositories = (appState.repositories ?? []).filter(
+                (r: Repository) => r.id !== repoId
+              );
+              if (appState.selectedRepoId === repoId) {
+                appState.selectedRepoId = appState.repositories[0]?.id ?? null;
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "reorder_repositories": {
+              // 与 store/commands.rs#reorder_repositories 对齐：按 repoIds
+              // 顺序重排仓库列表，未提及的仓库保持相对顺序附后。
+              const order = (args?.repoIds as string[]) ?? [];
+              const rank = new Map(
+                order.map((id, index) => [id, index] as const)
+              );
+              appState.repositories = [...(appState.repositories ?? [])].sort(
+                (a: Repository, b: Repository) =>
+                  (rank.get(a.id) ?? order.length) -
+                  (rank.get(b.id) ?? order.length)
+              );
+              return clone({ ...appState, executionHistory: [] });
+            }
+
             case "save_profile": {
               // 与 store/commands.rs#save_profile 对齐：在目标仓库追加配置
               // 并返回新 AppState（前端保存后按名称回读新配置身份）。
@@ -1126,12 +1163,119 @@ export async function installMockTauri(
               return clone({ ...appState, executionHistory: [] });
             }
 
-            case "delete_profile":
-            case "remove_recent_publish_config":
-            case "reorder_recent_publish_configs":
-            case "reorder_profiles":
-            case "replace_recent_publish_config_key":
-              return null;
+            case "delete_profile": {
+              // 与 store/types.rs#PublishConfigStore::delete_profile 对齐：
+              // 绑定引用与系统默认是硬错误；软删除 deletedAt 并清 selection。
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === (args?.repoId as string)
+              );
+              const config = repo?.publishConfig;
+              if (
+                config?.bindings?.some(
+                  (binding: { configurationId?: string }) =>
+                    binding.configurationId === (args?.profileId as string)
+                )
+              ) {
+                throw {
+                  code: "profile_delete_blocked_by_binding",
+                  message:
+                    "配置仍被外部自动化绑定引用，请先通过更新配置入口解除绑定",
+                };
+              }
+              const profile = config?.profiles?.find(
+                (p: ConfigProfile) =>
+                  p.id === (args?.profileId as string) && !p.deletedAt
+              );
+              if (!repo || !profile) {
+                throw { code: "profile_not_found", message: "配置不存在" };
+              }
+              if (profile.isSystemDefault) {
+                throw {
+                  code: "system_profile_immutable",
+                  message: "不能删除系统默认配置文件",
+                };
+              }
+              profile.deletedAt = new Date().toISOString();
+              if (
+                config?.selection?.kind === "revision" &&
+                config.selection.configurationId === profile.id
+              ) {
+                config.selection = undefined;
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "remove_recent_publish_config": {
+              // 与 store/commands.rs 对齐：从仓库最近键列表中移除 configKey。
+              const repoId = args?.repoId as string;
+              const configKey = args?.configKey as string;
+              const keys = appState.recentConfigKeysByRepo?.[repoId] ?? [];
+              if (appState.recentConfigKeysByRepo) {
+                appState.recentConfigKeysByRepo[repoId] = keys.filter(
+                  (key: string) => key !== configKey
+                );
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "replace_recent_publish_config_key": {
+              // 与 store/commands.rs 对齐：previousKey 原位替换为 nextKey。
+              const repoId = args?.repoId as string;
+              const previousKey = args?.previousKey as string;
+              const nextKey = args?.nextKey as string;
+              const keys = appState.recentConfigKeysByRepo?.[repoId] ?? [];
+              if (appState.recentConfigKeysByRepo) {
+                appState.recentConfigKeysByRepo[repoId] = keys.map(
+                  (key: string) => (key === previousKey ? nextKey : key)
+                );
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "reorder_recent_publish_configs": {
+              // 与 store/commands.rs 对齐：最近键列表整体替换为传入顺序。
+              const repoId = args?.repoId as string;
+              const configKeys = (args?.configKeys as string[]) ?? [];
+              if (appState.recentConfigKeysByRepo) {
+                appState.recentConfigKeysByRepo[repoId] = configKeys;
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
+            case "reorder_profiles": {
+              // 与 store/commands.rs 对齐：按 {id, profileGroup} 顺序重排
+              // 配置并回写 profileGroup；未提及的配置保持相对顺序附后。
+              const repoId = args?.repoId as string;
+              const order =
+                (args?.profiles as {
+                  id: string;
+                  profileGroup: string | null;
+                }[]) ?? [];
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === repoId
+              );
+              if (repo?.publishConfig?.profiles) {
+                const rank = new Map(
+                  order.map((entry, index) => [entry.id, index] as const)
+                );
+                const groupBy = new Map(
+                  order.map((entry) => [entry.id, entry.profileGroup] as const)
+                );
+                repo.publishConfig.profiles = [
+                  ...repo.publishConfig.profiles,
+                ].sort(
+                  (a: ConfigProfile, b: ConfigProfile) =>
+                    (rank.get(a.id) ?? order.length) -
+                    (rank.get(b.id) ?? order.length)
+                );
+                for (const profile of repo.publishConfig.profiles) {
+                  if (groupBy.has(profile.id)) {
+                    profile.profileGroup = groupBy.get(profile.id) ?? null;
+                  }
+                }
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
 
             case "update_repository": {
               // 与 store/commands.rs#update_repository 对齐：找不到仓库报

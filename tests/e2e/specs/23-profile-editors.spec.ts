@@ -97,4 +97,23 @@ test.describe("Profile editors", () => {
       0
     );
   });
+
+  test("delete confirmation soft-deletes the profile row", async ({ page }) => {
+    await gotoApp(page);
+    const row = page.locator("[data-list-item-id='userprofile:profile-zip']");
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await openRowMenu(
+      page,
+      "[data-list-item-id='userprofile:profile-zip']",
+      "ZipProfile"
+    );
+    await page.getByRole("menuitem", { name: "删除配置" }).click();
+    await page.getByRole("button", { name: "删除", exact: true }).click();
+    await expect(row).toHaveCount(0, { timeout: 10000 });
+    await expect
+      .poll(async () =>
+        (await invokedCommands(page)).includes("delete_profile")
+      )
+      .toBe(true);
+  });
 });
