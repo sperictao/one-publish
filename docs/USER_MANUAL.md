@@ -480,7 +480,7 @@ pnpm build
 | `pnpm e2e` / `e2e:ui`                                              | Playwright E2E 测试                         |
 | `pnpm check:i18n`                                                  | i18n 覆盖检查（zh/en 键一致、无硬编码中文） |
 | `pnpm check:design`                                                | Geist 设计规范合规检查                      |
-| `pnpm doctor`                                                      | react-doctor 代码健康检查                   |
+| `pnpm check:react`                                                 | react-doctor 代码健康检查                   |
 | `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings` | Rust lint                                   |
 | `cargo test --manifest-path src-tauri/Cargo.toml`                  | Rust 测试                                   |
 | `cargo audit`（src-tauri 下）                                      | Rust 依赖漏洞审计（CI）                     |

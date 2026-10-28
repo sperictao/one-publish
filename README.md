@@ -232,7 +232,7 @@ pnpm release -v 0.8.0     # Full release pipeline
 pnpm release -v 0.8.0 -d  # Dry-run (preview only)
 
 # Utilities
-pnpm doctor              # Run react-doctor for code health
+pnpm check:react         # Run react-doctor for code health
 pnpm build:updater       # Generate updater production config
 ```
 
