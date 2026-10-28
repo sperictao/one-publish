@@ -399,6 +399,8 @@ export interface MockTauriOptions {
   repositories?: Repository[];
   /** Override provider list */
   providers?: ProviderCatalogEntry[];
+  /** Override `run_environment_check` 返回的环境检查快照。 */
+  envCheck?: EnvironmentCheckResult;
   /** Map of Tauri command name → error message to inject for testing error paths.
    * `prepare_publish_runtime` 支持 `blocked:` 前缀：返回 blocked 结果而非抛错。 */
   errors?: Record<string, string>;
@@ -461,6 +463,7 @@ export async function installMockTauri(
     initialState,
     repositories,
     providers,
+    envCheck,
     errors,
     dialogOpenPath,
     dialogSavePath,
@@ -2227,7 +2230,7 @@ export async function installMockTauri(
       appState: clone(effectiveState),
       providers: clone(effectiveProviders),
       dotnetSchema: clone(DOTNET_SCHEMA),
-      envCheck: clone(DEFAULT_ENV_CHECK),
+      envCheck: clone(envCheck ?? DEFAULT_ENV_CHECK),
       errors: clone(errors ?? {}),
       dialogOpenPath: dialogOpenPath ?? null,
       dialogSavePath: dialogSavePath ?? null,

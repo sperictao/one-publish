@@ -41,6 +41,10 @@ test.describe("Full Publish Flow — Happy Path", () => {
     // 5. After clicking, the status should change from idle
     // (mock emits log chunks → status panel updates)
     await expect(statusPanel).toContainText("成功", { timeout: 15000 });
+    // publish:completed → notifyFeedback(toast) —— 成功反馈用户可见。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布完成" })
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("publish with different repo works end-to-end", async ({ page }) => {
@@ -201,9 +205,83 @@ test.describe("Full Publish Flow — Error Paths", () => {
       page.locator("[data-list-item-id='pubxml:FolderProfile']")
     ).toBeVisible({ timeout: 15000 });
 
-    // The publish button may be disabled or show an error
     const publishBtn = page.locator("[data-testid='publish-execute-btn']");
     await expect(publishBtn).toBeVisible({ timeout: 10000 });
+    await publishBtn.click();
+
+    // 预检 invoke 失败 → abortPublishPreparation 经 toast 呈现原因，
+    // 且不进入运行态（start_publish_runtime 未发出）。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布目录预检失败" })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
+  test("critical environment issue aborts publish and opens env dialog", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      envCheck: {
+        is_ready: false,
+        providers: [
+          {
+            provider_id: "dotnet",
+            installed: false,
+            version: null,
+            path: null,
+          },
+        ],
+        issues: [
+          {
+            severity: "critical",
+            provider_id: "dotnet",
+            issue_type: "missing_tool",
+            description: "dotnet SDK is required",
+            current_value: null,
+            expected_value: ">=8.0",
+            fixes: [
+              {
+                action_type: "open_url",
+                label: "Install .NET",
+                command: null,
+                url: "https://dotnet.microsoft.com/download",
+              },
+            ],
+          },
+        ],
+        checked_at: new Date().toISOString(),
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // 环境 critical → abort：toast 呈现阻止原因且环境对话框打开。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "环境未就绪" })
+    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("工具状态")).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
   });
 
   test("provider schema fetch failure is handled gracefully", async ({
