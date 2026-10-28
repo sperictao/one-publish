@@ -69,7 +69,15 @@ test.describe("Handoff bundle export (Phase 11 candidate C)", () => {
     await expect
       .poll(async () => (await invocations()).includes("plugin:dialog|save"))
       .toBe(true);
-    await page.waitForTimeout(300);
+    // 确定性负断言：save 取消后 handler 同步早退。做一次 invoke 往返冲洗
+    // 页面微任务队列——若取消路径误触 export_handoff_bundle，该调用必然已入队。
+    await page.evaluate(() =>
+      (
+        window as unknown as {
+          __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<unknown> };
+        }
+      ).__TAURI_INTERNALS__.invoke("get_app_state")
+    );
     expect(await invocations()).not.toContain("export_handoff_bundle");
     await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
     await expect(page.getByText("MSB3021: 未能复制文件")).toBeVisible();
