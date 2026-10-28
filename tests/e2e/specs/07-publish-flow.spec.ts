@@ -41,6 +41,10 @@ test.describe("Full Publish Flow — Happy Path", () => {
     // 5. After clicking, the status should change from idle
     // (mock emits log chunks → status panel updates)
     await expect(statusPanel).toContainText("成功", { timeout: 15000 });
+    // publish:completed → notifyFeedback(toast) —— 成功反馈用户可见。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布完成" })
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("publish with different repo works end-to-end", async ({ page }) => {
@@ -201,9 +205,405 @@ test.describe("Full Publish Flow — Error Paths", () => {
       page.locator("[data-list-item-id='pubxml:FolderProfile']")
     ).toBeVisible({ timeout: 15000 });
 
-    // The publish button may be disabled or show an error
     const publishBtn = page.locator("[data-testid='publish-execute-btn']");
     await expect(publishBtn).toBeVisible({ timeout: 10000 });
+    await publishBtn.click();
+
+    // 预检 invoke 失败 → abortPublishPreparation 经 toast 呈现原因，
+    // 且不进入运行态（start_publish_runtime 未发出）。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布目录预检失败" })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
+  test("critical environment issue aborts publish and opens env dialog", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      envCheck: {
+        is_ready: false,
+        providers: [
+          {
+            provider_id: "dotnet",
+            installed: false,
+            version: null,
+            path: null,
+          },
+        ],
+        issues: [
+          {
+            severity: "critical",
+            provider_id: "dotnet",
+            issue_type: "missing_tool",
+            description: "dotnet SDK is required",
+            current_value: null,
+            expected_value: ">=8.0",
+            fixes: [
+              {
+                action_type: "open_url",
+                label: "Install .NET",
+                command: null,
+                url: "https://dotnet.microsoft.com/download",
+              },
+            ],
+          },
+        ],
+        checked_at: new Date().toISOString(),
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // 环境 critical → abort：toast 呈现阻止原因且环境对话框打开。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "环境未就绪" })
+    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("工具状态")).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
+  test("incompatible output path aborts with validation feedback", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      preflightOutput: {
+        validationStatus: "incompatible",
+        validationIssue: "windows_drive_root_missing",
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // validation.status=incompatible → abort 并呈现分类标题「发布目录无效」。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布目录无效" })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
+  test("denied protected-directory access aborts after picker cancel", async ({
+    page,
+  }) => {
+    // access.status=denied → 受保护目录授权流程；dialogOpenPath 缺省
+    // null 表示用户在选择器中取消 → 仍 denied → abort toast。
+    await gotoApp(page, {
+      preflightOutput: { accessStatus: "denied" },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    await expect(
+      page.locator("[data-sonner-toast]", {
+        hasText: "受保护目录访问权限",
+      })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
+  test("granted protected-directory access retries preflight and publishes", async ({
+    page,
+  }) => {
+    // access.status=denied → 授权选择器（dialogOpenPath 模拟用户授权目录）
+    // → 第 2 次 preflight_publish_output 返回 granted → 发布放行。
+    await gotoApp(page, {
+      preflightOutput: { accessStatus: "denied" },
+      preflightOutputAfterPick: { accessStatus: "granted" },
+      dialogOpenPath: "/tmp/publish-output",
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // 授权选择器被打开，随后重试 preflight 放行进入运行态。
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("plugin:dialog|open")
+        )
+      )
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as { __MOCK_INVOCATIONS__: string[] }
+            ).__MOCK_INVOCATIONS__.filter(
+              (c) => c === "preflight_publish_output"
+            ).length
+        )
+      )
+      .toBe(2);
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(true);
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布完成" })
+    ).toBeVisible({ timeout: 10000 });
+  });
+
+  test("protected-directory picker failure aborts with request-failed feedback", async ({
+    page,
+  }) => {
+    // access.status=denied → 授权选择器自身抛错（plugin:dialog|open 注错）
+    // →「申请目录访问权限失败」abort toast，不进运行态。
+    await gotoApp(page, {
+      preflightOutput: { accessStatus: "denied" },
+      errors: { "plugin:dialog|open": "dialog backend unavailable" },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    await expect(
+      page.locator("[data-sonner-toast]", {
+        hasText: "申请目录访问权限失败",
+      })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
+  test("blocked prepare result surfaces diagnostics and prevents publish", async ({
+    page,
+  }) => {
+    // blocked: 前缀建模 prepare_publish_runtime 的阻塞结果（非抛错）。
+    await gotoApp(page, {
+      errors: {
+        prepare_publish_runtime: "blocked:provider binding is required",
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+
+    // 预览期 prepare 已返回 blocked → run card 渲染诊断、执行钮禁用，
+    // 发布根本不可发起。
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).toBeDisabled({ timeout: 10000 });
+    await expect(page.getByText("provider binding is required")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+  });
+
+  test("blocked prepare with denied access authorizes at publish start", async ({
+    page,
+  }) => {
+    // 预览期 prepare 返回 blocked + publish_output_access_denied →
+    // canRequestRuntimeOutputAccess → run card 仍属待执行（可发起），
+    // 开始发布时先经选择器授权 → 重试 prepare 放行 → 正常发布。
+    await gotoApp(page, {
+      errors: {
+        prepare_publish_runtime: "blocked:输出目录位于受保护位置",
+      },
+      preflightOutput: { accessStatus: "denied" },
+      preflightOutputAfterPick: { accessStatus: "granted" },
+      dialogOpenPath: "/tmp/publish-output",
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled({ timeout: 10000 });
+    await publishBtn.click();
+
+    // 授权选择器打开一次（outputAccessPicked）→ 重试 prepare 返回 ready →
+    // preflight 放行 → start_publish_runtime。
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("plugin:dialog|open")
+        )
+      )
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(true);
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布完成" })
+    ).toBeVisible({ timeout: 10000 });
+  });
+
+  test("authorize-at-start picker cancel silently aborts publish", async ({
+    page,
+  }) => {
+    // blocked + denied → 开始发布先走授权选择器；dialogOpenPath 缺省 null
+    // 表示用户取消 → authorized=false → 静默中止（无 toast、不进运行态）。
+    await gotoApp(page, {
+      errors: {
+        prepare_publish_runtime: "blocked:输出目录位于受保护位置",
+      },
+      preflightOutput: { accessStatus: "denied" },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled({ timeout: 10000 });
+    await publishBtn.click();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("plugin:dialog|open")
+        )
+      )
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(false);
+    // 中止后回到可再次发起的状态。
+    await expect(publishBtn).not.toBeDisabled({ timeout: 10000 });
+  });
+
+  test("warning environment issue warns but still publishes", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      envCheck: {
+        is_ready: true,
+        providers: [
+          {
+            provider_id: "dotnet",
+            installed: true,
+            version: "8.0.403",
+            path: "/usr/local/share/dotnet/dotnet",
+          },
+        ],
+        issues: [
+          {
+            severity: "warning",
+            provider_id: "dotnet",
+            issue_type: "outdated_version",
+            description: "dotnet SDK is older than recommended",
+            current_value: "8.0.100",
+            expected_value: ">=8.0.300",
+            fixes: [],
+          },
+        ],
+        checked_at: new Date().toISOString(),
+      },
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // warning 仅提示不阻断——发布照常进入运行态。
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "环境存在警告" })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(true);
   });
 
   test("provider schema fetch failure is handled gracefully", async ({

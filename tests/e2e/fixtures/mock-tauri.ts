@@ -399,6 +399,25 @@ export interface MockTauriOptions {
   repositories?: Repository[];
   /** Override provider list */
   providers?: ProviderCatalogEntry[];
+  /** Override `run_environment_check` 返回的环境检查快照。 */
+  envCheck?: EnvironmentCheckResult;
+  /**
+   * 覆写 `preflight_publish_output` 的 validation/access 状态，
+   * 用于构造 incompatible 路径或受保护目录拒绝臂。
+   */
+  preflightOutput?: {
+    validationStatus?: "not_applicable" | "incompatible" | "valid";
+    validationIssue?: string | null;
+    accessStatus?: "granted" | "denied";
+  };
+  /** 二次 `preflight_publish_output` 返回值（授权重试臂）：
+   * denied → 目录选择器授权后会再跑一次 preflight，此键给出第 2 次起的结果。
+   * 与 preflightOutput:{accessStatus:"denied"} 组合可覆盖"授权后放行"臂。 */
+  preflightOutputAfterPick?: {
+    validationStatus?: "not_applicable" | "incompatible" | "valid";
+    validationIssue?: string | null;
+    accessStatus?: "granted" | "denied";
+  };
   /** Map of Tauri command name → error message to inject for testing error paths.
    * `prepare_publish_runtime` 支持 `blocked:` 前缀：返回 blocked 结果而非抛错。 */
   errors?: Record<string, string>;
@@ -461,6 +480,9 @@ export async function installMockTauri(
     initialState,
     repositories,
     providers,
+    envCheck,
+    preflightOutput,
+    preflightOutputAfterPick,
     errors,
     dialogOpenPath,
     dialogSavePath,
@@ -633,6 +655,9 @@ export async function installMockTauri(
       const usePublishRuntimeLatch = opts.publishRuntimeLatch === true;
       let installUpdateResolve: (() => void) | null = null;
       let publishRuntimeResolve: (() => void) | null = null;
+      // 目录选择器授权过一次后置位——驱动 preflightOutputAfterPick
+      // 种子与 prepare 的「授权后重试放行」语义。
+      let outputAccessPicked = false;
 
       // 自动化安装流夹具：给带 publishConfig 的仓库追加一个 tauri provider
       // 配置（github-actions 后端 + releaseSettings，满足安装向导守卫）。
@@ -1543,15 +1568,25 @@ export async function installMockTauri(
 
             // ── Publish ──
             case "prepare_publish_runtime": {
-              if (blockedMessage) {
+              // 授权选择器放行后重试的 prepare 视为已解除阻塞
+              // （outputAccessPicked 由 plugin:dialog|open 置位）。
+              if (blockedMessage && !outputAccessPicked) {
+                const blockedAccessDenied =
+                  (opts.preflightOutput as { accessStatus?: string } | null)
+                    ?.accessStatus === "denied";
                 return {
                   status: "blocked",
                   diagnostics: [
-                    { code: "injected_blocked", message: blockedMessage },
+                    {
+                      code: blockedAccessDenied
+                        ? "publish_output_access_denied"
+                        : "injected_blocked",
+                      message: blockedMessage,
+                    },
                   ],
                   outputPreflight: {
                     outputDir: "/tmp/publish-output",
-                    accessStatus: "granted",
+                    accessStatus: blockedAccessDenied ? "denied" : "granted",
                     protectedRoot: null,
                     probeDirectory: null,
                     remoteLocation: null,
@@ -1930,14 +1965,34 @@ export async function installMockTauri(
                       args.spec as Record<string, Record<string, string>>
                     ).parameters?.outputDir?.toString()
                   : "") || "/tmp/publish-output";
+              // 目录选择器授权过后对应「授权重试」臂——若有
+              // preflightOutputAfterPick 种子则优先使用。
+              const seededPreflight = (
+                outputAccessPicked && opts.preflightOutputAfterPick
+                  ? opts.preflightOutputAfterPick
+                  : (opts.preflightOutput ?? null)
+              ) as {
+                validationStatus?: string;
+                validationIssue?: string | null;
+                accessStatus?: string;
+              } | null;
               return {
                 output_dir: outputDir,
                 configured_output_dir: outputDir || null,
-                validation: { status: "not_applicable", issue: null },
+                validation: {
+                  status: seededPreflight?.validationStatus ?? "not_applicable",
+                  issue: seededPreflight?.validationIssue ?? null,
+                },
                 access: {
-                  status: "granted",
-                  protectedLocation: null,
-                  protectedRoot: null,
+                  status: seededPreflight?.accessStatus ?? "granted",
+                  protectedLocation:
+                    seededPreflight?.accessStatus === "denied"
+                      ? "documents"
+                      : null,
+                  protectedRoot:
+                    seededPreflight?.accessStatus === "denied"
+                      ? outputDir
+                      : null,
                   probeDirectory: outputDir,
                   detail: null,
                 },
@@ -2150,6 +2205,9 @@ export async function installMockTauri(
 
             // ── Dialog plugin ──
             case "plugin:dialog|open":
+              if (typeof dialogOpen === "string" && dialogOpen.trim()) {
+                outputAccessPicked = true;
+              }
               return dialogOpen;
 
             case "plugin:dialog|save": {
@@ -2227,7 +2285,9 @@ export async function installMockTauri(
       appState: clone(effectiveState),
       providers: clone(effectiveProviders),
       dotnetSchema: clone(DOTNET_SCHEMA),
-      envCheck: clone(DEFAULT_ENV_CHECK),
+      envCheck: clone(envCheck ?? DEFAULT_ENV_CHECK),
+      preflightOutput: clone(preflightOutput ?? null),
+      preflightOutputAfterPick: clone(preflightOutputAfterPick ?? null),
       errors: clone(errors ?? {}),
       dialogOpenPath: dialogOpenPath ?? null,
       dialogSavePath: dialogSavePath ?? null,
