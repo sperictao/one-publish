@@ -41,7 +41,7 @@
     "retrying": "下载中断，正在进行第 {} / {} 次尝试",
     "downloadProgress": "已下载 {} / {}",
     "downloadProgressUnknown": "已下载 {}",
-    "productDescription": "跨平台 .NET 自动化发布与签名客户端",
+    "productDescription": "跨平台多语言自动化发布与签名客户端",
     "updateChannelNotConfiguredTitle": "更新通道未配置",
     "updateChannelNotConfiguredDescription": "检测到本地更新配置未设置，无法建立版本检查。",
     "updateReadyTitle": "新版本已准备就绪",

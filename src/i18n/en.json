@@ -41,7 +41,7 @@
     "retrying": "Download interrupted. Retrying attempt {} / {}",
     "downloadProgress": "Downloaded {} / {}",
     "downloadProgressUnknown": "Downloaded {}",
-    "productDescription": "Cross-platform .NET automated publishing and signing client",
+    "productDescription": "Cross-platform multi-language automated publishing and signing client",
     "updateChannelNotConfiguredTitle": "Update channel not configured",
     "updateChannelNotConfiguredDescription": "Local update configuration is missing, so version checks cannot be established.",
     "updateReadyTitle": "New version ready",
