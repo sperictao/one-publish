@@ -179,6 +179,53 @@ test.describe("Repository actions", () => {
       .toBe(true);
   });
 
+  test("boot scans branches, connectivity, and bound project info", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+
+    // 挂载时对每个仓库扫实际分支，随后对所选仓库检查连通性并解析
+    // 绑定项目文件（repo-a 绑定了 App.csproj → resolve_project_info）。
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => {
+            const calls = (
+              window as unknown as {
+                __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+              }
+            ).__MOCK_INVOKE_ARGS__;
+            const has = (
+              cmd: string,
+              match: (args: Record<string, unknown>) => boolean
+            ) =>
+              calls.some(
+                (entry) =>
+                  (entry as { cmd?: string }).cmd === cmd &&
+                  match(
+                    (entry as { args?: Record<string, unknown> }).args ?? {}
+                  )
+              );
+            return (
+              has(
+                "scan_repository_branches",
+                (a) => a.path === "/workspace/alpha-service"
+              ) &&
+              has(
+                "check_repository_branch_connectivity",
+                (a) => a.path === "/workspace/alpha-service"
+              ) &&
+              has(
+                "resolve_project_info",
+                (a) => a.projectFile === "/workspace/alpha-service/App.csproj"
+              )
+            );
+          }),
+        { timeout: 10000 }
+      )
+      .toBe(true);
+  });
+
   test("recent config row removes via remove_recent_publish_config", async ({
     page,
   }) => {
