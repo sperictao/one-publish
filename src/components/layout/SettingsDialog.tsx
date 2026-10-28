@@ -925,7 +925,7 @@ export function SettingsDialog({
               </p>
               <p className="text-label-12 text-muted-foreground">
                 {versionT.productDescription ||
-                  "跨平台 .NET 自动化发布与签名客户端"}
+                  "跨平台多语言自动化发布与签名客户端"}
               </p>
             </div>
             <span className="inline-flex items-center rounded-sm px-2 py-0.5 text-label-12-mono font-semibold text-muted-foreground font-mono shrink-0 surface-input">
