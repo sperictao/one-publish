@@ -467,6 +467,53 @@ test.describe("Full Publish Flow — Error Paths", () => {
       .toBe(false);
   });
 
+  test("blocked prepare with denied access authorizes at publish start", async ({
+    page,
+  }) => {
+    // 预览期 prepare 返回 blocked + publish_output_access_denied →
+    // canRequestRuntimeOutputAccess → run card 仍属待执行（可发起），
+    // 开始发布时先经选择器授权 → 重试 prepare 放行 → 正常发布。
+    await gotoApp(page, {
+      errors: {
+        prepare_publish_runtime: "blocked:输出目录位于受保护位置",
+      },
+      preflightOutput: { accessStatus: "denied" },
+      preflightOutputAfterPick: { accessStatus: "granted" },
+      dialogOpenPath: "/tmp/publish-output",
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled({ timeout: 10000 });
+    await publishBtn.click();
+
+    // 授权选择器打开一次（outputAccessPicked）→ 重试 prepare 返回 ready →
+    // preflight 放行 → start_publish_runtime。
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("plugin:dialog|open")
+        )
+      )
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(true);
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布完成" })
+    ).toBeVisible({ timeout: 10000 });
+  });
+
   test("warning environment issue warns but still publishes", async ({
     page,
   }) => {

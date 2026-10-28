@@ -655,7 +655,9 @@ export async function installMockTauri(
       const usePublishRuntimeLatch = opts.publishRuntimeLatch === true;
       let installUpdateResolve: (() => void) | null = null;
       let publishRuntimeResolve: (() => void) | null = null;
-      let preflightOutputCallCount = 0;
+      // 目录选择器授权过一次后置位——驱动 preflightOutputAfterPick
+      // 种子与 prepare 的「授权后重试放行」语义。
+      let outputAccessPicked = false;
 
       // 自动化安装流夹具：给带 publishConfig 的仓库追加一个 tauri provider
       // 配置（github-actions 后端 + releaseSettings，满足安装向导守卫）。
@@ -1566,15 +1568,25 @@ export async function installMockTauri(
 
             // ── Publish ──
             case "prepare_publish_runtime": {
-              if (blockedMessage) {
+              // 授权选择器放行后重试的 prepare 视为已解除阻塞
+              // （outputAccessPicked 由 plugin:dialog|open 置位）。
+              if (blockedMessage && !outputAccessPicked) {
+                const blockedAccessDenied =
+                  (opts.preflightOutput as { accessStatus?: string } | null)
+                    ?.accessStatus === "denied";
                 return {
                   status: "blocked",
                   diagnostics: [
-                    { code: "injected_blocked", message: blockedMessage },
+                    {
+                      code: blockedAccessDenied
+                        ? "publish_output_access_denied"
+                        : "injected_blocked",
+                      message: blockedMessage,
+                    },
                   ],
                   outputPreflight: {
                     outputDir: "/tmp/publish-output",
-                    accessStatus: "granted",
+                    accessStatus: blockedAccessDenied ? "denied" : "granted",
                     protectedRoot: null,
                     probeDirectory: null,
                     remoteLocation: null,
@@ -1953,11 +1965,10 @@ export async function installMockTauri(
                       args.spec as Record<string, Record<string, string>>
                     ).parameters?.outputDir?.toString()
                   : "") || "/tmp/publish-output";
-              // 第 2 次起的调用对应「目录授权后重试」臂——若有
+              // 目录选择器授权过后对应「授权重试」臂——若有
               // preflightOutputAfterPick 种子则优先使用。
-              preflightOutputCallCount += 1;
               const seededPreflight = (
-                preflightOutputCallCount > 1 && opts.preflightOutputAfterPick
+                outputAccessPicked && opts.preflightOutputAfterPick
                   ? opts.preflightOutputAfterPick
                   : (opts.preflightOutput ?? null)
               ) as {
@@ -2194,6 +2205,9 @@ export async function installMockTauri(
 
             // ── Dialog plugin ──
             case "plugin:dialog|open":
+              if (typeof dialogOpen === "string" && dialogOpen.trim()) {
+                outputAccessPicked = true;
+              }
               return dialogOpen;
 
             case "plugin:dialog|save": {
