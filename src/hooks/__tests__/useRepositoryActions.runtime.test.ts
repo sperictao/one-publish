@@ -508,6 +508,49 @@ describe("handleAddRepoRuntime", () => {
     expect(secondRepo.id).toBeTruthy();
     expect(firstRepo.id).not.toBe(secondRepo.id);
   });
+
+  it("Provider 不在本地清单也不在远端目录时跳过项目扫描", async () => {
+    mocks.detectRepositoryProvider.mockResolvedValue({
+      providerId: "mystery-provider",
+      candidates: [],
+    });
+    mocks.listProviders.mockResolvedValue([providers[0]]);
+
+    await runAddRepo({ providers: [] });
+
+    expect(mocks.listProviders).toHaveBeenCalledOnce();
+    expect(mocks.scanProjectCandidates).not.toHaveBeenCalled();
+    expect(mocks.addRepository).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "mystery-provider" })
+    );
+  });
+
+  it("远端 Provider 目录拉取失败时按无清单处理并跳过扫描", async () => {
+    mocks.detectRepositoryProvider.mockResolvedValue({
+      providerId: "mystery-provider",
+      candidates: [],
+    });
+    mocks.listProviders.mockRejectedValue(new Error("offline"));
+
+    await runAddRepo({ providers: [] });
+
+    expect(mocks.scanProjectCandidates).not.toHaveBeenCalled();
+    expect(mocks.addRepository).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "mystery-provider" })
+    );
+  });
+
+  it("crypto.randomUUID 缺失时使用时间戳回退生成仓库 id", async () => {
+    vi.stubGlobal("crypto", {});
+    try {
+      await runAddRepo();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    const repoId = mocks.addRepository.mock.calls[0][0].id;
+    expect(repoId).toMatch(/^repo-/);
+  });
 });
 
 describe("handleDetectRepoProviderRuntime", () => {
@@ -549,6 +592,43 @@ describe("handleDetectRepoProviderRuntime", () => {
     expect(result).toBeNull();
     expect(mocks.toastError).toHaveBeenCalledTimes(1);
     expect(mocks.toastError.mock.calls[0][0]).toBe("未识别到支持的 Provider");
+  });
+
+  it.each([
+    ["path_not_found", "仓库路径不存在"],
+    ["not_directory", "Project Root 不是目录"],
+    ["permission_denied", "缺少目录访问权限"],
+    ["read_failed", "读取项目目录失败"],
+  ])("手动检测 %s 失败时给出对应文案", async (code, title) => {
+    mocks.detectRepositoryProvider.mockRejectedValue({ code });
+
+    const result = await handleDetectRepoProviderRuntime({
+      appT,
+      translations: {},
+      path: "/tmp/demo-repo",
+    });
+
+    expect(result).toBeNull();
+    expect(mocks.toastError.mock.calls[0][0]).toBe(title);
+  });
+
+  it("无法归类的探测失败走默认文案并本地化错误描述", async () => {
+    mocks.detectRepositoryProvider.mockRejectedValue({
+      code: "mystery_failure",
+      message: "weird backend error",
+    });
+
+    const result = await handleDetectRepoProviderRuntime({
+      appT,
+      translations: {},
+      path: "/tmp/demo-repo",
+    });
+
+    expect(result).toBeNull();
+    expect(mocks.toastError.mock.calls[0][0]).toBe("自动检测 Provider 失败");
+    expect(mocks.toastError.mock.calls[0][1]).toEqual({
+      description: expect.any(String),
+    });
   });
 });
 
@@ -895,6 +975,41 @@ describe("handleEditRepoRuntime", () => {
       { description: "This directory is already a repository" }
     );
   });
+
+  it("空白项目文件归一化为 undefined", async () => {
+    const params = baseParams();
+    params.repo = existingRepo({ projectFile: "   " });
+    params.repositories = [params.repo];
+
+    const result = await handleEditRepoRuntime(params);
+
+    expect(result).toBe(true);
+    expect(params.updateRepository).toHaveBeenCalledWith(
+      expect.objectContaining({ projectFile: undefined })
+    );
+  });
+
+  it("仓库路径变更时分支路径同步重映射", async () => {
+    const params = baseParams();
+    params.repo = existingRepo({
+      path: "/tmp/moved",
+      branches: [
+        { name: "main", isMain: true, isCurrent: true, path: "/tmp/demo-repo" },
+      ],
+    });
+    params.repositories = [existingRepo()];
+
+    const result = await handleEditRepoRuntime(params);
+
+    expect(result).toBe(true);
+    expect(params.updateRepository).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branches: [
+          expect.objectContaining({ name: "main", path: "/tmp/moved" }),
+        ],
+      })
+    );
+  });
 });
 
 describe("handleDetectRepoProviderRuntime", () => {
@@ -1084,6 +1199,53 @@ describe("handleRefreshRepoBranchesRuntime", () => {
     expect(await runRefresh()).toBeNull();
     expect(mocks.toastError).toHaveBeenCalledWith("Failed to pull branches", {
       description: expect.stringContaining("network exploded"),
+    });
+  });
+
+  it.each([
+    ["path_not_found", "仓库路径不存在"],
+    ["not_directory", "仓库路径不是目录"],
+    ["git_missing", "未检测到 Git 命令"],
+    ["cannot_connect_repo", "无法连接 Git 仓库"],
+    ["not_git_repo", "该目录不是 Git 仓库"],
+    ["permission_denied", "缺少仓库访问权限"],
+    ["dubious_ownership", "仓库所有权校验失败"],
+    ["no_branches", "未读取到分支"],
+  ])("i18n 键缺失时 %s 回落到内置中文文案", async (code, title) => {
+    mocks.scanRepositoryBranches.mockRejectedValue({ code, message: "x" });
+
+    expect(await runRefresh({ appT: {} })).toBeNull();
+    expect(mocks.toastError).toHaveBeenCalledWith(title, {
+      description: expect.any(String),
+    });
+  });
+
+  it("i18n 键缺失时未知失败回落到默认中文文案", async () => {
+    mocks.scanRepositoryBranches.mockRejectedValue(
+      new Error("network exploded")
+    );
+
+    expect(await runRefresh({ appT: {} })).toBeNull();
+    expect(mocks.toastError).toHaveBeenCalledWith("拉取分支失败", {
+      description: expect.any(String),
+    });
+  });
+
+  it("i18n 键缺失时空路径与成功反馈回落到内置中文文案", async () => {
+    expect(await runRefresh({ appT: {}, path: " " })).toBeNull();
+    expect(mocks.toastError).toHaveBeenCalledWith("请输入 Project Root 路径");
+
+    mocks.scanRepositoryBranches.mockResolvedValue({
+      current_branch: "main",
+      branches: [
+        { name: "main", isMain: true, isCurrent: true, path: "/tmp/repo" },
+        { name: "dev", isMain: false, isCurrent: false, path: "/tmp/repo" },
+      ],
+    });
+
+    expect(await runRefresh({ appT: {} })).not.toBeNull();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("分支列表已刷新", {
+      description: "2个分支",
     });
   });
 });
