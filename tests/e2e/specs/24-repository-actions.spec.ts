@@ -5,7 +5,7 @@
  * mock 建模为真实状态变更并返回新 AppState。
  */
 import { test, expect, type Page } from "@playwright/test";
-import { gotoApp } from "../fixtures/mock-tauri";
+import { gotoApp, type MockTauriOptions } from "../fixtures/mock-tauri";
 
 async function openRepoRowMenu(page: Page, repoId: string, name: string) {
   const row = page.locator(`[data-list-item-id='${repoId}']`);
@@ -80,6 +80,30 @@ test.describe("Repository actions", () => {
     await expect
       .poll(async () =>
         (await invokedCommands(page)).includes("rebind_profile_project")
+      )
+      .toBe(true);
+  });
+
+  test("recent config row removes via remove_recent_publish_config", async ({
+    page,
+  }) => {
+    const options: MockTauriOptions = {
+      initialState: {
+        recentConfigKeysByRepo: { "repo-a": ["userprofile:profile-folder"] },
+      },
+    };
+    await gotoApp(page, options);
+    const row = page.locator(
+      "[data-list-item-id='recent:userprofile:profile-folder']"
+    );
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.hover();
+    await row.getByRole("button", { name: /更多操作/ }).click();
+    await page.getByRole("menuitem", { name: "从最近使用移除" }).click();
+    await expect(row).toHaveCount(0, { timeout: 10000 });
+    await expect
+      .poll(async () =>
+        (await invokedCommands(page)).includes("remove_recent_publish_config")
       )
       .toBe(true);
   });
