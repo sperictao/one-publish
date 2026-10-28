@@ -118,4 +118,25 @@ describe("failureGroups", () => {
 
     expect(representative.id).toBe("older-with-cmd");
   });
+
+  it("同计数分组按最新记录时间倒序", () => {
+    const records: ExecutionRecord[] = [
+      createRecord({
+        id: "old-1",
+        finishedAt: "2026-02-08T10:00:00.000Z",
+        providerId: "dotnet",
+        failureSignature: "err a",
+      }),
+      createRecord({
+        id: "new-1",
+        finishedAt: "2026-02-08T12:00:00.000Z",
+        providerId: "cargo",
+        failureSignature: "err b",
+      }),
+    ];
+
+    const groups = groupExecutionFailures(records);
+
+    expect(groups.map((g) => g.key)).toEqual(["cargo::err b", "dotnet::err a"]);
+  });
 });

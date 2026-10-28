@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
     path: "/repos/demo",
     projectFile: "src/Demo/Demo.csproj",
   },
+  repositories: [] as { id: string }[],
+  selectedRepoId: "repo-1",
+  editorProviderState: vi.fn(() => ({})),
 }));
 
 vi.mock("@/lib/platform", () => ({
@@ -21,8 +24,8 @@ vi.mock("@/lib/platform", () => ({
 vi.mock("@/hooks/useAppState", () => ({
   useAppState: () => ({
     isLoading: false,
-    repositories: [],
-    selectedRepoId: mocks.selectedRepo.id,
+    repositories: mocks.repositories,
+    selectedRepoId: mocks.selectedRepoId,
   }),
 }));
 
@@ -62,7 +65,7 @@ vi.mock("@/features/history/usePublishHistoryState", () => ({
 }));
 
 vi.mock("@/features/provider/useEditorProviderState", () => ({
-  useEditorProviderState: () => ({}),
+  useEditorProviderState: mocks.editorProviderState,
 }));
 
 vi.mock("@/features/provider/useProviderPresentationState", () => ({
@@ -133,5 +136,18 @@ describe("useAppBoot 快捷键接线", () => {
     pressCtrl(",");
 
     expect(mocks.handleOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("selectedRepoId 未命中仓库列表时 editor 的 selectedRepo 为 null", () => {
+    mocks.repositories = [{ id: "other-repo" }];
+    mocks.editorProviderState.mockReturnValue({});
+
+    renderHook(() => useAppBoot());
+
+    expect(mocks.editorProviderState).toHaveBeenCalledWith(
+      expect.objectContaining({ selectedRepo: null })
+    );
+    mocks.repositories = [];
+    mocks.selectedRepoId = "repo-1";
   });
 });
