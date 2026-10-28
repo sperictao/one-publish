@@ -61,4 +61,41 @@ test.describe("Settings dialog", () => {
     });
     await expect.poll(async () => (await appState(page)).language).toBe("en");
   });
+
+  test("检查更新呈现新版本并可安装至重启提示", async ({ page }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      updaterConfigHealth: { configured: true, message: null },
+      updateInfo: {
+        current_version: "0.6.3",
+        available_version: "0.7.0",
+        has_update: true,
+        release_notes: "Bug fixes",
+        message: null,
+      },
+      installUpdateMessage: "更新已安装，重启应用后生效",
+    });
+    await openSettings(page);
+    await page.getByRole("button", { name: "关于" }).click();
+    await page.getByRole("button", { name: "检查更新" }).click();
+    const installButton = page.getByRole("button", {
+      name: "更新",
+      exact: true,
+    });
+    await expect(installButton).toBeVisible({ timeout: 10000 });
+    await installButton.click();
+
+    await expect(
+      page.getByRole("button", { name: /重启应用|重启中/ })
+    ).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("install_update")
+        )
+      )
+      .toBe(true);
+  });
 });
