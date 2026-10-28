@@ -156,4 +156,73 @@ test.describe("Automation bindings — seeded view", () => {
       )
       .toBe(true);
   });
+
+  test("drift and blocked badges render for a drifted binding", async ({
+    page,
+  }) => {
+    const drifted: AutomationBindingsView = {
+      bindings: [
+        {
+          ...SEEDED_BINDINGS.bindings[0],
+          blockedReason: "projection drift detected",
+        },
+      ],
+      drift: [
+        {
+          path: ".github/workflows/deploy.yml",
+          kind: "updated",
+          currentContent: "on: push",
+          expectedContent: "on: workflow_dispatch",
+          conflictReleaseNamespace: null,
+          conflictDeliveryDestinationNamespace: null,
+        },
+      ],
+    };
+    await gotoApp(page, { automationBindings: drifted });
+    await expect(page.getByTestId("automation-drift-banner")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(
+      page.getByTestId("automation-binding-blocked-binding-1")
+    ).toBeVisible();
+  });
+
+  test("terminal and expired evidence render without cancel affordances", async ({
+    page,
+  }) => {
+    const evidence: RemoteAttemptEvidenceView[] = [
+      {
+        attemptId: "e2e-published",
+        bindingId: "binding-1",
+        runId: 7,
+        state: { kind: "archived", status: "published", error: null },
+      },
+      {
+        attemptId: "e2e-expired",
+        bindingId: "binding-1",
+        runId: 8,
+        state: { kind: "expired", missing: ["receipt"] },
+      },
+    ];
+    await gotoApp(page, {
+      automationBindings: SEEDED_BINDINGS,
+      remoteEvidence: evidence,
+    });
+    await page
+      .getByTestId("automation-remote-evidence")
+      .getByRole("button", { name: /同步远端证据/ })
+      .click();
+    await expect(
+      page.getByTestId("automation-remote-attempt-e2e-published")
+    ).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.getByTestId("automation-remote-expired-e2e-expired")
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("automation-remote-cancel-e2e-published")
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId("automation-remote-cancel-e2e-expired")
+    ).toHaveCount(0);
+  });
 });
