@@ -598,8 +598,30 @@ export async function installMockTauri(
           const tauriRevision = tauriProfile.revisions[0];
           if (tauriRevision) {
             tauriRevision.providerId = "tauri";
+            // 与 load_release_settings_draft 的默认草稿同形：表单
+            // normalize 对每个字段取值，缺键会在保存前抛错。
             tauriRevision.parameters = {
-              releaseSettings: { bundleTargets: "all", tagPrefix: "v" },
+              releaseSettings: {
+                appConfigPath: "src-tauri/tauri.conf.json",
+                appName: "mock-app",
+                buildDriver: "pnpm",
+                enabledTargets: ["macos_arm64"],
+                releaseAssetPatterns: ["release/${version}/**"],
+                updater: {
+                  enabled: false,
+                  endpoint: null,
+                  publicKey: null,
+                  privateKeySecretName: null,
+                },
+                allowUnsignedRelease: false,
+                requiredActionsSecretNames: [],
+                actionsSecretEnvironment: {},
+                tagPrefix: "v",
+                releaseGates: [],
+                localDeliveryDir: "release/local",
+                versionMirrors: [],
+                managedWorkflowVersion: 1,
+              },
             };
             const backend = tauriRevision.composition?.executionBackend;
             if (backend) {
@@ -1057,7 +1079,53 @@ export async function installMockTauri(
               // 默认无远端运行记录；spec 可经 remoteEvidence 选项播种归档证据。
               return clone(seededRemoteEvidence ?? []);
 
-            case "update_profile":
+            case "update_profile": {
+              // 与 store/commands.rs#update_profile 对齐：编辑把
+              // name/parameters/composition 写入新修订并切为当前修订，
+              // 返回新 AppState（前端 normalizeAppState 依赖非空返回）。
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === (args?.repoId as string)
+              );
+              const profile = repo?.publishConfig.profiles?.find(
+                (p: ConfigProfile) => p.id === (args?.profileId as string)
+              );
+              const current = profile?.revisions?.find(
+                (r) => r.id === profile.currentRevisionId
+              );
+              if (!repo || !profile || !current) {
+                throw { code: "profile_not_found", message: "配置不存在" };
+              }
+              const nextSequence =
+                Math.max(...profile.revisions.map((r) => r.sequence ?? 0)) + 1;
+              const nextRevision = {
+                ...clone(current),
+                id: `${profile.id}-revision-${nextSequence}`,
+                sequence: nextSequence,
+                createdAt: new Date().toISOString(),
+                providerId:
+                  (args?.providerId as string | undefined) ??
+                  current.providerId,
+                parameters: clone(
+                  (args?.parameters as Record<string, unknown> | undefined) ??
+                    current.parameters
+                ),
+                composition:
+                  args?.composition !== undefined
+                    ? clone(args.composition)
+                    : current.composition,
+              };
+              profile.revisions.push(nextRevision);
+              profile.currentRevisionId = nextRevision.id;
+              if (typeof args?.name === "string" && args.name.trim()) {
+                profile.name = args.name;
+              }
+              if (args?.profileGroup !== undefined) {
+                profile.profileGroup =
+                  (args.profileGroup as string | null) ?? null;
+              }
+              return clone({ ...appState, executionHistory: [] });
+            }
+
             case "delete_profile":
             case "remove_recent_publish_config":
             case "reorder_recent_publish_configs":
