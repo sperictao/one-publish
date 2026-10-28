@@ -107,8 +107,52 @@ describe("usePublishExecute invoke 失败本地化", () => {
     expect(mocks.synchronizePublishRuntime).toHaveBeenCalledTimes(1);
   });
 
+  it("同步报告缺失段时输出诊断日志", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mocks.synchronizePublishRuntime.mockResolvedValue({
+      attemptId: "attempt-9",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [{ start: 2, end: 5 }],
+      result: null,
+    });
+
+    renderHook(() => usePublishExecute(params));
+
+    await waitFor(() =>
+      expect(warnSpy).toHaveBeenCalledWith(
+        "publish runtime synchronization reported missing event ranges",
+        { attemptId: "attempt-9", missingRanges: [{ start: 2, end: 5 }] }
+      )
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("同步报告无缺失段时不输出诊断日志", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mocks.synchronizePublishRuntime.mockResolvedValue({
+      attemptId: "attempt-9",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [],
+      result: null,
+    });
+
+    renderHook(() => usePublishExecute(params));
+    await waitFor(() =>
+      expect(mocks.synchronizePublishRuntime).toHaveBeenCalled()
+    );
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
   it("继续发布失败按界面语言提示", async () => {
     mocks.synchronizePublishRuntime.mockResolvedValue({
+      attemptId: "attempt-1",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [],
       result: { attempt: { status: "running", attemptId: "attempt-1" } },
     });
     mocks.resumePublishRuntime.mockRejectedValue(repositoryUnavailable);
@@ -132,7 +176,13 @@ describe("usePublishExecute invoke 失败本地化", () => {
   });
 
   it("发布准备失败：反馈本地化，事件与历史保留后端原文", async () => {
-    mocks.synchronizePublishRuntime.mockResolvedValue({ result: null });
+    mocks.synchronizePublishRuntime.mockResolvedValue({
+      attemptId: "",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [],
+      result: null,
+    });
     mocks.preparePublishRuntime.mockRejectedValue({
       kind: "validation",
       message: "failed to resolve publish project",
@@ -165,7 +215,13 @@ describe("usePublishExecute invoke 失败本地化", () => {
   });
 
   it("再交付把 promotedManifestDigest 注入 prepare 请求 runInputs", async () => {
-    mocks.synchronizePublishRuntime.mockResolvedValue({ result: null });
+    mocks.synchronizePublishRuntime.mockResolvedValue({
+      attemptId: "",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [],
+      result: null,
+    });
     mocks.preparePublishRuntime.mockResolvedValue({
       status: "ready",
       runtimeToken: "runtime-1",
@@ -197,7 +253,13 @@ describe("usePublishExecute invoke 失败本地化", () => {
   });
 
   it("默认发布不传 promotedManifestDigest", async () => {
-    mocks.synchronizePublishRuntime.mockResolvedValue({ result: null });
+    mocks.synchronizePublishRuntime.mockResolvedValue({
+      attemptId: "",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [],
+      result: null,
+    });
     mocks.preparePublishRuntime.mockResolvedValue({
       status: "ready",
       runtimeToken: "runtime-1",
@@ -230,7 +292,13 @@ describe("usePublishExecute 守卫与恢复流", () => {
     vi.resetAllMocks();
     mocks.i18n.translations = en;
     mocks.exportExecutionSnapshot.mockResolvedValue(null);
-    mocks.synchronizePublishRuntime.mockResolvedValue({ result: null });
+    mocks.synchronizePublishRuntime.mockResolvedValue({
+      attemptId: "",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [],
+      result: null,
+    });
     usePublishStore.getState().setIsPublishing(false);
     usePublishStore.getState().setIsCancellingPublish(false);
     validate.getPublishStartBlocker = () => null;
@@ -345,6 +413,10 @@ describe("usePublishExecute 守卫与恢复流", () => {
 
   it("resume 返回运行中 attempt 时重绑活动 run", async () => {
     mocks.synchronizePublishRuntime.mockResolvedValue({
+      attemptId: "attempt-1",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [],
       result: { attempt: { status: "running", attemptId: "attempt-1" } },
     });
     mocks.resumePublishRuntime.mockResolvedValue({
@@ -381,6 +453,10 @@ describe("usePublishExecute 守卫与恢复流", () => {
 
   it("cancelPublish：后端无运行任务时给出提示", async () => {
     mocks.synchronizePublishRuntime.mockResolvedValue({
+      attemptId: "attempt-1",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [],
       result: { attempt: { status: "running", attemptId: "attempt-1" } },
     });
     mocks.cancelPublishRuntime.mockResolvedValue(false);
@@ -404,6 +480,10 @@ describe("usePublishExecute 守卫与恢复流", () => {
 
   it("cancelPublish：取消失败经延迟加载给出本地化反馈", async () => {
     mocks.synchronizePublishRuntime.mockResolvedValue({
+      attemptId: "attempt-1",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [],
       result: { attempt: { status: "running", attemptId: "attempt-1" } },
     });
     mocks.cancelPublishRuntime.mockRejectedValue({
@@ -440,8 +520,12 @@ describe("usePublishExecute 守卫与恢复流", () => {
       details: "attempt-r",
     });
     mocks.synchronizePublishRuntime
-      .mockResolvedValueOnce({ result: null })
+      .mockResolvedValueOnce({ result: null, missingRanges: [] })
       .mockResolvedValue({
+        attemptId: "attempt-r",
+        acceptedEvents: 0,
+        duplicateEvents: 0,
+        missingRanges: [],
         result: { attempt: { status: "running", attemptId: "attempt-r" } },
       });
 
