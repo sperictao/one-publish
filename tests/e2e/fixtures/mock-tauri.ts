@@ -691,6 +691,26 @@ export async function installMockTauri(
         unregisterListener: (_event: string, _eventId: number) => {},
       };
 
+      // 事件监听器注册表：plugin:event|listen 登记 {event, handlerId}，
+      // __MOCK_EMIT_EVENT__ 按事件名向 handler 回调投递真实 Event 载荷。
+      const eventListeners: Record<
+        number,
+        { event: string; handlerId: number }
+      > = {};
+      let eventSeq = 0;
+      win.__MOCK_EMIT_EVENT__ = (event: string, payload: unknown) => {
+        for (const listener of Object.values(eventListeners)) {
+          if (listener.event !== event) {
+            continue;
+          }
+          callbackRegistry[listener.handlerId]?.({
+            event,
+            windowLabel: "main",
+            payload,
+          });
+        }
+      };
+
       win.__TAURI_INTERNALS__ = {
         // isTauri=true 时插件 API 会读取的运行时结构。
         metadata: {
@@ -2015,8 +2035,21 @@ export async function installMockTauri(
               return null;
 
             // ── Listeners (events) ──
-            case "plugin:event|listen":
+            case "plugin:event|listen": {
+              // 真实建模：登记 {event, handlerId} 并返回递增 eventId，
+              // 供 __MOCK_EMIT_EVENT__ 定向投递、unlisten 清理。
+              const eventId = ++eventSeq;
+              eventListeners[eventId] = {
+                event: String(args?.event ?? ""),
+                handlerId: args?.handler as number,
+              };
+              return eventId;
+            }
+
+            case "plugin:event|unlisten": {
+              delete eventListeners[args?.eventId as number];
               return null;
+            }
 
             case "plugin:event|emit":
               return null;
