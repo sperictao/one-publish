@@ -152,6 +152,80 @@ test.describe("Repository actions", () => {
       .toBe(true);
   });
 
+  test("repo row selection persists via update_ui_state", async ({ page }) => {
+    await gotoApp(page);
+    const row = page.locator("[data-list-item-id='repo-b']");
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.getByText("beta-worker").first().click();
+
+    // 选中经 setUIState 500ms 防抖后调用 update_ui_state 持久化。
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() =>
+            (
+              window as unknown as {
+                __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+              }
+            ).__MOCK_INVOKE_ARGS__.some(
+              (entry) =>
+                (entry as { cmd?: string }).cmd === "update_ui_state" &&
+                (entry as { args?: { selectedRepoId?: string } }).args
+                  ?.selectedRepoId === "repo-b"
+            )
+          ),
+        { timeout: 10000 }
+      )
+      .toBe(true);
+  });
+
+  test("boot scans branches, connectivity, and bound project info", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+
+    // 挂载时对每个仓库扫实际分支，随后对所选仓库检查连通性并解析
+    // 绑定项目文件（repo-a 绑定了 App.csproj → resolve_project_info）。
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => {
+            const calls = (
+              window as unknown as {
+                __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+              }
+            ).__MOCK_INVOKE_ARGS__;
+            const has = (
+              cmd: string,
+              match: (args: Record<string, unknown>) => boolean
+            ) =>
+              calls.some(
+                (entry) =>
+                  (entry as { cmd?: string }).cmd === cmd &&
+                  match(
+                    (entry as { args?: Record<string, unknown> }).args ?? {}
+                  )
+              );
+            return (
+              has(
+                "scan_repository_branches",
+                (a) => a.path === "/workspace/alpha-service"
+              ) &&
+              has(
+                "check_repository_branch_connectivity",
+                (a) => a.path === "/workspace/alpha-service"
+              ) &&
+              has(
+                "resolve_project_info",
+                (a) => a.projectFile === "/workspace/alpha-service/App.csproj"
+              )
+            );
+          }),
+        { timeout: 10000 }
+      )
+      .toBe(true);
+  });
+
   test("recent config row removes via remove_recent_publish_config", async ({
     page,
   }) => {
