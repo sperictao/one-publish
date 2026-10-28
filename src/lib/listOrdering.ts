@@ -1,6 +1,6 @@
 import type { ConfigProfile } from "@/lib/store/types";
 
-export type DropPosition = "before" | "after";
+type DropPosition = "before" | "after";
 
 export interface ListDropTarget<TMeta> {
   itemId: string;
@@ -8,14 +8,14 @@ export interface ListDropTarget<TMeta> {
   meta: TMeta;
 }
 
-export interface SortableItemGeometry<TMeta> {
+interface SortableItemGeometry<TMeta> {
   itemId: string;
   top: number;
   height: number;
   meta: TMeta;
 }
 
-export interface DraggedItemProjection {
+interface DraggedItemProjection {
   left: number;
   top: number;
   centerX: number;

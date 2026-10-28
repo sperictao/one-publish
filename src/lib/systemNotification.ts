@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export interface SystemNotificationOptions {
+interface SystemNotificationOptions {
   title: string;
   body?: string;
 }
