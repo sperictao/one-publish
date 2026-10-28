@@ -456,6 +456,29 @@ describe("ConfigManagementContent", () => {
     });
   });
 
+  it("导入文件内同名配置：仅首条可导入，其余按同名处理", async () => {
+    renderConfigManagementContent();
+
+    await openImportPreview([
+      importedProfile("Release", "dotnet"),
+      importedProfile("Release", "dotnet"),
+    ]);
+
+    const releaseRows = screen
+      .getAllByText("Release")
+      .map((element) => element.closest("li"))
+      .filter((row) => row !== null);
+    expect(releaseRows).toHaveLength(2);
+    const markedRows = releaseRows.filter((row) =>
+      row.textContent?.includes("同名已存在，跳过")
+    );
+    expect(markedRows).toHaveLength(1);
+    expect(
+      screen.getByText("1 个配置与仓库内现有配置同名，选择处理方式：")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导入配置" })).toBeEnabled();
+  });
+
   it("后端未导入任何配置时给出警告而不是成功提示", async () => {
     mocks.applyImportedProfiles.mockResolvedValue({
       imported: 0,
