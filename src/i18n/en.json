@@ -35,7 +35,6 @@
     "openGuide": "Open setup guide",
     "openTemplate": "Open template file",
     "notes": "Release Notes",
-    "clickToCheck": "Click to check for latest version info",
     "autoCheckDescription": "A new version is available. Open Settings > About to install it.",
     "downloading": "Downloading update…",
     "installing": "Installing update…",
@@ -119,7 +118,6 @@
   "config": {
     "title": "Publish Configuration",
     "description": "Select preset or customize publish parameters",
-    "presets": "Select preset configuration",
     "refresh": "Refresh",
     "execute": "Execute Publish",
     "publishing": "Publishing…",
@@ -580,7 +578,6 @@
     "promote": "Redeliver",
     "promoteDesc": "Redeliver the sealed artifact set without rebuilding (manifest {{digest}}…)",
     "copyShellSnippet": "Copy shell snippet",
-    "copyGhaSnippet": "Copy GHA snippet",
     "copyGitlabSnippet": "Copy GitLab CI snippet",
     "handoffOnlySuccess": "Only successful records support handoff snippets",
     "handoffBundleTitle": "Export handoff bundle",
