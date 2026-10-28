@@ -145,4 +145,45 @@ test.describe("Settings dialog", () => {
       page.getByRole("button", { name: /重启应用|重启中/ })
     ).toBeVisible({ timeout: 10000 });
   });
+
+  test("更新源未配置时换档为指南入口并调用 open_updater_help", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      updaterConfigHealth: {
+        configured: false,
+        message: "No updater configured",
+      },
+    });
+    await openSettings(page);
+    await page.getByRole("button", { name: "关于" }).click();
+
+    const guideButton = page.getByRole("button", { name: "打开配置指南" });
+    await expect(guideButton).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.getByRole("button", { name: "打开模板文件" })
+    ).toBeVisible();
+    // 不健康档位下常规检查/安装按钮换出。
+    await expect(
+      page.getByRole("button", { name: "检查更新" })
+    ).not.toBeVisible();
+
+    await guideButton.click();
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: { cmd: string; args?: unknown }[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              entry.cmd === "open_updater_help" &&
+              (entry.args as { target?: string })?.target === "docs"
+          )
+        )
+      )
+      .toBe(true);
+  });
 });
