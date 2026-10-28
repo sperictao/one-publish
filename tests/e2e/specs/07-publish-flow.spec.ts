@@ -8,6 +8,38 @@
 import { test, expect } from "@playwright/test";
 import { gotoApp, gotoAppWithPublishConfig } from "../fixtures/mock-tauri";
 
+// uncertain-attempt 恢复种子：start 抛结构化错误 + synchronize
+// 返回 running attempt——恢复后运行面板呈现「发布中」且 attemptId 已知，
+// 是 resume / attemptId 取消两臂的前置状态。
+function uncertainRecoveryOptions(attemptId: string) {
+  return {
+    errors: {
+      start_publish_runtime: JSON.stringify({
+        code: "publish_runtime_attempt_uncertain",
+        details: attemptId,
+      }),
+    },
+    synchronizeResult: {
+      attempt: {
+        attemptId,
+        backendRunId: `backend-${attemptId}`,
+        configurationRevisionId: "mock-draft-revision",
+        planDigest: "plan-uncertain",
+        executionBackend: "local-execution",
+        status: "running",
+        manifestDigest: null,
+        manifest: null,
+        receipts: [],
+        routes: [],
+        warnings: [],
+        events: [],
+        error: null,
+      },
+      publishResult: null,
+    },
+  };
+}
+
 test.describe("Full Publish Flow — Happy Path", () => {
   test("complete publish lifecycle: select → execute → success", async ({
     page,
@@ -561,32 +593,7 @@ test.describe("Full Publish Flow — Error Paths", () => {
     // start_publish_runtime 抛结构化错误 {code:attempt_uncertain,
     // details:attemptId} → 前端用 synchronize_publish_runtime 恢复；
     // 同步结果 attempt.status=running → 运行继续呈现（不落入失败）。
-    await gotoApp(page, {
-      errors: {
-        start_publish_runtime: JSON.stringify({
-          code: "publish_runtime_attempt_uncertain",
-          details: "attempt-uncertain-1",
-        }),
-      },
-      synchronizeResult: {
-        attempt: {
-          attemptId: "attempt-uncertain-1",
-          backendRunId: "backend-uncertain-1",
-          configurationRevisionId: "mock-draft-revision",
-          planDigest: "plan-uncertain",
-          executionBackend: "local-execution",
-          status: "running",
-          manifestDigest: null,
-          manifest: null,
-          receipts: [],
-          routes: [],
-          warnings: [],
-          events: [],
-          error: null,
-        },
-        publishResult: null,
-      },
-    });
+    await gotoApp(page, uncertainRecoveryOptions("attempt-uncertain-1"));
 
     await expect(
       page.locator("[data-list-item-id='pubxml:FolderProfile']")
@@ -616,6 +623,143 @@ test.describe("Full Publish Flow — Error Paths", () => {
     await expect(
       page.locator("[data-testid='publish-status-panel']")
     ).toContainText("发布中", { timeout: 10000 });
+  });
+
+  test("recovered running attempt resumes via resume_publish_runtime", async ({
+    page,
+  }) => {
+    // 恢复到 running 态后「继续发布」→ resume_publish_runtime 带 attemptId
+    // → 返回 published → 成功态。
+    await gotoApp(page, uncertainRecoveryOptions("attempt-resume-1"));
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // 等恢复完成：面板呈运行态、按钮换档为「继续发布」。
+    await expect(
+      page.locator("[data-testid='publish-status-panel']")
+    ).toContainText("发布中", { timeout: 10000 });
+    await expect(publishBtn).toContainText("继续发布", { timeout: 10000 });
+    await publishBtn.click();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              (entry as { cmd?: string }).cmd === "resume_publish_runtime" &&
+              ((entry as { args?: { request?: { attemptId?: string } } }).args
+                ?.request?.attemptId ?? "") === "attempt-resume-1"
+          )
+        )
+      )
+      .toBe(true);
+    await expect(
+      page.locator("[data-testid='publish-status-panel']")
+    ).toContainText("成功", { timeout: 10000 });
+  });
+
+  test("recovered running attempt cancels via attemptId + synchronize", async ({
+    page,
+  }) => {
+    // 选中已保存配置触发挂载期恢复同步：synchronize 返回 running
+    // attempt → 「继续发布/取消发布」挂起态 → 取消走 attemptId 臂
+    // （非 runtimeToken）→ 取消成功后再次 synchronize 对账。
+    await gotoAppWithPublishConfig(page, {
+      synchronizeResult: {
+        attempt: {
+          attemptId: "attempt-cancel-1",
+          backendRunId: "backend-attempt-cancel-1",
+          configurationRevisionId: "profile-folder-revision-1",
+          planDigest: "plan-cancel",
+          executionBackend: "local-execution",
+          status: "running",
+          manifestDigest: null,
+          manifest: null,
+          receipts: [],
+          routes: [],
+          warnings: [],
+          events: [],
+          error: null,
+        },
+        publishResult: null,
+      },
+    });
+    await page
+      .locator(
+        "[data-list-item-id='userprofile:profile-folder'] button[aria-pressed]"
+      )
+      .click();
+
+    await expect(
+      page.locator("[data-testid='publish-status-panel']")
+    ).toContainText("发布中", { timeout: 10000 });
+    const cancelBtn = page.getByRole("button", { name: /取消发布/ });
+    await expect(cancelBtn).toBeVisible({ timeout: 10000 });
+    await cancelBtn.click();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              (entry as { cmd?: string }).cmd === "cancel_publish_runtime" &&
+              ((entry as { args?: { request?: { attemptId?: string } } }).args
+                ?.request?.attemptId ?? "") === "attempt-cancel-1"
+          )
+        )
+      )
+      .toBe(true);
+    // 取消后的对账同步：attemptId + 当前配置修订一起发出（挂载期
+    // 恢复同步不带 attemptId，此形状只可能来自取消臂）。
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              (entry as { cmd?: string }).cmd ===
+                "synchronize_publish_runtime" &&
+              ((
+                entry as {
+                  args?: {
+                    request?: {
+                      attemptId?: string;
+                      configurationRevisionId?: string;
+                    };
+                  };
+                }
+              ).args?.request?.attemptId ?? "") === "attempt-cancel-1" &&
+              ((
+                entry as {
+                  args?: {
+                    request?: {
+                      attemptId?: string;
+                      configurationRevisionId?: string;
+                    };
+                  };
+                }
+              ).args?.request?.configurationRevisionId ?? "") ===
+                "profile-folder-revision-1"
+          )
+        )
+      )
+      .toBe(true);
   });
 
   test("uncertain attempt without recovery result falls back to failure", async ({
