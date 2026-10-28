@@ -35,7 +35,6 @@
     "openGuide": "打开配置指南",
     "openTemplate": "打开模板文件",
     "notes": "更新说明",
-    "clickToCheck": "点击检查更新以获取最新版本信息",
     "autoCheckDescription": "发现新版本，可前往设置 > 关于安装更新。",
     "downloading": "正在下载更新…",
     "installing": "正在安装更新…",
@@ -119,7 +118,6 @@
   "config": {
     "title": "发布配置",
     "description": "选择预设配置或自定义发布参数",
-    "presets": "选择预设配置",
     "refresh": "刷新",
     "execute": "执行发布",
     "publishing": "发布中…",
@@ -580,7 +578,6 @@
     "promote": "再交付",
     "promoteDesc": "复用该次封存产物直接再交付（跳过构建），Manifest {{digest}}…",
     "copyShellSnippet": "复制 Shell 片段",
-    "copyGhaSnippet": "复制 GHA 片段",
     "copyGitlabSnippet": "复制 GitLab CI 片段",
     "handoffOnlySuccess": "仅成功记录支持生成交接片段",
     "handoffBundleTitle": "导出交接包",
