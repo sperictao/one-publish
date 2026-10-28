@@ -194,6 +194,74 @@ test.describe("Full Publish Flow — Error Paths", () => {
 });
 
 test.describe("Publish Flow — Edge Cases", () => {
+  test("cancel during runtime invokes cancel_publish_runtime", async ({
+    page,
+  }) => {
+    // publishRuntimeLatch 挂起 start_publish_runtime——运行中窗口内
+    // 取消按钮可点击，断言 runtimeToken 取消命令与反馈提示。
+    await gotoApp(page, { publishRuntimeLatch: true });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // 等 start_publish_runtime 已发出——此时 phase="running" 且
+    // runtimeToken 就位；过早点击会走 preflight 本地重置臂（不发命令）。
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: { cmd: string }[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) => entry.cmd === "start_publish_runtime"
+          )
+        )
+      )
+      .toBe(true);
+
+    const cancelBtn = page.getByRole("button", { name: "取消发布" });
+    await expect(cancelBtn).toBeVisible({ timeout: 15000 });
+    await cancelBtn.click();
+
+    await expect(page.getByText(/正在取消发布/)).toBeVisible({
+      timeout: 10000,
+    });
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: { cmd: string; args?: unknown }[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              entry.cmd === "cancel_publish_runtime" &&
+              Boolean(
+                (
+                  entry.args as {
+                    request?: { runtimeToken?: string };
+                  }
+                )?.request?.runtimeToken
+              )
+          )
+        )
+      )
+      .toBe(true);
+
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          __MOCK_RESOLVE_PUBLISH_RUNTIME__: () => void;
+        }
+      ).__MOCK_RESOLVE_PUBLISH_RUNTIME__();
+    });
+  });
+
   test("publish button is disabled when no repo is selected", async ({
     page,
   }) => {
