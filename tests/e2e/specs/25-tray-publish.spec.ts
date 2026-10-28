@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { gotoApp } from "../fixtures/mock-tauri";
+import { DEFAULT_REPOSITORIES, gotoApp } from "../fixtures/mock-tauri";
 
 /**
  * 状态栏托盘发布流：真实 Tauri 运行时中托盘菜单发出
@@ -202,6 +202,38 @@ test.describe("Tray publish request", () => {
         (await mockInvocations(page)).includes("add_execution_record")
       )
       .toBe(true);
+  });
+
+  test("pubxml key without bound provider fails resolution", async ({
+    page,
+  }) => {
+    const repoWithoutProvider = {
+      ...DEFAULT_REPOSITORIES[0],
+      providerId: undefined,
+    } as unknown as (typeof DEFAULT_REPOSITORIES)[number];
+    await gotoApp(page, {
+      simulateTauri: true,
+      repositories: [repoWithoutProvider, ...DEFAULT_REPOSITORIES.slice(1)],
+    });
+
+    await emitEvent(page, "tray-publish-request", {
+      repoId: "repo-a",
+      configKey: "pubxml:FolderProfile",
+    });
+
+    // 项目配置键要求仓库已绑定 Provider（ADR-0044）——缺失即解析失败。
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "set_tray_publish_status"
+        )) as { status?: string }[];
+        return args.some((arg) => arg?.status === "failure");
+      })
+      .toBe(true);
+    expect(
+      (await mockInvocations(page)).includes("start_publish_runtime")
+    ).toBe(false);
   });
 
   test("notification failure falls back to restoring the main window", async ({
