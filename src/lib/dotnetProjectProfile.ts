@@ -8,14 +8,11 @@ import { readProjectPublishProfile } from "@/lib/store/api";
 import type { ProjectInfo } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 
-export type DotnetProjectInfo = Pick<
-  ProjectInfo,
-  "root_path" | "project_file"
-> & {
+type DotnetProjectInfo = Pick<ProjectInfo, "root_path" | "project_file"> & {
   target_frameworks?: string[];
 };
 
-export interface ResolvedDotnetProjectProfile {
+interface ResolvedDotnetProjectProfile {
   profileName: string;
   filePath: string;
   parsedProfile: ParsedProjectPublishProfile;

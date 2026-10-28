@@ -1,6 +1,6 @@
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 
-export type HandoffSpec = Pick<
+type HandoffSpec = Pick<
   ProviderPublishSpec,
   "provider_id" | "project_path" | "parameters"
 >;
