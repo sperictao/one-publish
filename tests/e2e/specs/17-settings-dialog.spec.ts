@@ -186,4 +186,26 @@ test.describe("Settings dialog", () => {
       )
       .toBe(true);
   });
+
+  test("快捷键视图加载并展示帮助条目", async ({ page }) => {
+    await gotoApp(page);
+    await openSettings(page);
+    await page.getByRole("button", { name: "快捷键", exact: true }).click();
+    await page.getByRole("button", { name: "查看快捷键" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "快捷键" });
+    await expect(dialog.getByText("Publish")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(dialog.getByText("Ctrl+P")).toBeVisible();
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("get_shortcuts_help")
+        )
+      )
+      .toBe(true);
+  });
 });
