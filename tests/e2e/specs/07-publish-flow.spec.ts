@@ -348,6 +348,60 @@ test.describe("Full Publish Flow — Error Paths", () => {
       .toBe(false);
   });
 
+  test("granted protected-directory access retries preflight and publishes", async ({
+    page,
+  }) => {
+    // access.status=denied → 授权选择器（dialogOpenPath 模拟用户授权目录）
+    // → 第 2 次 preflight_publish_output 返回 granted → 发布放行。
+    await gotoApp(page, {
+      preflightOutput: { accessStatus: "denied" },
+      preflightOutputAfterPick: { accessStatus: "granted" },
+      dialogOpenPath: "/tmp/publish-output",
+    });
+
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 15000 });
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    // 授权选择器被打开，随后重试 preflight 放行进入运行态。
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("plugin:dialog|open")
+        )
+      )
+      .toBe(true);
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as { __MOCK_INVOCATIONS__: string[] }
+            ).__MOCK_INVOCATIONS__.filter(
+              (c) => c === "preflight_publish_output"
+            ).length
+        )
+      )
+      .toBe(2);
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("start_publish_runtime")
+        )
+      )
+      .toBe(true);
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "发布完成" })
+    ).toBeVisible({ timeout: 10000 });
+  });
+
   test("blocked prepare result surfaces diagnostics and prevents publish", async ({
     page,
   }) => {
