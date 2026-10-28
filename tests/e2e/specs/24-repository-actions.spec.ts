@@ -60,6 +60,34 @@ test.describe("Repository actions", () => {
       .toBe(true);
   });
 
+  test("open directory menu invokes open_directory with repo path", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await openRepoRowMenu(page, "repo-a", "alpha-service");
+    await page.getByRole("menuitem", { name: "打开目录" }).click();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              (entry as { cmd?: string }).cmd === "open_directory" &&
+              ((entry as { args?: { path?: string } }).args?.path ?? "") ===
+                "/workspace/alpha-service"
+          )
+        )
+      )
+      .toBe(true);
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "已打开仓库目录" })
+    ).toBeVisible({ timeout: 10000 });
+  });
+
   test("composition editor rebinds the project candidate", async ({ page }) => {
     await gotoApp(page);
     const row = page.locator(

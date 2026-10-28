@@ -185,6 +185,17 @@ test.describe("Settings dialog", () => {
       page.getByRole("button", { name: "检查更新" })
     ).not.toBeVisible();
 
+    // 不健康档位先经 get_updater_help_paths 装载帮助路径。
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__.includes("get_updater_help_paths")
+        )
+      )
+      .toBe(true);
+
     await guideButton.click();
     await expect
       .poll(async () =>

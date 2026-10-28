@@ -53,6 +53,99 @@ test.describe("Diagnostics index export", () => {
     await expect(toast).toContainText("诊断索引已导出");
   });
 
+  test("导出历史按钮经保存对话框导出执行历史", async ({ page }) => {
+    await gotoApp(page, {
+      dialogSavePath: "/tmp/execution-history.json",
+      initialState: {
+        executionHistory: [
+          {
+            ...baseRecord,
+            id: "hist-exp-1",
+            repoId: "repo-a",
+            projectPath: "/workspace/alpha-service/App.csproj",
+            outputDir: "/workspace/alpha-service/bin/Release",
+            snapshotPath: null,
+            startedAt: "2026-04-02T10:00:00.000Z",
+            finishedAt: "2026-04-02T10:00:03.000Z",
+            success: true,
+          },
+        ],
+      },
+    });
+    await page.getByRole("button", { name: "历史记录" }).click();
+    await expect(page.getByText("最近执行历史")).toBeVisible();
+
+    await page.getByRole("button", { name: "导出历史" }).click();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              (entry as { cmd?: string }).cmd === "export_execution_history" &&
+              ((entry as { args?: { filePath?: string } }).args?.filePath ??
+                "") === "/tmp/execution-history.json"
+          )
+        )
+      )
+      .toBe(true);
+    const toast = page.locator("[data-sonner-toast]");
+    await expect(toast).toContainText("执行历史已导出", { timeout: 10000 });
+  });
+
+  test("失败记录存在时可导出失败分组包", async ({ page }) => {
+    await gotoApp(page, {
+      dialogSavePath: "/tmp/failure-groups.zip",
+      initialState: {
+        executionHistory: [
+          {
+            ...baseRecord,
+            id: "fail-grp-1",
+            repoId: "repo-a",
+            projectPath: "/workspace/alpha-service/App.csproj",
+            outputDir: null,
+            snapshotPath: null,
+            startedAt: "2026-04-02T10:00:00.000Z",
+            finishedAt: "2026-04-02T10:00:03.000Z",
+            success: false,
+            error: "dotnet SDK not found",
+            failureSignature: "dotnet_missing",
+          },
+        ],
+      },
+    });
+    await page.getByRole("button", { name: "历史记录" }).click();
+    await expect(page.getByText("最近执行历史")).toBeVisible();
+
+    const button = page.getByTestId("export-failure-groups-btn");
+    await expect(button).not.toBeDisabled();
+    await button.click();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              (entry as { cmd?: string }).cmd ===
+                "export_failure_group_bundle" &&
+              ((entry as { args?: { filePath?: string } }).args?.filePath ??
+                "") === "/tmp/failure-groups.zip"
+          )
+        )
+      )
+      .toBe(true);
+    const toast = page.locator("[data-sonner-toast]");
+    await expect(toast).toContainText("失败分组已导出", { timeout: 10000 });
+  });
+
   test("无可索引来源时按钮提示而非导出", async ({ page }) => {
     await gotoApp(page, {
       dialogSavePath: "/tmp/diagnostics-index.html",

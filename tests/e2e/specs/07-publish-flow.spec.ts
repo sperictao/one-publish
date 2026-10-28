@@ -77,6 +77,25 @@ test.describe("Full Publish Flow — Happy Path", () => {
     await expect(
       page.locator("[data-sonner-toast]", { hasText: "发布完成" })
     ).toBeVisible({ timeout: 10000 });
+
+    // 6. 钉住发布命令链契约：环境/输出预检 → 启动运行时 → 快照导出
+    // → 执行记录落账。
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const invocations = (
+            window as unknown as { __MOCK_INVOCATIONS__: string[] }
+          ).__MOCK_INVOCATIONS__;
+          return [
+            "run_environment_check",
+            "preflight_publish_output",
+            "start_publish_runtime",
+            "export_execution_snapshot",
+            "add_execution_record",
+          ].every((cmd) => invocations.includes(cmd));
+        })
+      )
+      .toBe(true);
   });
 
   test("publish with different repo works end-to-end", async ({ page }) => {
