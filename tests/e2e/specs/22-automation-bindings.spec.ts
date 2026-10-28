@@ -268,6 +268,142 @@ test.describe("Automation bindings — seeded view", () => {
   });
 });
 
+test.describe("Automation bindings — change flows", () => {
+  const seededApply = {
+    commitSha: "abc123",
+    pushedBranch: "main",
+    bindings: [],
+  };
+
+  async function applySeededPreview(
+    page: import("@playwright/test").Page
+  ): Promise<Record<string, unknown> | undefined> {
+    await expect(page.getByTestId("automation-preview-changes")).toBeVisible({
+      timeout: 10000,
+    });
+    await page.getByTestId("automation-confirm-apply").click();
+    await expect(
+      page.locator("[data-sonner-toast]", { hasText: "自动化投影已应用" })
+    ).toBeVisible({ timeout: 10000 });
+    return page.evaluate(() => {
+      const entries = (
+        window as unknown as {
+          __MOCK_INVOKE_ARGS__: {
+            cmd: string;
+            args?: Record<string, unknown>;
+          }[];
+        }
+      ).__MOCK_INVOKE_ARGS__;
+      return entries.find((entry) => entry.cmd === "apply_automation_change")
+        ?.args;
+    });
+  }
+
+  test("detach flow previews and applies the unbind request", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      automationBindings: SEEDED_BINDINGS,
+      automationPreview: {
+        change: { kind: "detach", bindingId: "binding-1" },
+        confirmationDigest: "detach-digest",
+        changes: [
+          {
+            path: ".github/workflows/deploy.yml",
+            kind: "removed",
+            currentContent: "name: deploy",
+            expectedContent: null,
+            conflictReleaseNamespace: null,
+            conflictDeliveryDestinationNamespace: null,
+          },
+        ],
+      },
+      automationApplyResult: seededApply,
+    });
+    await page.getByRole("button", { name: "解除绑定" }).click();
+    const applyArgs = await applySeededPreview(page);
+    expect((applyArgs?.change as { kind?: string } | undefined)?.kind).toBe(
+      "detach"
+    );
+    expect(applyArgs?.confirmedDigest).toBe("detach-digest");
+  });
+
+  test("upgrade flow previews and applies the revision upgrade", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      automationBindings: SEEDED_BINDINGS,
+      automationPreview: {
+        change: { kind: "upgradeRevision", bindingId: "binding-1" },
+        confirmationDigest: "upgrade-digest",
+        changes: [
+          {
+            path: ".github/workflows/deploy.yml",
+            kind: "updated",
+            currentContent: "runner v0.1.0",
+            expectedContent: "runner v0.2.0",
+            conflictReleaseNamespace: null,
+            conflictDeliveryDestinationNamespace: null,
+          },
+        ],
+      },
+      automationApplyResult: seededApply,
+    });
+    await page.getByRole("button", { name: "升级修订" }).click();
+    const applyArgs = await applySeededPreview(page);
+    expect((applyArgs?.change as { kind?: string } | undefined)?.kind).toBe(
+      "upgradeRevision"
+    );
+  });
+
+  test("drift banner reconcile flow applies the reconcile request", async ({
+    page,
+  }) => {
+    const drifted: AutomationBindingsView = {
+      bindings: [SEEDED_BINDINGS.bindings[0]],
+      drift: [
+        {
+          path: ".github/workflows/deploy.yml",
+          kind: "updated",
+          currentContent: "on: push",
+          expectedContent: "on: workflow_dispatch",
+          conflictReleaseNamespace: null,
+          conflictDeliveryDestinationNamespace: null,
+        },
+      ],
+    };
+    await gotoApp(page, {
+      automationBindings: drifted,
+      automationPreview: {
+        change: { kind: "reconcile" },
+        confirmationDigest: "reconcile-digest",
+        changes: [
+          {
+            path: ".github/workflows/deploy.yml",
+            kind: "updated",
+            currentContent: "on: push",
+            expectedContent: "on: workflow_dispatch",
+            conflictReleaseNamespace: null,
+            conflictDeliveryDestinationNamespace: null,
+          },
+        ],
+      },
+      automationApplyResult: seededApply,
+    });
+    await expect(page.getByTestId("automation-drift-banner")).toBeVisible({
+      timeout: 10000,
+    });
+    await page
+      .getByTestId("automation-drift-banner")
+      .getByRole("button", { name: "更新配置" })
+      .click();
+    const applyArgs = await applySeededPreview(page);
+    expect((applyArgs?.change as { kind?: string } | undefined)?.kind).toBe(
+      "reconcile"
+    );
+  });
+});
+
 test.describe("Automation bindings — install flow", () => {
   test("preview renders runtime section and apply echoes the digest", async ({
     page,
