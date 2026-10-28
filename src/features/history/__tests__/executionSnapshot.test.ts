@@ -66,6 +66,16 @@ describe("executionSnapshot", () => {
     });
   });
 
+  it("缺 spec/commandLine 的记录导出为 null 载荷", () => {
+    const payload = buildExecutionSnapshotPayload(
+      createRecord({ spec: null, commandLine: null }),
+      ""
+    );
+
+    expect(payload.spec).toBeNull();
+    expect(payload.command).toBeNull();
+  });
+
   it("交由后端写入私有存储区，不把快照路径指向输出目录", async () => {
     const storedPath =
       "/Users/me/.one-publish/execution-snapshots/abc/execution-snapshot-2026-07-17T10-01-02.345Z.md";
