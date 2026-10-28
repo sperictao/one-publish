@@ -138,6 +138,12 @@ export function useTrayRecentPublish(params: {
       }
     )
       .then((handler) => {
+        // effect 若在 listen() 挂起期间已清理，注册仍会落地——
+        // 立即注销，否则事件投递到泄漏监听器会重复触发整条发布链。
+        if (disposed) {
+          handler();
+          return;
+        }
         unlisten = handler;
       })
       .catch((error) => {
