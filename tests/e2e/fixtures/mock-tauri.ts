@@ -428,6 +428,12 @@ export interface MockTauriOptions {
   };
   /** `install_update` 返回的消息；缺省为需要重启的提示文案。 */
   installUpdateMessage?: string;
+  /**
+   * 置 true 时 `install_update` 挂起在 spec 可控的闩锁上，直到
+   * `window.__MOCK_RESOLVE_INSTALL_UPDATE__()` 被调用——用于观测
+   * 安装进行中的下载进度条等瞬态 UI。
+   */
+  installUpdateLatch?: boolean;
   /** `get_updater_config_health` 返回的配置健康度；缺省为未配置。 */
   updaterConfigHealth?: { configured: boolean; message: string | null };
   /**
@@ -456,6 +462,7 @@ export async function installMockTauri(
     automationApplyResult,
     updateInfo,
     installUpdateMessage,
+    installUpdateLatch,
     updaterConfigHealth,
     simulateTauri,
   } = options;
@@ -610,6 +617,8 @@ export async function installMockTauri(
         message: string | null;
       } | null;
       const shouldSimulateTauri = opts.simulateTauri === true;
+      const useInstallUpdateLatch = opts.installUpdateLatch === true;
+      let installUpdateResolve: (() => void) | null = null;
 
       // 自动化安装流夹具：给带 publishConfig 的仓库追加一个 tauri provider
       // 配置（github-actions 后端 + releaseSettings，满足安装向导守卫）。
@@ -674,6 +683,10 @@ export async function installMockTauri(
       };
 
       const win = window as unknown as Record<string, unknown>;
+      win.__MOCK_RESOLVE_INSTALL_UPDATE__ = () => {
+        installUpdateResolve?.();
+        installUpdateResolve = null;
+      };
 
       // 记录全部 invoke 命令名，供 spec 断言某命令是否被调用（如导出/写文件）。
       win.__MOCK_INVOCATIONS__ = [] as string[];
@@ -2023,6 +2036,14 @@ export async function installMockTauri(
               return { docsPath: "/docs", templatePath: "/template" };
 
             case "install_update":
+              // installUpdateLatch 时挂起至 spec 调用
+              // __MOCK_RESOLVE_INSTALL_UPDATE__——让 isInstallingUpdate
+              // 期间的进度条等中间态可被断言。
+              if (useInstallUpdateLatch) {
+                await new Promise<void>((resolve) => {
+                  installUpdateResolve = resolve;
+                });
+              }
               // 与 installUpdate 的 Promise<string> 契约对齐——消息
               // 文案驱动 isRestartRequired 判定（含"重启"/restart）。
               return seededInstallUpdateMessage ?? "更新已安装，重启后生效";
@@ -2145,6 +2166,7 @@ export async function installMockTauri(
       automationApplyResult: clone(automationApplyResult ?? null),
       updateInfo: clone(updateInfo ?? null),
       installUpdateMessage: installUpdateMessage ?? null,
+      installUpdateLatch: installUpdateLatch ?? false,
       updaterConfigHealth: clone(updaterConfigHealth ?? null),
       simulateTauri: simulateTauri ?? false,
     } as unknown as Record<string, unknown>
