@@ -99,6 +99,21 @@ export async function cancelPublishRuntime(
   return await invoke<boolean>("cancel_publish_runtime", { request });
 }
 
+/**
+ * ADR-0057 缺失段信号：后端检测到事件序列缺口时拒绝重构结果视图（result=null）。
+ * 缺口本身仍是可观测事实，上报给控制台诊断，避免同步结果静默吞掉。
+ */
+export function logMissingSyncRanges(
+  report: SynchronizePublishRuntimeResult
+): void {
+  if (report.missingRanges.length > 0) {
+    console.warn(
+      "publish runtime synchronization reported missing event ranges",
+      { attemptId: report.attemptId, missingRanges: report.missingRanges }
+    );
+  }
+}
+
 export async function preflightProviderPublishOutput(
   spec: ProviderPublishSpec
 ): Promise<PublishOutputPreflightResult> {

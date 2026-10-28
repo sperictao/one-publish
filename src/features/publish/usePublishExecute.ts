@@ -14,6 +14,7 @@ import {
   canRequestRuntimeOutputAccess,
   cancelPublishRuntime,
   describeBlockedRuntime,
+  logMissingSyncRanges,
   preparePublishRuntime,
   resumePublishRuntime,
   startPublishRuntime,
@@ -219,6 +220,7 @@ export function usePublishExecute({
       events: [],
     })
       .then((report) => {
+        logMissingSyncRanges(report);
         const recovered = report.result;
         if (
           disposed ||
@@ -499,6 +501,7 @@ export function usePublishExecute({
               attemptId: extractInvokeErrorDetails(err) || undefined,
               events: [],
             });
+            logMissingSyncRanges(synchronized);
             if (
               synchronized.result &&
               activeRunRef.current?.revision === runRevision
@@ -759,6 +762,7 @@ export function usePublishExecute({
             attemptId,
             events: [],
           });
+          logMissingSyncRanges(synchronized);
           if (synchronized.result) {
             setRuntimeResult(synchronized.result);
             if (synchronized.result.attempt.status !== "running") {
