@@ -204,6 +204,37 @@ test.describe("Tray publish request", () => {
       .toBe(true);
   });
 
+  test("missing user profile and preset keys fail resolution", async ({
+    page,
+  }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      seedTauriProfile: true,
+    });
+
+    // userprofile:<未知 id> → missing user profile 臂；
+    // preset:<id> → unsupported tray config key 臂。
+    for (const configKey of ["userprofile:missing", "preset:preset-1"]) {
+      await emitEvent(page, "tray-publish-request", {
+        repoId: "repo-a",
+        configKey,
+      });
+    }
+
+    await expect
+      .poll(async () => {
+        const args = (await mockInvokeArgsFor(
+          page,
+          "set_tray_publish_status"
+        )) as { status?: string }[];
+        return args.filter((arg) => arg?.status === "failure").length;
+      })
+      .toBe(2);
+    expect(
+      (await mockInvocations(page)).includes("start_publish_runtime")
+    ).toBe(false);
+  });
+
   test("pubxml key without bound provider fails resolution", async ({
     page,
   }) => {
