@@ -913,7 +913,7 @@ mod tests {
     fn apply_status_title_returns_false_without_tray() {
         let app = tauri::test::mock_app();
         let updated =
-            apply_tray_status_title(&app.handle(), TrayPublishStatus::Success, 0).expect("apply");
+            apply_tray_status_title(app.handle(), TrayPublishStatus::Success, 0).expect("apply");
         assert!(!updated, "无托盘实例时必须返回 false 而非错误");
     }
 
@@ -928,7 +928,7 @@ mod tests {
             TrayPublishStatus::Failure,
         ] {
             let updated =
-                set_tray_publish_status_internal(&app.handle(), status).expect("set status");
+                set_tray_publish_status_internal(app.handle(), status).expect("set status");
             assert!(!updated);
         }
     }

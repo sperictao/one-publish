@@ -1544,13 +1544,15 @@ mod tests {
     fn apply_preference_update_clamps_history_limit_and_trims() {
         use super::{apply_preference_update, AppState, PreferenceUpdate};
 
-        let mut state = AppState::default();
-        state.execution_history = (0..10)
-            .map(|index| ExecutionRecord {
-                id: format!("rec-{index}"),
-                ..test_record()
-            })
-            .collect();
+        let mut state = AppState {
+            execution_history: (0..10)
+                .map(|index| ExecutionRecord {
+                    id: format!("rec-{index}"),
+                    ..test_record()
+                })
+                .collect(),
+            ..AppState::default()
+        };
 
         apply_preference_update(
             &mut state,
@@ -1955,12 +1957,14 @@ mod tests {
     fn apply_repository_reorder_validates_membership_before_noop() {
         use super::{apply_repository_reorder, AppState};
 
-        let mut state = AppState::default();
-        state.repositories = vec![
-            test_repository("r1", "/one"),
-            test_repository("r2", "/two"),
-            test_repository("r3", "/three"),
-        ];
+        let mut state = AppState {
+            repositories: vec![
+                test_repository("r1", "/one"),
+                test_repository("r2", "/two"),
+                test_repository("r3", "/three"),
+            ],
+            ..AppState::default()
+        };
 
         let error = apply_repository_reorder(&mut state, vec!["r1".to_string(), "r2".to_string()])
             .expect_err("subset must be rejected");

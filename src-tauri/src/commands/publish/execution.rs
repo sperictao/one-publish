@@ -25,7 +25,7 @@ use tokio::sync::mpsc;
 type PublishRunResult =
     Result<(bool, bool, Option<String>, String, Vec<String>), crate::errors::AppError>;
 
-fn build_publish_session_id(provider_id: &str) -> String {
+pub(super) fn build_publish_session_id(provider_id: &str) -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|value| value.as_nanos())

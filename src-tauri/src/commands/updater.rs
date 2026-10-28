@@ -1184,7 +1184,7 @@ mod tests {
     fn emit_progress_on_mock_app_is_infallible() {
         let app = updater_test_app();
         emit_update_download_progress(
-            &app.handle(),
+            app.handle(),
             build_progress_payload("retrying", "1.0.0", 0, None, 1, None),
         );
     }

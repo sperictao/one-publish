@@ -439,3 +439,114 @@ pub fn render_diagnostics_index_markdown(index: &Value) -> Result<String, crate:
 
     Ok(lines.join("\n"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn markdown_link_escapes_label_but_keeps_url_raw() {
+        assert_eq!(
+            markdown_link("out\\logs\\[run 1].md"),
+            "[out\\\\logs\\\\\\[run 1\\].md](<out\\logs\\[run 1].md>)"
+        );
+        assert_eq!(markdown_link("a b.md"), "[a b.md](<a b.md>)");
+    }
+
+    #[test]
+    fn summary_u64_defaults_to_zero_for_missing_or_typed_mismatch() {
+        assert_eq!(summary_u64(&json!({}), "historyCount"), 0);
+        assert_eq!(summary_u64(&json!({"summary": {}}), "historyCount"), 0);
+        assert_eq!(
+            summary_u64(&json!({"summary": {"historyCount": "7"}}), "historyCount"),
+            0
+        );
+        assert_eq!(
+            summary_u64(&json!({"summary": {"historyCount": 7}}), "historyCount"),
+            7
+        );
+    }
+
+    #[test]
+    fn collect_link_paths_trims_and_filters_entries() {
+        let index = json!({
+            "links": {
+                "snapshots": ["  a.md ", "", "   ", 42, null, "b.md"],
+                "other": ["x.md"]
+            }
+        });
+        assert_eq!(
+            collect_link_paths(&index, "snapshots"),
+            vec!["a.md".to_string(), "b.md".to_string()]
+        );
+        assert!(collect_link_paths(&index, "bundles").is_empty());
+        assert!(collect_link_paths(&json!({}), "snapshots").is_empty());
+    }
+
+    #[test]
+    fn preflight_markdown_renders_defaults_for_empty_report() {
+        let markdown = render_preflight_markdown(&json!({})).expect("markdown");
+        assert!(markdown.contains("# Preflight Report"));
+        assert!(markdown.contains("- Generated At: unknown"));
+        assert!(markdown.contains("- Blocking Ready: no"));
+        assert!(markdown.contains("- Passed: 0"));
+        assert!(markdown.contains("- (no checklist items)"));
+    }
+
+    #[test]
+    fn preflight_markdown_falls_back_for_missing_checklist_fields() {
+        let markdown = render_preflight_markdown(&json!({
+            "generatedAt": "2026-01-01T00:00:00Z",
+            "summary": {"passed": 1, "failed": 0, "warning": 0, "blockingReady": true},
+            "checklist": [{}]
+        }))
+        .expect("markdown");
+        assert!(markdown.contains("- Blocking Ready: yes"));
+        assert!(markdown.contains("untitled"));
+        assert!(markdown.contains("unknown"));
+    }
+
+    #[test]
+    fn snapshot_markdown_accepts_snake_case_keys_and_missing_command() {
+        let markdown = render_execution_snapshot_markdown(&json!({
+            "provider_id": "dotnet",
+            "result": {"success": true, "cancelled": false}
+        }))
+        .expect("markdown");
+        assert!(markdown.contains("dotnet"));
+        assert!(markdown.contains("(not captured)"));
+    }
+
+    #[test]
+    fn bundle_markdown_accepts_snake_case_representative_id() {
+        let markdown = render_failure_group_bundle_markdown(&json!({
+            "provider_id": "tauri",
+            "representative_record_id": "rec-1",
+            "records": []
+        }))
+        .expect("markdown");
+        assert!(markdown.contains("tauri"));
+        assert!(markdown.contains("rec-1"));
+    }
+
+    #[test]
+    fn diagnostics_index_markdown_renders_empty_sections() {
+        let markdown = render_diagnostics_index_markdown(&json!({})).expect("markdown");
+        assert!(markdown.contains("# Diagnostics Index"));
+        assert!(markdown.contains("- History Records: 0"));
+        assert!(markdown.contains("## Snapshot Exports\n- (none)"));
+        assert!(markdown.contains("## Bundle Exports\n- (none)"));
+        assert!(markdown.contains("## History Exports\n- (none)"));
+        assert!(markdown.contains("## Raw Index"));
+    }
+
+    #[test]
+    fn diagnostics_index_markdown_lists_links_with_escaping() {
+        let markdown = render_diagnostics_index_markdown(&json!({
+            "links": {"snapshots": ["out/[a].md"]}
+        }))
+        .expect("markdown");
+        assert!(markdown.contains("- [out/\\[a\\].md](<out/[a].md>)"));
+    }
+}

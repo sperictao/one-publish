@@ -623,7 +623,7 @@ async fn sealed_build_success_collects_log_and_counts_output_files() {
     );
 
     let result =
-        super::execution::execute_sealed_build(&app.handle(), &request, &CancellationSignal::new())
+        super::execution::execute_sealed_build(app.handle(), &request, &CancellationSignal::new())
             .await
             .expect("sealed build");
 
@@ -647,7 +647,7 @@ async fn sealed_build_nonzero_exit_reports_failure_with_log() {
     let request = sealed_request(temp.path(), "echo oops >&2; exit 3");
 
     let result =
-        super::execution::execute_sealed_build(&app.handle(), &request, &CancellationSignal::new())
+        super::execution::execute_sealed_build(app.handle(), &request, &CancellationSignal::new())
             .await
             .expect("sealed build");
 
@@ -676,7 +676,7 @@ async fn sealed_build_missing_program_maps_to_tool_missing() {
     };
 
     let error =
-        super::execution::execute_sealed_build(&app.handle(), &request, &CancellationSignal::new())
+        super::execution::execute_sealed_build(app.handle(), &request, &CancellationSignal::new())
             .await
             .expect_err("missing program must fail");
 
@@ -693,7 +693,7 @@ async fn sealed_build_pre_cancelled_skips_spawn_and_marks_cancelled() {
 
     let cancellation = CancellationSignal::new();
     cancellation.request();
-    let result = super::execution::execute_sealed_build(&app.handle(), &request, &cancellation)
+    let result = super::execution::execute_sealed_build(app.handle(), &request, &cancellation)
         .await
         .expect("cancelled build still returns a result");
 
@@ -722,7 +722,7 @@ async fn sealed_build_mid_run_cancellation_marks_result_and_releases_slot() {
 
     let result = tokio::time::timeout(
         Duration::from_secs(15),
-        super::execution::execute_sealed_build(&app.handle(), &request, &cancellation),
+        super::execution::execute_sealed_build(app.handle(), &request, &cancellation),
     )
     .await
     .expect("cancelled build must finish within 15 s")
@@ -814,4 +814,12 @@ fn cleanup_policy_clean_surfaces_remove_failures() {
     );
     let error = super::execution::apply_cleanup_policy(&policy).expect_err("clean must fail");
     assert!(error.code.is_some());
+}
+
+#[test]
+fn session_id_carries_provider_prefix_and_is_unique() {
+    let first = super::execution::build_publish_session_id("dotnet");
+    let second = super::execution::build_publish_session_id("dotnet");
+    assert!(first.starts_with("dotnet-"));
+    assert_ne!(first, second);
 }
