@@ -137,6 +137,7 @@ test.describe("添加仓库", () => {
   test("检测耗时期间添加按钮呈现 busy 状态并在完成后恢复", async ({ page }) => {
     await gotoApp(page, { dialogOpenPath: "/workspace/new-repo" });
 
+    // 闩锁化 provider 检测：测试断言 busy 态后显式放行，不再依赖固定 1.4s。
     await page.evaluate(() => {
       const internals = (
         window as unknown as {
@@ -151,7 +152,11 @@ test.describe("添加仓库", () => {
       const invoke = internals.invoke;
       internals.invoke = async (cmd, args) => {
         if (cmd === "detect_repository_provider") {
-          await new Promise((r) => setTimeout(r, 1_400));
+          await new Promise<void>((resolve) => {
+            (
+              window as unknown as { __MOCK_RESOLVE_DETECT__?: () => void }
+            ).__MOCK_RESOLVE_DETECT__ = resolve;
+          });
         }
         return invoke(cmd, args);
       };
@@ -162,7 +167,12 @@ test.describe("添加仓库", () => {
     await expect(button).toBeDisabled();
     await expect(button).toHaveAttribute("aria-busy", "true");
 
-    // 完成后 busy 解除，仓库入库
+    // busy 断言完成后放行检测，验证完成态转换
+    await page.evaluate(() =>
+      (
+        window as unknown as { __MOCK_RESOLVE_DETECT__?: () => void }
+      ).__MOCK_RESOLVE_DETECT__?.()
+    );
     await expect(button).toBeEnabled({ timeout: 10_000 });
     await expect(button).toHaveAttribute("aria-busy", "false");
     await expect(
