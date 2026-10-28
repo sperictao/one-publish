@@ -98,4 +98,51 @@ test.describe("Settings dialog", () => {
       )
       .toBe(true);
   });
+
+  test("下载进度事件在安装期间驱动进度条", async ({ page }) => {
+    await gotoApp(page, {
+      simulateTauri: true,
+      updaterConfigHealth: { configured: true, message: null },
+      updateInfo: {
+        current_version: "0.6.3",
+        available_version: "0.7.0",
+        has_update: true,
+        release_notes: null,
+        message: null,
+      },
+      installUpdateLatch: true,
+    });
+    await openSettings(page);
+    await page.getByRole("button", { name: "关于" }).click();
+    await page.getByRole("button", { name: "检查更新" }).click();
+    await page.getByRole("button", { name: "更新", exact: true }).click();
+
+    // install_update 挂起在闩锁上——此时注入进度事件，进度条可见。
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          __MOCK_EMIT_EVENT__: (event: string, payload: unknown) => void;
+        }
+      ).__MOCK_EMIT_EVENT__("updater-download-progress", {
+        stage: "downloading",
+        version: "0.7.0",
+        downloadedBytes: 420,
+        totalBytes: 1000,
+        percent: 42,
+      });
+    });
+    await expect(page.getByText("正在下载更新…")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.getByText("42%")).toBeVisible({ timeout: 10000 });
+
+    await page.evaluate(() => {
+      (
+        window as unknown as { __MOCK_RESOLVE_INSTALL_UPDATE__: () => void }
+      ).__MOCK_RESOLVE_INSTALL_UPDATE__();
+    });
+    await expect(
+      page.getByRole("button", { name: /重启应用|重启中/ })
+    ).toBeVisible({ timeout: 10000 });
+  });
 });
