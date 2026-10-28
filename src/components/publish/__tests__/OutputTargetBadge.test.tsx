@@ -69,6 +69,51 @@ describe("OutputTargetBadge", () => {
     });
   });
 
+  it("shows host detail and UNC label for a mounted UNC share", async () => {
+    invokeMock.mockResolvedValue({
+      kind: "mounted_remote",
+      raw: "\\\\nas01\\share\\app",
+      path: "/Volumes/share/app",
+      mountKind: "unc",
+      fsType: "smbfs",
+      scheme: null,
+      host: "nas01",
+      port: null,
+      user: null,
+      query: null,
+    } satisfies OutputTargetDescriptor);
+
+    render(<OutputTargetBadge raw="\\\\nas01\\share\\app" />);
+    await waitFor(() => {
+      expect(screen.getByText(/UNC 共享 \(smbfs\)/)).toBeInTheDocument();
+      expect(screen.getByTitle("UNC 共享 (smbfs) · nas01")).toBeInTheDocument();
+    });
+  });
+
+  it("falls back to REMOTE label when descriptor scheme is empty", async () => {
+    invokeMock.mockResolvedValue({
+      kind: "remote",
+      raw: "custom://edge/bucket",
+      path: "/bucket",
+      mountKind: null,
+      fsType: null,
+      scheme: null,
+      host: "edge",
+      port: null,
+      user: null,
+      query: null,
+    } satisfies OutputTargetDescriptor);
+
+    render(<OutputTargetBadge raw="custom://edge/bucket" />);
+    await waitFor(() => {
+      expect(screen.getByText("CUSTOM")).toBeInTheDocument();
+      expect(screen.getByText("edge/bucket")).toBeInTheDocument();
+      expect(
+        screen.getByTitle("远程协议将在 Phase 13 启用上传")
+      ).toBeInTheDocument();
+    });
+  });
+
   it("drops stale remote descriptor immediately when input changes", async () => {
     invokeMock.mockResolvedValue({
       kind: "remote",
