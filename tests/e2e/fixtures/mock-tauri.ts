@@ -434,6 +434,12 @@ export interface MockTauriOptions {
    * 安装进行中的下载进度条等瞬态 UI。
    */
   installUpdateLatch?: boolean;
+  /**
+   * 置 true 时 `start_publish_runtime` 挂起至
+   * `window.__MOCK_RESOLVE_PUBLISH_RUNTIME__()`；解析后按已取消
+   * 语义返回 cancelled attempt，供发布中取消流断言。
+   */
+  publishRuntimeLatch?: boolean;
   /** `get_updater_config_health` 返回的配置健康度；缺省为未配置。 */
   updaterConfigHealth?: { configured: boolean; message: string | null };
   /**
@@ -463,6 +469,7 @@ export async function installMockTauri(
     updateInfo,
     installUpdateMessage,
     installUpdateLatch,
+    publishRuntimeLatch,
     updaterConfigHealth,
     simulateTauri,
   } = options;
@@ -618,7 +625,9 @@ export async function installMockTauri(
       } | null;
       const shouldSimulateTauri = opts.simulateTauri === true;
       const useInstallUpdateLatch = opts.installUpdateLatch === true;
+      const usePublishRuntimeLatch = opts.publishRuntimeLatch === true;
       let installUpdateResolve: (() => void) | null = null;
+      let publishRuntimeResolve: (() => void) | null = null;
 
       // 自动化安装流夹具：给带 publishConfig 的仓库追加一个 tauri provider
       // 配置（github-actions 后端 + releaseSettings，满足安装向导守卫）。
@@ -686,6 +695,10 @@ export async function installMockTauri(
       win.__MOCK_RESOLVE_INSTALL_UPDATE__ = () => {
         installUpdateResolve?.();
         installUpdateResolve = null;
+      };
+      win.__MOCK_RESOLVE_PUBLISH_RUNTIME__ = () => {
+        publishRuntimeResolve?.();
+        publishRuntimeResolve = null;
       };
 
       // 记录全部 invoke 命令名，供 spec 断言某命令是否被调用（如导出/写文件）。
@@ -1736,6 +1749,55 @@ export async function installMockTauri(
               const revision =
                 runtimeToken?.replace("runtime-", "") || "mock-revision";
               const manifestDigest = `manifest-${revision}`;
+              // publishRuntimeLatch：挂起至 spec 解析，随后按取消
+              // 语义返回——取消命令已先行落地。
+              if (usePublishRuntimeLatch) {
+                await new Promise<void>((resolve) => {
+                  publishRuntimeResolve = resolve;
+                });
+                return {
+                  attempt: {
+                    attemptId: `attempt-${revision}`,
+                    backendRunId: `backend-${revision}`,
+                    configurationRevisionId: revision,
+                    planDigest: `plan-${revision}`,
+                    executionBackend: "local-execution",
+                    status: "cancelled",
+                    manifestDigest: null,
+                    manifest: null,
+                    receipts: [],
+                    routes: [
+                      {
+                        routeId: "local-delivery",
+                        required: true,
+                        status: "cancelled",
+                        externalReference: null,
+                        error: null,
+                      },
+                    ],
+                    warnings: [],
+                    events: [],
+                    error: null,
+                  },
+                  publishResult: {
+                    provider_id: "dotnet",
+                    success: false,
+                    cancelled: true,
+                    error: null,
+                    command: {
+                      program: "dotnet",
+                      args: ["publish"],
+                      working_dir: "/workspace/alpha-service",
+                      display_command: "dotnet publish",
+                      env: [],
+                    },
+                    output_log: "[mock] Publishing...\n[mock] Cancelled.\n",
+                    output_dir: null,
+                    file_count: 0,
+                    warnings: null,
+                  },
+                };
+              }
               return {
                 attempt: {
                   attemptId: `attempt-${revision}`,
@@ -2167,6 +2229,7 @@ export async function installMockTauri(
       updateInfo: clone(updateInfo ?? null),
       installUpdateMessage: installUpdateMessage ?? null,
       installUpdateLatch: installUpdateLatch ?? false,
+      publishRuntimeLatch: publishRuntimeLatch ?? false,
       updaterConfigHealth: clone(updaterConfigHealth ?? null),
       simulateTauri: simulateTauri ?? false,
     } as unknown as Record<string, unknown>
