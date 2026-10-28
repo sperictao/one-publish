@@ -91,6 +91,14 @@ test.describe("Tray publish request", () => {
         (await mockInvocations(page)).includes("show_system_notification")
       )
       .toBe(true);
+    // 监听器必须恰好一份——泄漏会使整条链扇形放大（见 #345 修复）。
+    const invocations = await mockInvocations(page);
+    expect(
+      invocations.filter((cmd) => cmd === "start_publish_runtime")
+    ).toHaveLength(1);
+    expect(
+      invocations.filter((cmd) => cmd === "add_execution_record")
+    ).toHaveLength(1);
   });
 
   test("output-dir open failure surfaces a system error notification", async ({
