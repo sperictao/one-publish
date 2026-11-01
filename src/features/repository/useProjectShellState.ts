@@ -186,44 +186,54 @@ export function useProjectShellState(params: {
       }
 
       setIsProjectInfoRefreshing(true);
-      const info = await resolvePreferredProjectInfo({
-        repoPath: targetPath,
-        projectFile: boundProjectFile,
-        resolveProjectInfo: (projectFile) =>
-          resolveProjectInfoRequest(projectFile, {
-            silentFailure: options?.silentFailure,
-          }),
-        scanProject: (repoPath) =>
-          scanProjectRequest(repoPath, {
-            silentSuccess: options?.silentSuccess,
-            silentFailure: options?.silentFailure,
-          }),
-      });
+      try {
+        const info = await resolvePreferredProjectInfo({
+          repoPath: targetPath,
+          projectFile: boundProjectFile,
+          resolveProjectInfo: (projectFile) =>
+            resolveProjectInfoRequest(projectFile, {
+              silentFailure: options?.silentFailure,
+            }),
+          scanProject: (repoPath) =>
+            scanProjectRequest(repoPath, {
+              silentSuccess: options?.silentSuccess,
+              silentFailure: options?.silentFailure,
+            }),
+        });
 
-      if (
-        requestId !== scanRequestIdRef.current ||
-        selectedScopeKeyRef.current !== currentScopeKey ||
-        !canExposeProjectInfoRef.current ||
-        !info ||
-        params.selectedRepoPath?.trim() !== targetPath ||
-        (boundProjectFile &&
-          params.selectedRepoProjectFile?.trim() !== boundProjectFile)
-      ) {
+        if (
+          requestId !== scanRequestIdRef.current ||
+          selectedScopeKeyRef.current !== currentScopeKey ||
+          !canExposeProjectInfoRef.current ||
+          !info ||
+          params.selectedRepoPath?.trim() !== targetPath ||
+          (boundProjectFile &&
+            params.selectedRepoProjectFile?.trim() !== boundProjectFile)
+        ) {
+          if (
+            requestId === scanRequestIdRef.current &&
+            selectedScopeKeyRef.current === currentScopeKey &&
+            canExposeProjectInfoRef.current &&
+            !info
+          ) {
+            commitProjectInfoSnapshot(currentScopeKey, null);
+          }
+          return info;
+        }
+
+        commitProjectInfoSnapshot(currentScopeKey, info);
+        return info;
+      } finally {
+        // 异常路径也要归还刷新标记；仅当本请求仍是当前请求时才重置——
+        // stale 请求不得清掉新请求的 loading 态。
         if (
           requestId === scanRequestIdRef.current &&
           selectedScopeKeyRef.current === currentScopeKey &&
-          canExposeProjectInfoRef.current &&
-          !info
+          canExposeProjectInfoRef.current
         ) {
-          commitProjectInfoSnapshot(currentScopeKey, null);
           setIsProjectInfoRefreshing(false);
         }
-        return info;
       }
-
-      commitProjectInfoSnapshot(currentScopeKey, info);
-      setIsProjectInfoRefreshing(false);
-      return info;
     },
     [
       commitProjectInfoSnapshot,
