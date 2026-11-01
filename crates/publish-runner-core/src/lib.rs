@@ -728,7 +728,9 @@ impl AttemptEventLog {
                 event.event_id, self.attempt_id, self.backend_run_id, self.plan_digest
             )));
         }
-        if event.sequence == 0 || event.event_id.trim().is_empty() {
+        // u64::MAX 也要拒绝：接受它会让 missing_ranges / 追加期望值的
+        // `sequence + 1` 算术溢出（debug panic，release 静默回绕出假缺口）。
+        if event.sequence == 0 || event.sequence == u64::MAX || event.event_id.trim().is_empty() {
             return Err(PublishError::Execution(format!(
                 "publish events require a stable event id and a positive causal sequence, got {} at {}",
                 event.event_id, event.sequence
