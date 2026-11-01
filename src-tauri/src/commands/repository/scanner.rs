@@ -111,13 +111,22 @@ fn nested_worktree_roots_from_paths(root: &Path, worktree_paths: Vec<PathBuf>) -
 
 #[cfg(not(windows))]
 fn discover_nested_worktree_roots(root: &Path) -> Vec<PathBuf> {
-    let Ok(output) = crate::process_utils::new_std_command("git")
+    // worktree 列举是本地元数据读取：文件系统停滞或仓库锁竞争不能让
+    // 扫描无界等待；超时/启动失败都优雅退化为不嵌套。
+    let Ok(child) = crate::process_utils::new_std_command("git")
         .arg("-C")
         .arg(root)
         .arg("worktree")
         .arg("list")
         .arg("--porcelain")
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    else {
+        return Vec::new();
+    };
+    let Some(output) =
+        crate::process_utils::wait_child_with_timeout(child, std::time::Duration::from_secs(10))
     else {
         return Vec::new();
     };
@@ -365,7 +374,12 @@ pub async fn detect_repository_provider(
         .with_details(err.to_string()));
     }
 
-    let candidates = detect_provider_candidates_from_path(&repo_path);
+    let candidates = tokio::task::spawn_blocking({
+        let repo_path = repo_path.clone();
+        move || detect_provider_candidates_from_path(&repo_path)
+    })
+    .await
+    .map_err(repository_join_error)?;
     let Some(first) = candidates.first() else {
         return Err(repository_error(
             "cannot detect provider from repository path",

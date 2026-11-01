@@ -36,6 +36,16 @@ pub(crate) fn repository_error(
     crate::errors::AppError::repository_with_code(message, code)
 }
 
+/// spawn_blocking 闭包 panic/取消的统一映射：仓库扫描走 blocking 线程池
+///（递归 WalkDir 与 git worktree 列举是同步文件系统/子进程工作，不能占
+/// 住 executor）。
+pub(crate) fn repository_join_error(error: tokio::task::JoinError) -> crate::errors::AppError {
+    repository_error(
+        format!("repository work failed to complete: {error}"),
+        "repository_task_join_failed",
+    )
+}
+
 #[derive(Debug, Serialize, Deserialize, TS)]
 pub struct RepositoryBranchScanResult {
     pub branches: Vec<crate::store::Branch>,
@@ -119,20 +129,26 @@ pub async fn read_project_publish_profile(
         );
     }
 
-    let profile_path = resolve_publish_profile_path(&project_file_path, &profile_name)?;
-    let content = std::fs::read_to_string(&profile_path).map_err(|error| {
-        repository_error(
-            "failed to read publish profile",
-            classify_repository_path_error(error.kind()),
-        )
-        .with_details(format!("{}: {}", profile_path.to_string_lossy(), error))
-    })?;
+    let profile_name_for_task = profile_name.clone();
+    tokio::task::spawn_blocking(move || {
+        let profile_path =
+            resolve_publish_profile_path(&project_file_path, &profile_name_for_task)?;
+        let content = std::fs::read_to_string(&profile_path).map_err(|error| {
+            repository_error(
+                "failed to read publish profile",
+                classify_repository_path_error(error.kind()),
+            )
+            .with_details(format!("{}: {}", profile_path.to_string_lossy(), error))
+        })?;
 
-    Ok(ProjectPublishProfileFile {
-        profile_name: profile_name.trim().to_string(),
-        file_path: profile_path.to_string_lossy().to_string(),
-        content,
+        Ok(ProjectPublishProfileFile {
+            profile_name: profile_name_for_task.trim().to_string(),
+            file_path: profile_path.to_string_lossy().to_string(),
+            content,
+        })
     })
+    .await
+    .map_err(repository_join_error)?
 }
 
 #[cfg(test)]
