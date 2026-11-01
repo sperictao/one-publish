@@ -288,35 +288,11 @@ pub(crate) fn evaluate_msbuild_publish_dir(spec: &PublishSpec) -> Option<String>
         .stderr(std::process::Stdio::piped())
         .spawn()
         .ok()?;
-    let output = wait_child_with_timeout(child, MSBUILD_EVAL_TIMEOUT)?;
+    let output = crate::process_utils::wait_child_with_timeout(child, MSBUILD_EVAL_TIMEOUT)?;
     if !output.status.success() {
         return None;
     }
     parse_msbuild_publish_dir(&String::from_utf8_lossy(&output.stdout))
-}
-
-/// try_wait 轮询 + 超时 kill：同步链路没有 runtime 可用
-/// tokio::time::timeout，std Command 也不自带 wait_timeout。超时进程被
-/// kill+wait 回收（不残留孤儿），返回 None 让调用方走既定回落。
-fn wait_child_with_timeout(
-    mut child: std::process::Child,
-    timeout: std::time::Duration,
-) -> Option<std::process::Output> {
-    let deadline = std::time::Instant::now() + timeout;
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => return child.wait_with_output().ok(),
-            Ok(None) if std::time::Instant::now() < deadline => {
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return None;
-            }
-            Err(_) => return None,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -377,33 +353,6 @@ mod tests {
                 "-p:PublishProfile=FolderProfile".to_string(),
             ]
         );
-    }
-
-    /// 超时路径：挂起的子进程被 kill+wait 回收并返回 None（回落到静态推断）。
-    #[cfg(unix)]
-    #[test]
-    fn wait_child_with_timeout_kills_a_hung_process() {
-        let child = crate::process_utils::new_std_command("sleep")
-            .arg("30")
-            .spawn()
-            .expect("spawn sleep");
-        let started = std::time::Instant::now();
-        assert!(wait_child_with_timeout(child, std::time::Duration::from_millis(200)).is_none());
-        assert!(started.elapsed() < std::time::Duration::from_secs(10));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn wait_child_with_timeout_collects_a_fast_process() {
-        let child = crate::process_utils::new_std_command("echo")
-            .arg("out")
-            .stdout(std::process::Stdio::piped())
-            .spawn()
-            .expect("spawn echo");
-        let output = wait_child_with_timeout(child, std::time::Duration::from_secs(5))
-            .expect("collect output");
-        assert!(output.status.success());
-        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "out");
     }
 
     #[test]
