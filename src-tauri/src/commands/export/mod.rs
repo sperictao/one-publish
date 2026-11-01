@@ -451,8 +451,25 @@ fn resolve_execution_snapshot(
         .as_deref()
         .map(str::trim)
         .filter(|path| !path.is_empty());
-    if let Some(candidate) = recorded.map(PathBuf::from).filter(|path| path.is_file()) {
-        return Ok(candidate);
+    if let Some(path) = recorded {
+        let candidate = PathBuf::from(path);
+        if candidate.is_file() {
+            // snapshot_path 来自前端传入的历史记录——canonicalize 后必须留在
+            // 快照根之内；否则任意本地文件（如 ~/.ssh/id_rsa）会被读进号称
+            // "已脱敏、可分享"的交接包，或被 open::that 打开。
+            let root_canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+            let resolved = std::fs::canonicalize(&candidate).map_err(|source| {
+                export_source_error("resolve error", source, "snapshot_path_resolve_failed")
+            })?;
+            if !resolved.starts_with(&root_canonical) {
+                return Err(export_error(
+                    "记录中的快照路径不在快照目录内",
+                    "snapshot_path_outside_root",
+                )
+                .with_details(path));
+            }
+            return Ok(resolved);
+        }
     }
     if let Some(output_dir) = output_dir {
         return find_latest_snapshot_for_output_dir(root, &output_dir);
@@ -555,18 +572,15 @@ mod tests {
     #[test]
     fn handoff_bundle_packages_command_snapshot_and_failure_groups_without_local_paths() {
         let dir = tempfile::tempdir().expect("temp dir");
-        // 预置一份已脱敏导出的执行快照，交接包应原样收录。
-        let snapshot_dir = dir.path().join("snapshot-bucket");
-        std::fs::create_dir_all(&snapshot_dir).expect("create snapshot bucket");
-        std::fs::write(
-            snapshot_dir.join("execution-snapshot-2026.md"),
-            "# 执行快照\n\n命令已脱敏：/private/tmp 应不可见。",
+        // 经 write_execution_snapshot 写入真实快照根，得到合法的 recorded
+        // 路径——resolve_execution_snapshot 只收录快照根内的文件（根外
+        // 记录路径被 snapshot_path_outside_root 拒绝，见相邻测试）。
+        let snapshot_path = write_execution_snapshot(
+            &execution_snapshot_root().expect("snapshot root"),
+            "/Users/secret/project/bin/Release/publish",
+            snapshot_payload(),
         )
-        .expect("write snapshot");
-        // execution_snapshot_root 读取固定主目录，这里直接注入 resolve 的结果文件：
-        // 通过 record.snapshot_path 指向该文件即可命中 resolve_execution_snapshot 的
-        // recorded 分支，无需改写 home 目录。
-        let snapshot_path = snapshot_dir.join("execution-snapshot-2026.md");
+        .expect("write execution snapshot");
 
         let record = json!({
             "provider_id": "dotnet",
@@ -639,7 +653,7 @@ mod tests {
         );
 
         let snapshot = read("snapshot.md");
-        assert!(snapshot.contains("执行快照"));
+        assert!(snapshot.contains("Execution Snapshot"));
     }
 
     #[test]
@@ -967,7 +981,10 @@ mod tests {
         let temp = tempfile::tempdir().expect("temp dir");
         let root = temp.path().join("execution-snapshots");
         let output_dir = temp.path().join("out").to_string_lossy().to_string();
-        let recorded = temp.path().join("recorded.md");
+        std::fs::create_dir_all(&root).expect("snapshot root");
+        // 记录的快照路径必须位于快照根之内——此前的 fixture 把 recorded
+        // 放在根外，正是被修复的任意文件读漏洞形态。
+        let recorded = root.join("recorded.md");
         std::fs::write(&recorded, "# recorded").expect("recorded snapshot");
         let latest = write_execution_snapshot(&root, &output_dir, snapshot_payload())
             .expect("bucket snapshot");
@@ -979,7 +996,7 @@ mod tests {
                 Some(output_dir.clone()),
             )
             .expect("recorded path"),
-            recorded
+            std::fs::canonicalize(&recorded).expect("canonical recorded path")
         );
         assert_eq!(
             resolve_execution_snapshot(
@@ -1011,6 +1028,29 @@ mod tests {
             error_code(None).as_deref(),
             Some("snapshot_and_output_dir_missing")
         );
+    }
+
+    /// snapshot_path 由前端传入的历史记录携带——根外路径（含 `..` 段与
+    /// 符号链接）不得被读入交接包或被 open::that 打开。
+    #[test]
+    fn resolve_snapshot_rejects_recorded_paths_outside_the_snapshot_root() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let root = temp.path().join("execution-snapshots");
+        std::fs::create_dir_all(&root).expect("snapshot root");
+        let outside = temp.path().join("secret-material.md");
+        std::fs::write(&outside, "private").expect("outside file");
+
+        for hostile in [
+            outside.to_string_lossy().to_string(),
+            root.join("..")
+                .join("secret-material.md")
+                .to_string_lossy()
+                .to_string(),
+        ] {
+            let error = resolve_execution_snapshot(&root, Some(hostile), None)
+                .expect_err("outside-root path must be rejected");
+            assert_eq!(error.code.as_deref(), Some("snapshot_path_outside_root"));
+        }
     }
 
     #[test]

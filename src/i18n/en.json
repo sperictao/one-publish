@@ -993,6 +993,8 @@
     "snapshot_output_dir_missing": "The record has no output directory.",
     "snapshot_not_found_for_output_dir": "No execution snapshot was found for this output directory.",
     "snapshot_file_not_found": "The execution snapshot file doesn't exist.",
+    "snapshot_path_outside_root": "The recorded snapshot path is outside the snapshot directory.",
+    "snapshot_path_resolve_failed": "Couldn't resolve the recorded snapshot path.",
     "snapshot_path_missing": "The record has no snapshot path.",
     "snapshot_and_output_dir_missing": "The record has neither a snapshot path nor an output directory.",
     "directory_path_empty": "The directory path is empty.",
