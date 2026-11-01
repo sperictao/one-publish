@@ -77,17 +77,18 @@ pub(crate) fn default_output(
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
     };
-    let goos = parameter(GO_OS_PARAMETER);
+    // GOOS/GOARCH 与模块名都参与 `-o` 输出文件名的拼接——参数与 go.mod
+    // 都是用户/仓库内容，分隔符或 `..` 会把默认输出写到 dist/ 之外。
+    // 文件名侧只按真实取值形状收口；非法 GOOS/GOARCH 仍随 env 传给
+    // go，由工具链自己报错。
+    let goos = parameter(GO_OS_PARAMETER).filter(|v| is_go_target_component(v));
+    let goarch = parameter(GO_ARCH_PARAMETER).filter(|v| is_go_target_component(v));
     let name = module_binary_name(module_dir)?;
-    let mut file_name = [
-        Some(name.clone()),
-        goos.clone(),
-        parameter(GO_ARCH_PARAMETER),
-    ]
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>()
-    .join("-");
+    let mut file_name = [Some(name.clone()), goos.clone(), goarch]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("-");
     if goos.map_or(cfg!(windows), |os| os.eq_ignore_ascii_case("windows")) {
         file_name.push_str(".exe");
     }
@@ -124,7 +125,19 @@ fn module_binary_name(module_dir: &Path) -> Option<String> {
                 .file_name()
                 .map(|name| name.to_string_lossy().to_string())
         })
-        .filter(|name| !name.is_empty() && name != "." && name != "..")
+        // 模块名进入 `-o` 文件名：分隔符（Windows 下的 `\`）或 `..` 不能过。
+        .filter(|name| {
+            !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\'])
+        })
+}
+
+/// GOOS/GOARCH 的真实取值全是小写 `[a-z0-9_]`（linux/amd64/wasip1…）；
+/// 该形状同时保证文件名片段不含分隔符、`.`、`..`。
+fn is_go_target_component(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
 fn module_directive_path(line: &str) -> Option<&str> {
@@ -210,6 +223,24 @@ mod tests {
         );
     }
 
+    /// GOOS/GOARCH 是自由文本 schema 参数，但会拼进 `-o` 文件名——
+    /// 分隔符/`..` 形态的取值必须被文件名侧丢弃（env 侧由 go 报错）。
+    #[test]
+    fn hostile_target_parameters_stay_out_of_the_output_path() {
+        let module = tempfile::tempdir().expect("create module");
+        std::fs::write(module.path().join("go.mod"), "module example.com/app\n")
+            .expect("write go.mod");
+        for hostile in ["../escape", "a/b", "x\\y", "linux;rm", "x y"] {
+            let path = output_path(module.path(), &[("arch", hostile)], "/publish");
+            let file = path.file_name().unwrap().to_string_lossy().to_string();
+            assert_eq!(file, "app", "hostile arch {hostile:?} leaked into {path:?}");
+            assert!(
+                path.starts_with(Path::new("/publish").join("app")),
+                "{hostile:?} escaped the output root: {path:?}"
+            );
+        }
+    }
+
     #[test]
     fn module_name_follows_go_build_naming_with_directory_fallback() {
         let module = tempfile::tempdir().expect("create module");
@@ -218,6 +249,11 @@ mod tests {
 
         // go.mod 缺失：退回目录名。
         assert_eq!(module_binary_name(&module_dir).as_deref(), Some("svc"));
+
+        // 分隔符形态的模块名被整体拒绝（不得进 `-o` 文件名）。
+        std::fs::write(module_dir.join("go.mod"), "module example.com/app\\bad\n")
+            .expect("write go.mod");
+        assert_eq!(module_binary_name(&module_dir), None);
 
         for (module_path, expected) in [
             ("example.com/app", "app"),
