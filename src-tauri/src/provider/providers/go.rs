@@ -106,19 +106,22 @@ pub(crate) fn default_output(
 /// 与 `go build` 的缺省命名一致：模块路径的最后一个非主版本段
 /// （`example.com/app/v2` → `app`）；go.mod 不可读时退回模块目录名。
 fn module_binary_name(module_dir: &Path) -> Option<String> {
-    let declared = std::fs::read_to_string(module_dir.join("go.mod"))
-        .ok()
-        .and_then(|go_mod| {
-            let module_path = go_mod.lines().find_map(module_directive_path)?;
-            let mut segments = module_path.rsplit('/');
-            let last = segments.next()?;
-            let name = if is_major_version_suffix(last) {
-                segments.next().unwrap_or(last)
-            } else {
-                last
-            };
-            Some(name.to_string())
-        });
+    let declared = crate::security::read_text_file_bounded(
+        &module_dir.join("go.mod"),
+        crate::security::MAX_REPO_FILE_BYTES,
+    )
+    .ok()
+    .and_then(|go_mod| {
+        let module_path = go_mod.lines().find_map(module_directive_path)?;
+        let mut segments = module_path.rsplit('/');
+        let last = segments.next()?;
+        let name = if is_major_version_suffix(last) {
+            segments.next().unwrap_or(last)
+        } else {
+            last
+        };
+        Some(name.to_string())
+    });
     declared
         .or_else(|| {
             module_dir

@@ -545,11 +545,10 @@ pub(crate) fn write_private_binary_file(path: &Path, bytes: &[u8]) -> io::Result
 /// 32MB 保留充足余量同时阻断病态 GB 级文件的整体载入。
 pub(crate) const MAX_REPO_FILE_BYTES: u64 = 32 * 1024 * 1024;
 
-/// 有界文本读取：文件对话框/仓库/`.git` 路径指向的文件可能异常巨大，
-/// 无界 `read_to_string` 会把整个文件载入内存直到 OOM。`take` 至多读取
-/// `max_bytes + 1` 字节（竞态安全：文件在读取期间增长也不越过上限），
-/// 超限返回 InvalidData；大小检查先于 UTF-8 解码，超限文件报大小而非编码。
-pub(crate) fn read_text_file_bounded(path: &Path, max_bytes: u64) -> io::Result<String> {
+/// 有界字节读取：持久化/仓库路径指向的文件可能异常巨大，无界 `fs::read`
+/// 会把整个文件载入内存直到 OOM。`take` 至多读取 `max_bytes + 1` 字节
+/// （竞态安全：文件在读取期间增长也不越过上限），超限返回 InvalidData。
+pub(crate) fn read_file_bounded(path: &Path, max_bytes: u64) -> io::Result<Vec<u8>> {
     use std::io::Read;
     let file = File::open(path)?;
     let mut limited = file.take(max_bytes.saturating_add(1));
@@ -561,6 +560,14 @@ pub(crate) fn read_text_file_bounded(path: &Path, max_bytes: u64) -> io::Result<
             format!("file exceeds the {max_bytes} byte limit"),
         ));
     }
+    Ok(bytes)
+}
+
+/// 有界文本读取：文件对话框/仓库/`.git` 路径指向的文件可能异常巨大，
+/// 无界 `read_to_string` 会把整个文件载入内存直到 OOM。大小检查先于
+/// UTF-8 解码，超限文件报大小而非编码。
+pub(crate) fn read_text_file_bounded(path: &Path, max_bytes: u64) -> io::Result<String> {
+    let bytes = read_file_bounded(path, max_bytes)?;
     String::from_utf8(bytes).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
 }
 

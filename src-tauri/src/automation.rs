@@ -942,7 +942,11 @@ fn read_repository_files(
         if !absolute.is_file() {
             continue;
         }
-        let content = std::fs::read_to_string(&absolute).map_err(|error| {
+        let content = crate::security::read_text_file_bounded(
+            &absolute,
+            crate::security::MAX_REPO_FILE_BYTES,
+        )
+        .map_err(|error| {
             AppError::repository_with_code(
                 format!("无法读取自动化投影文件 {relative}: {error}"),
                 "automation_repository_file_unreadable",
@@ -1260,12 +1264,14 @@ fn discover_initial_takeover_conflicts(
         if expected_paths.contains(&relative) {
             continue;
         }
-        let content = std::fs::read_to_string(&path).map_err(|error| {
-            AppError::repository_with_code(
-                format!("无法读取 workflow {relative}: {error}"),
-                "automation_workflow_read_failed",
-            )
-        })?;
+        let content =
+            crate::security::read_text_file_bounded(&path, crate::security::MAX_REPO_FILE_BYTES)
+                .map_err(|error| {
+                    AppError::repository_with_code(
+                        format!("无法读取 workflow {relative}: {error}"),
+                        "automation_workflow_read_failed",
+                    )
+                })?;
         let inspection = inspect_workflow(&content).map_err(|error| {
             AppError::validation_with_code(
                 format!("无法解析 workflow {relative}: {error}"),
@@ -1373,7 +1379,11 @@ pub(crate) fn preview_change(
         }
     }
     for path in conflicts.keys() {
-        let content = std::fs::read_to_string(repo_root.join(path)).map_err(|error| {
+        let content = crate::security::read_text_file_bounded(
+            &repo_root.join(path),
+            crate::security::MAX_REPO_FILE_BYTES,
+        )
+        .map_err(|error| {
             AppError::repository_with_code(
                 format!("无法读取冲突 workflow {path}: {error}"),
                 "automation_workflow_read_failed",

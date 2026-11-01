@@ -406,7 +406,7 @@ impl RemoteEvidenceArchive {
         if !path.is_file() {
             return Ok(None);
         }
-        let bytes = std::fs::read(path)
+        let bytes = crate::security::read_file_bounded(path, crate::security::MAX_REPO_FILE_BYTES)
             .map_err(|error| remote_error(format!("无法读取归档 {}: {error}", path.display())))?;
         serde_json::from_slice(&bytes)
             .map(Some)
