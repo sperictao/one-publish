@@ -14,7 +14,6 @@ import type {
   Repository as TauriRepository,
   RepositoryBranchScanResult,
   RepoPublishConfig as TauriRepoPublishConfig,
-  ShortcutHelp,
   UpdaterConfigHealth,
   UpdaterHelpPaths,
 } from "@/generated/tauri-contracts";
@@ -24,7 +23,6 @@ export type {
   ProviderProjectPathKind,
   ProjectInfo,
   RepositoryBranchScanResult,
-  ShortcutHelp,
   UpdaterConfigHealth,
   UpdaterHelpPaths,
 };

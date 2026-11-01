@@ -173,7 +173,6 @@ describe("invoke command boundary", () => {
       [{ target: "docs" }],
     ],
     ["get_current_version", () => api.getCurrentVersion(), [undefined]],
-    ["get_shortcuts_help", () => api.getShortcutsHelp(), [undefined]],
     [
       "save_profile",
       () =>

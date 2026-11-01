@@ -44,7 +44,7 @@ pub(crate) use repository::{
 };
 pub(crate) use updater::PendingUpdateState;
 pub use updater::{
-    check_update, get_current_version, get_shortcuts_help, get_updater_config_health,
-    get_updater_help_paths, install_update, open_updater_help, UpdateDownloadProgressPayload,
-    UpdateInfo, UpdaterConfigHealth, UpdaterHelpPaths,
+    check_update, get_current_version, get_updater_config_health, get_updater_help_paths,
+    install_update, open_updater_help, UpdateDownloadProgressPayload, UpdateInfo,
+    UpdaterConfigHealth, UpdaterHelpPaths,
 };

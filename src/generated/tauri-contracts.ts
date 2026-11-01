@@ -314,8 +314,6 @@ templates: Array<ProviderTemplateSummary>, };
 
 export type ProviderProjectPathKind = "repository_root" | "project_file";
 
-export type ShortcutHelp = { key: string, description: string, };
-
 export type PublishSpec = { version: number, provider_id: string, project_path: string, parameters: { [key in string]: SpecValue }, };
 
 export type SpecValue = null | boolean | number | string | Array<SpecValue> | { [key in string]: SpecValue };

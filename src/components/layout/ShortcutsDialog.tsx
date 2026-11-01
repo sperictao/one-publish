@@ -1,10 +1,7 @@
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Dialog } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Keyboard } from "lucide-react";
-import { useEffect, useState } from "react";
-import { getShortcutsHelp } from "@/lib/store/api";
-import type { ShortcutHelp } from "@/lib/store/types";
+import { isMacPlatform } from "@/lib/platform";
 import { useI18n } from "@/hooks/useI18n";
 
 interface ShortcutsDialogProps {
@@ -13,15 +10,14 @@ interface ShortcutsDialogProps {
 }
 
 export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
-  const [shortcuts, setShortcuts] = useState<ShortcutHelp[]>([]);
   const { translations } = useI18n();
   const shortcutT = translations.shortcuts || {};
-
-  useEffect(() => {
-    if (open) {
-      getShortcutsHelp().then(setShortcuts).catch(console.error);
-    }
-  }, [open]);
+  const modifier = isMacPlatform() ? "⌘" : "Ctrl";
+  const shortcuts = [
+    { key: `${modifier} R`, description: shortcutT.refresh || "刷新项目" },
+    { key: `${modifier} P`, description: shortcutT.publish || "执行发布" },
+    { key: `${modifier} ,`, description: shortcutT.settings || "打开设置" },
+  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -44,12 +40,6 @@ export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
               </kbd>
             </div>
           ))}
-          {shortcuts.length === 0 && (
-            <EmptyState
-              icon={Keyboard}
-              title={shortcutT.empty || "暂无快捷键"}
-            />
-          )}
         </div>
       </AppDialogShell>
     </Dialog>

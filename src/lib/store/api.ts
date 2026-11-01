@@ -39,7 +39,6 @@ import type {
   RepositoryBranchConnectivityResult,
   RepositoryBranchScanResult,
   RepositoryProviderDetection,
-  ShortcutHelp,
   TauriReleaseConfig,
   UpdateInfo as TauriUpdateInfo,
   UpdaterConfigHealth,
@@ -295,10 +294,6 @@ export async function openUpdaterHelp(
 
 export async function getCurrentVersion(): Promise<string> {
   return await invoke<string>("get_current_version");
-}
-
-export async function getShortcutsHelp(): Promise<ShortcutHelp[]> {
-  return await invoke<ShortcutHelp[]>("get_shortcuts_help");
 }
 
 export async function getProfiles(repoId: string): Promise<ConfigProfile[]> {
