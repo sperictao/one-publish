@@ -24,11 +24,15 @@ function ensure(condition, message) {
   }
 }
 
+// 子进程统一上限：挂死的 cargo/node 调用不得无限阻塞测试脚本。
+const subprocessTimeoutMs = 20 * 60 * 1000;
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: rootDir,
     encoding: "utf8",
     stdio: "pipe",
+    timeout: subprocessTimeoutMs,
     ...options,
   });
 
@@ -52,6 +56,7 @@ function runExpectFailure(command, args, options = {}) {
     cwd: rootDir,
     encoding: "utf8",
     stdio: "pipe",
+    timeout: subprocessTimeoutMs,
     ...options,
   });
 

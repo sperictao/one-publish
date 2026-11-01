@@ -31,6 +31,8 @@ const gitHubRequestRetryBaseDelayMs = 2 * 1000;
 const maxFailureAnnotations = 5;
 const maxFailureLogLines = 80;
 const maxFailureLogChars = 4000;
+// git/gh 子进程统一上限：网络停顿或凭证提示时发布脚本不得无限挂起。
+const subprocessTimeoutMs = 5 * 60 * 1000;
 
 function fail(message) {
   console.error(`❌ ${message}`);
@@ -38,16 +40,17 @@ function fail(message) {
 }
 
 function runOptional(command, args, options = {}) {
-  const { stdio = "pipe", env } = options;
+  const { stdio = "pipe", env, timeout = subprocessTimeoutMs } = options;
   const result = spawnSync(command, args, {
     cwd: rootDir,
     encoding: "utf8",
     stdio,
     env: env ?? process.env,
+    timeout,
   });
 
   return {
-    status: result.status ?? (result.error ? 1 : 0),
+    status: result.status ?? (result.error || result.signal ? 1 : 0),
     stdout: typeof result.stdout === "string" ? result.stdout.trim() : "",
     stderr: typeof result.stderr === "string" ? result.stderr.trim() : "",
     error: result.error ?? null,
@@ -63,7 +66,9 @@ function run(command, args, options = {}) {
   }
 
   if (result.status !== 0 && !allowFailure) {
-    const details = result.stderr || result.stdout || `退出码 ${result.status}`;
+    const details = result.signal
+      ? `被信号 ${result.signal} 终止（可能超时）`
+      : result.stderr || result.stdout || `退出码 ${result.status}`;
     fail(`执行 ${command} ${args.join(" ")} 失败：${details}`);
   }
 
