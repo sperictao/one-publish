@@ -1225,13 +1225,29 @@ fn run_release_gate(
         )));
     }
 
-    let output = background_command(&gate.program)
+    const RELEASE_GATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+    let child = background_command(&gate.program)
         .args(&gate.args)
         .current_dir(repository_root)
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|error| {
             PublishError::Execution(format!(
                 "failed to start release gate '{}': {error}",
+                gate.program
+            ))
+        })?;
+    let output = crate::process_tree::wait_piped_with_timeout(child, None, RELEASE_GATE_TIMEOUT)
+        .map_err(|error| {
+            PublishError::Execution(format!(
+                "failed to run release gate '{}': {error}",
+                gate.program
+            ))
+        })?
+        .ok_or_else(|| {
+            PublishError::Execution(format!(
+                "release gate '{}' did not finish within {RELEASE_GATE_TIMEOUT:?}",
                 gate.program
             ))
         })?;

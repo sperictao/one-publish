@@ -1315,6 +1315,10 @@ pub fn classify_github_failure(failure: &GitHubApiFailure) -> PublishFailure {
 /// 保守等待秒数。
 const DEFAULT_RATE_LIMIT_RETRY_SECONDS: u64 = 60;
 const GH_PROGRAM: &str = "gh";
+/// `gh api` 元数据调用的总界：网络半开/服务停滞不能让 runner job 无限
+/// 等待 CI 级别超时；上传资产体积可达 GB 级，给独立宽松界。
+const GH_METADATA_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+const GH_UPLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
 /// 通过 `gh` CLI 访问真实 GitHub Release API 的生产端口：本机与 GitHub Actions
 /// 后端共用同一 Destination 语义，只有传输不同。凭据以 GH_TOKEN 传入子进程
@@ -1332,7 +1336,6 @@ impl GhCliGitHubReleaseApi {
         args: &[&str],
         stdin: Option<&[u8]>,
     ) -> Result<String, GitHubApiFailure> {
-        use std::io::Write;
         use std::process::Stdio;
 
         let mut command = std::process::Command::new(GH_PROGRAM);
@@ -1346,20 +1349,22 @@ impl GhCliGitHubReleaseApi {
             })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut child = command.spawn().map_err(|error| GitHubApiFailure::Network {
+        let child = command.spawn().map_err(|error| GitHubApiFailure::Network {
             message: format!("failed to start {GH_PROGRAM}: {error}"),
         })?;
-        if let (Some(bytes), Some(mut pipe)) = (stdin, child.stdin.take()) {
-            pipe.write_all(bytes)
+        let timeout = if stdin.is_some() {
+            GH_UPLOAD_TIMEOUT
+        } else {
+            GH_METADATA_TIMEOUT
+        };
+        let output =
+            crate::process_tree::wait_piped_with_timeout(child, stdin.map(<[u8]>::to_vec), timeout)
                 .map_err(|error| GitHubApiFailure::Network {
-                    message: format!("failed to stream the asset to {GH_PROGRAM}: {error}"),
+                    message: format!("failed to run {GH_PROGRAM}: {error}"),
+                })?
+                .ok_or_else(|| GitHubApiFailure::Network {
+                    message: format!("{GH_PROGRAM} did not finish within {timeout:?}"),
                 })?;
-        }
-        let output = child
-            .wait_with_output()
-            .map_err(|error| GitHubApiFailure::Network {
-                message: format!("failed to run {GH_PROGRAM}: {error}"),
-            })?;
         if output.status.success() {
             return Ok(String::from_utf8_lossy(&output.stdout).to_string());
         }
