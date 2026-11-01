@@ -45,6 +45,25 @@ fn portable_path_rejects_empty_and_dot_components() {
 }
 
 #[test]
+fn portable_path_rejects_control_characters() {
+    // Unix 文件名可含换行——含 \n 的 file_name 会把伪造行注入 SHA256SUMS、
+    // sftp batch 与 workflow YAML 等按行消费面。
+    for path in [
+        "a\nb",
+        "evil\ndigest  forged.bin",
+        "a\rb",
+        "a\tb",
+        "a\u{7f}b",
+        "a\u{85}b",
+    ] {
+        assert!(
+            !is_safe_portable_relative_path(path),
+            "expected rejected: {path:?}"
+        );
+    }
+}
+
+#[test]
 fn portable_path_accepts_dotfile_components() {
     // ".hidden" 不是 "." 组件——点号文件属合法相对路径。
     assert!(is_safe_portable_relative_path(".hidden"));

@@ -1243,6 +1243,9 @@ pub fn is_safe_portable_relative_path(path: &str) -> bool {
         && !path.starts_with('/')
         && !path.ends_with('/')
         && !path.contains(['\\', '\0', ':'])
+        // 控制字符（\n、\r、DEL 等）会把单个条目渲染成多行——SHA256SUMS、
+        // batch 文件与 YAML 列表等按行消费的下游面由此可被注入伪造行。
+        && !path.chars().any(char::is_control)
         && path
             .split('/')
             .all(|component| !component.is_empty() && component != "." && component != "..")
