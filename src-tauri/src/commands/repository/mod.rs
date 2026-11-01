@@ -133,7 +133,11 @@ pub async fn read_project_publish_profile(
     tokio::task::spawn_blocking(move || {
         let profile_path =
             resolve_publish_profile_path(&project_file_path, &profile_name_for_task)?;
-        let content = std::fs::read_to_string(&profile_path).map_err(|error| {
+        let content = crate::security::read_text_file_bounded(
+            &profile_path,
+            crate::security::MAX_REPO_FILE_BYTES,
+        )
+        .map_err(|error| {
             repository_error(
                 "failed to read publish profile",
                 classify_repository_path_error(error.kind()),

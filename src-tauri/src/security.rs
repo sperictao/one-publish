@@ -541,14 +541,74 @@ pub(crate) fn write_private_binary_file(path: &Path, bytes: &[u8]) -> io::Result
     harden_private_path(path)
 }
 
+/// 仓库/项目元数据文件的上限：`.sln`、`packed-refs` 等在巨型仓库可达数 MB，
+/// 32MB 保留充足余量同时阻断病态 GB 级文件的整体载入。
+pub(crate) const MAX_REPO_FILE_BYTES: u64 = 32 * 1024 * 1024;
+
+/// 有界文本读取：文件对话框/仓库/`.git` 路径指向的文件可能异常巨大，
+/// 无界 `read_to_string` 会把整个文件载入内存直到 OOM。`take` 至多读取
+/// `max_bytes + 1` 字节（竞态安全：文件在读取期间增长也不越过上限），
+/// 超限返回 InvalidData；大小检查先于 UTF-8 解码，超限文件报大小而非编码。
+pub(crate) fn read_text_file_bounded(path: &Path, max_bytes: u64) -> io::Result<String> {
+    use std::io::Read;
+    let file = File::open(path)?;
+    let mut limited = file.take(max_bytes.saturating_add(1));
+    let mut bytes = Vec::new();
+    limited.read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("file exceeds the {max_bytes} byte limit"),
+        ));
+    }
+    String::from_utf8(bytes).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        is_path_like_key, is_sensitive_key, sanitize_evidence_json_map, sanitize_export_value,
-        sanitize_freeform_text, sanitize_secrets_in_text,
+        is_path_like_key, is_sensitive_key, read_text_file_bounded, sanitize_evidence_json_map,
+        sanitize_export_value, sanitize_freeform_text, sanitize_secrets_in_text,
     };
     use serde_json::json;
     use std::collections::BTreeMap;
+
+    #[test]
+    fn bounded_read_returns_small_files_verbatim() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("small.txt");
+        std::fs::write(&path, "hello bounded read").expect("write");
+        assert_eq!(
+            read_text_file_bounded(&path, 1024).expect("read"),
+            "hello bounded read"
+        );
+    }
+
+    #[test]
+    fn bounded_read_accepts_file_at_exact_limit() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("exact.txt");
+        std::fs::write(&path, "x".repeat(64)).expect("write");
+        assert_eq!(read_text_file_bounded(&path, 64).expect("read").len(), 64);
+    }
+
+    #[test]
+    fn bounded_read_rejects_oversized_file_with_invalid_data() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("big.txt");
+        std::fs::write(&path, "x".repeat(128)).expect("write");
+        let error = read_text_file_bounded(&path, 64).expect_err("must reject");
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn bounded_read_rejects_invalid_utf8() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("binary.bin");
+        std::fs::write(&path, [0xff, 0xfe, 0xfd]).expect("write");
+        let error = read_text_file_bounded(&path, 1024).expect_err("must reject");
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
 
     #[test]
     fn sensitive_key_matches_secret_value_names_across_casing() {

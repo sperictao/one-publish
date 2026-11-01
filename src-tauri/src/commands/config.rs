@@ -87,11 +87,19 @@ pub async fn export_config(
     Ok(file_path.to_string_lossy().into_owned())
 }
 
+/// 配置导入文件上限：导出产物是 KB 级 JSON；文件对话框可能选中任意文件，
+/// 有界读取把"选错超大文件"降级为可读错误而非 OOM。
+const MAX_IMPORT_CONFIG_BYTES: u64 = 10 * 1024 * 1024;
+
 /// 导入配置从文件
 #[tauri::command]
 pub async fn import_config(file_path: String) -> Result<ConfigExport, crate::errors::AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("commands::config::import_config");
-    let content = std::fs::read_to_string(&file_path).map_err(|source| {
+    let content = crate::security::read_text_file_bounded(
+        std::path::Path::new(&file_path),
+        MAX_IMPORT_CONFIG_BYTES,
+    )
+    .map_err(|source| {
         crate::errors::AppError::config_with_code("read error", "import_config_read_failed")
             .with_details(source.to_string())
     })?;
