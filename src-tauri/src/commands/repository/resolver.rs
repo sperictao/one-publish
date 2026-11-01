@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::*;
 
@@ -17,7 +17,11 @@ pub async fn scan_project_candidates(
                 .with_details(error.to_string())
         })?,
     };
-    scan_provider_project_candidates_from_path(&search_path, provider_id.as_deref())
+    tokio::task::spawn_blocking(move || {
+        scan_provider_project_candidates_from_path(&search_path, provider_id.as_deref())
+    })
+    .await
+    .map_err(repository_join_error)?
 }
 
 #[tauri::command]
@@ -35,12 +39,23 @@ pub async fn resolve_project_info(
         );
     }
 
+    tokio::task::spawn_blocking(move || {
+        resolve_project_info_sync(&project_file, &project_file_path)
+    })
+    .await
+    .map_err(repository_join_error)?
+}
+
+fn resolve_project_info_sync(
+    project_file: &str,
+    project_file_path: &Path,
+) -> Result<ProjectInfo, crate::errors::AppError> {
     let registry = crate::provider::registry::provider_registry();
     let Some(discovery) = registry.repository_discoveries().find(|discovery| {
         discovery
             .project_file_matchers
             .iter()
-            .any(|matcher| super::matches_project_file(&project_file_path, matcher))
+            .any(|matcher| super::matches_project_file(project_file_path, matcher))
     }) else {
         return Err(
             repository_error("unsupported project file", "project_file_not_found")
@@ -71,7 +86,7 @@ pub async fn resolve_project_info(
                     .then(|| parent.parent())
                     .flatten()
             })
-            .unwrap_or_else(|| project_file_path.parent().unwrap_or(&project_file_path));
+            .unwrap_or_else(|| project_file_path.parent().unwrap_or(project_file_path));
         return Ok(ProjectInfo {
             root_path: root.to_string_lossy().to_string(),
             project_file: project_file_path.to_string_lossy().to_string(),
@@ -80,14 +95,14 @@ pub async fn resolve_project_info(
         });
     }
 
-    let publish_profiles = scan_publish_profiles(&project_file_path);
+    let publish_profiles = scan_publish_profiles(project_file_path);
     let target_frameworks = if capabilities.framework_tags.is_empty() {
         Vec::new()
     } else {
-        read_target_frameworks(&project_file_path, &capabilities.framework_tags)?
+        read_target_frameworks(project_file_path, &capabilities.framework_tags)?
     };
     let root_path =
-        resolve_project_root_for_file(&project_file_path, &discovery.solution_file_extensions);
+        resolve_project_root_for_file(project_file_path, &discovery.solution_file_extensions);
 
     Ok(ProjectInfo {
         root_path: root_path.to_string_lossy().to_string(),
