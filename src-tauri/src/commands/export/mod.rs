@@ -331,7 +331,9 @@ pub async fn export_handoff_bundle(
             .map(str::to_string),
     )
     .ok()
-    .and_then(|path| std::fs::read_to_string(path).ok());
+    .and_then(|path| {
+        crate::security::read_text_file_bounded(&path, crate::security::MAX_REPO_FILE_BYTES).ok()
+    });
 
     crate::security::sanitize_export_value(&mut record);
     let mut failure_bundle = failure_bundle;

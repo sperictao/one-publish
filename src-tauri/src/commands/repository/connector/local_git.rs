@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::store::Branch;
@@ -13,7 +12,7 @@ struct GitLayout {
 }
 
 fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path)
+    crate::security::read_text_file_bounded(path, crate::security::MAX_REPO_FILE_BYTES)
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
@@ -33,7 +32,9 @@ fn resolve_git_layout(repository_root: &Path) -> Option<GitLayout> {
     let git_dir = if dot_git.is_dir() {
         dot_git
     } else if dot_git.is_file() {
-        let pointer = fs::read_to_string(&dot_git).ok()?;
+        let pointer =
+            crate::security::read_text_file_bounded(&dot_git, crate::security::MAX_REPO_FILE_BYTES)
+                .ok()?;
         let raw_git_dir = pointer
             .lines()
             .find_map(|line| line.trim().strip_prefix("gitdir:"))?
@@ -96,7 +97,10 @@ fn collect_loose_branches(common_dir: &Path, branches: &mut BTreeSet<String>) {
 }
 
 fn collect_packed_branches(common_dir: &Path, branches: &mut BTreeSet<String>) {
-    let Ok(content) = fs::read_to_string(common_dir.join("packed-refs")) else {
+    let Ok(content) = crate::security::read_text_file_bounded(
+        &common_dir.join("packed-refs"),
+        crate::security::MAX_REPO_FILE_BYTES,
+    ) else {
         return;
     };
 
@@ -251,7 +255,10 @@ pub(super) fn branch_connectivity(repository_root: &Path, requested_branch: Opti
         return false;
     };
 
-    let Ok(config) = fs::read_to_string(layout.common_dir.join("config")) else {
+    let Ok(config) = crate::security::read_text_file_bounded(
+        &layout.common_dir.join("config"),
+        crate::security::MAX_REPO_FILE_BYTES,
+    ) else {
         return false;
     };
 
@@ -276,6 +283,7 @@ pub(super) fn branch_connectivity(repository_root: &Path, requested_branch: Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::TempDir;
 
     fn write(path: impl AsRef<Path>, content: &str) {

@@ -78,7 +78,10 @@ fn path_from_visual_studio_relative(base_dir: &Path, raw_path: &str) -> PathBuf 
 }
 
 fn parse_solution_project_paths(solution_file: &Path) -> Vec<PathBuf> {
-    let Ok(content) = std::fs::read_to_string(solution_file) else {
+    let Ok(content) = crate::security::read_text_file_bounded(
+        solution_file,
+        crate::security::MAX_REPO_FILE_BYTES,
+    ) else {
         return Vec::new();
     };
     let solution_dir = solution_file.parent().unwrap_or_else(|| Path::new(""));
@@ -150,7 +153,9 @@ fn collect_start_project_paths_from_launch_value(value: &Value, project_paths: &
 }
 
 fn start_project_paths_from_launch_file(launch_file: &Path) -> Vec<PathBuf> {
-    let Ok(content) = std::fs::read_to_string(launch_file) else {
+    let Ok(content) =
+        crate::security::read_text_file_bounded(launch_file, crate::security::MAX_REPO_FILE_BYTES)
+    else {
         return Vec::new();
     };
     let Ok(value) = serde_json::from_str::<Value>(&content) else {
@@ -713,13 +718,19 @@ pub fn read_target_frameworks(
     project_file: &Path,
     framework_tags: &[String],
 ) -> Result<Vec<String>, crate::errors::AppError> {
-    let content = std::fs::read_to_string(project_file).map_err(|error| {
-        repository_error(
-            "failed to read project file",
-            classify_repository_path_error(error.kind()),
-        )
-        .with_details(format!("{}: {}", project_file.to_string_lossy(), error))
-    })?;
+    let content =
+        crate::security::read_text_file_bounded(project_file, crate::security::MAX_REPO_FILE_BYTES)
+            .map_err(|error| {
+                repository_error(
+                    "failed to read project file",
+                    classify_repository_path_error(error.kind()),
+                )
+                .with_details(format!(
+                    "{}: {}",
+                    project_file.to_string_lossy(),
+                    error
+                ))
+            })?;
 
     Ok(extract_target_frameworks_from_project_xml(
         &content,
