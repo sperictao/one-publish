@@ -123,10 +123,14 @@ pub fn setup_traffic_light_positioner<R: Runtime>(window: Window<R>) {
     use objc::runtime::{Object, Sel};
     use std::ffi::c_void;
 
+    // 本地 patch：ns_window() 失败时跳过定位挂载而非 panic——窗口句柄缺失
+    // 属于可降级状态，崩溃反而让应用无法启动。
+    let Ok(initial_ns) = window.ns_window() else {
+        return;
+    };
+
     // Do the initial positioning
-    position_traffic_lights_with_saved_inset(UnsafeWindowHandle(
-        window.ns_window().expect("Failed to create window handle"),
-    ));
+    position_traffic_lights_with_saved_inset(UnsafeWindowHandle(initial_ns));
 
     // Ensure they stay in place while resizing the window.
     fn with_window_state<R: Runtime, F: FnOnce(&mut WindowState<R>) -> T, T>(
@@ -141,10 +145,10 @@ pub fn setup_traffic_light_positioner<R: Runtime>(window: Window<R>) {
     }
 
     unsafe {
-        let ns_win = window
-            .ns_window()
-            .expect("NS Window should exist to mount traffic light delegate.")
-            as id;
+        let Ok(ns_win_raw) = window.ns_window() else {
+            return;
+        };
+        let ns_win = ns_win_raw as id;
 
         let current_delegate: id = ns_win.delegate();
 
@@ -168,16 +172,14 @@ pub fn setup_traffic_light_positioner<R: Runtime>(window: Window<R>) {
         extern "C" fn on_window_did_resize<R: Runtime>(this: &Object, _cmd: Sel, notification: id) {
             unsafe {
                 with_window_state(&*this, |state: &mut WindowState<R>| {
-                    let id = state
-                        .window
-                        .ns_window()
-                        .expect("NS window should exist on state to handle resize")
-                        as id;
-
-                    #[cfg(target_os = "macos")]
-                    position_traffic_lights_with_saved_inset(UnsafeWindowHandle(
-                        id as *mut std::ffi::c_void,
-                    ));
+                    // 本地 patch：extern "C" 回调内不 panic（跨 FFI unwind 为 UB）——
+                    // ns_window 失败即跳过本次重定位。
+                    if let Ok(id) = state.window.ns_window() {
+                        #[cfg(target_os = "macos")]
+                        position_traffic_lights_with_saved_inset(UnsafeWindowHandle(
+                            id as *mut std::ffi::c_void,
+                        ));
+                    }
                 });
 
                 let super_del: id = *this.get_ivar("super_delegate");
@@ -264,10 +266,8 @@ pub fn setup_traffic_light_positioner<R: Runtime>(window: Window<R>) {
         ) {
             unsafe {
                 with_window_state(&*this, |state: &mut WindowState<R>| {
-                    state
-                        .window
-                        .emit("did-enter-fullscreen", ())
-                        .expect("Failed to emit event");
+                    // 本地 patch：回调内 emit 失败仅降级（teardown 竞态下无监听者）
+                    let _ = state.window.emit("did-enter-fullscreen", ());
                 });
 
                 let super_del: id = *this.get_ivar("super_delegate");
@@ -281,10 +281,8 @@ pub fn setup_traffic_light_positioner<R: Runtime>(window: Window<R>) {
         ) {
             unsafe {
                 with_window_state(&*this, |state: &mut WindowState<R>| {
-                    state
-                        .window
-                        .emit("will-enter-fullscreen", ())
-                        .expect("Failed to emit event");
+                    // 本地 patch：回调内 emit 失败仅降级（teardown 竞态下无监听者）
+                    let _ = state.window.emit("will-enter-fullscreen", ());
                 });
 
                 let super_del: id = *this.get_ivar("super_delegate");
@@ -298,15 +296,16 @@ pub fn setup_traffic_light_positioner<R: Runtime>(window: Window<R>) {
         ) {
             unsafe {
                 with_window_state(&*this, |state: &mut WindowState<R>| {
-                    state
-                        .window
-                        .emit("did-exit-fullscreen", ())
-                        .expect("Failed to emit event");
+                    // 本地 patch：回调内 emit 失败仅降级（teardown 竞态下无监听者）
+                    let _ = state.window.emit("did-exit-fullscreen", ());
 
-                    let id = state.window.ns_window().expect("Failed to emit event") as id;
-                    position_traffic_lights_with_saved_inset(UnsafeWindowHandle(
-                        id as *mut std::ffi::c_void,
-                    ));
+                    // 本地 patch：extern "C" 回调内不 panic——ns_window 失败
+                    // 即跳过本次重定位。
+                    if let Ok(id) = state.window.ns_window() {
+                        position_traffic_lights_with_saved_inset(UnsafeWindowHandle(
+                            id as *mut std::ffi::c_void,
+                        ));
+                    }
                 });
 
                 let super_del: id = *this.get_ivar("super_delegate");
@@ -320,10 +319,8 @@ pub fn setup_traffic_light_positioner<R: Runtime>(window: Window<R>) {
         ) {
             unsafe {
                 with_window_state(&*this, |state: &mut WindowState<R>| {
-                    state
-                        .window
-                        .emit("will-exit-fullscreen", ())
-                        .expect("Failed to emit event");
+                    // 本地 patch：回调内 emit 失败仅降级（teardown 竞态下无监听者）
+                    let _ = state.window.emit("will-exit-fullscreen", ());
                 });
 
                 let super_del: id = *this.get_ivar("super_delegate");

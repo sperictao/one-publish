@@ -61,6 +61,17 @@ vendor 目录的源码（`src/traffic.rs` 等）目前与上游 1.1.1 一致；
 - 与上游对应版本的 diff 摘要
 - 定制动机
 
+**已落地的本地 patch**（相对上游 1.1.1 的源码 diff）：
+
+| 文件/函数 | diff 摘要 | 定制动机 |
+| --------- | --------- | -------- |
+| `src/dconf.rs::read` | `Command::output()` 无界等待 → `spawn` + `try_wait` 轮询 + 5s 超时 `kill`；输出渲染语义不变 | 无会话总线/容器环境下 `dconf` 阻塞在连接上会让 Linux 窗口设置在启动路径永久挂起；超时降级为"无 dconf 配置" |
+| `src/lib.rs`（Linux 图标内联） | `File::open(control_icon.path).unwrap()` → `if let Ok` 跳过 | 主题解析出的图标路径可能已不存在（主题残缺/中途换主题），unwrap 会在窗口设置时 panic；失败回退脚本默认图标 |
+| `src/lib.rs`（Linux/Windows `win2.eval` 两处） | `.expect("couldn't run js")` → `unwrap_or_else` 打印错误 | eval 注入失败不应崩溃应用；与上游同函数 `titlebar.js` 注入的既有处理方式一致 |
+| `src/lib.rs::ensure_main_thread` | `run_on_main_thread` 闭包内 `.unwrap()` → `Arc<Mutex>` 带出 `main_action` 结果向上传播 | macOS 三个装饰命令（inset/transparent/level）的失败原本在主线程 panic 且错误被吞 |
+| `src/traffic.rs::setup_traffic_light_positioner` | 两处 `ns_window().expect()` → `let Ok(..) else return` | 无 NSWindow 句柄属可降级状态，不应让应用无法启动 |
+| `src/traffic.rs`（`extern "C"` delegate 回调五处） | `emit().expect`/`ns_window().expect` → `let _ =`/`if let Ok` 跳过 | Cocoa delegate 回调内 panic 会跨 FFI 边界 unwind（UB）；teardown 竞态下 emit/ns_window 失败仅需跳过当次操作 |
+
 > **TODO(maintainer): 补充定制动机** — 当前 vendor 化的预期收益是"可快速 patch
 > 交通灯位置相关逻辑"，但尚未落地具体源码改动。请补充：为何不直接向上游提 PR？
 > 为何不通过 fork + `[patch.crates-io]` 替代 path vendor？维护者评估后填入。

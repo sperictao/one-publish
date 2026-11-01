@@ -7,6 +7,9 @@ dist-ssr/
 release-assets/
 /src-tauri/target/
 /target/
+# vendored crates keep their own cargo metadata when built in isolation
+/src-tauri/vendor/*/target/
+/src-tauri/vendor/*/Cargo.lock
 /crates/publish-runner-core/tests/samples/*/target/
 /crates/publish-runner-core/tests/samples/*/obj/
 /crates/publish-runner-core/tests/samples/*/bin/
