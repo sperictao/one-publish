@@ -91,6 +91,11 @@
     "zustand": "^5.0.16"
   },
   "packageManager": "pnpm@10.10.0",
+  "pnpm": {
+    "overrides": {
+      "minimatch": ">=11.0.1"
+    }
+  },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec lint-staged"
   },
