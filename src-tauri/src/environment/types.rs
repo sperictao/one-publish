@@ -191,15 +191,30 @@ pub fn parse_version(output: &[u8], prefix: &str) -> Option<String> {
     })
 }
 
+/// 命令探测子进程的统一上限：login-shell 查找会 source 用户 rc（可能阻塞），
+/// `--version` 探测也可能挂死——同步调用方（含 async 命令路径）不能被无限占用。
+const COMMAND_LOOKUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const COMMAND_VERSION_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+fn spawn_and_wait_bounded(
+    command: &mut std::process::Command,
+    timeout: std::time::Duration,
+) -> Option<std::process::Output> {
+    let child = command.spawn().ok()?;
+    crate::process_utils::wait_child_with_timeout(child, timeout)
+}
+
 /// Check if a command is available in PATH
 pub fn command_exists(command: &str) -> bool {
     let resolved = resolve_command_path(command).unwrap_or_else(|| PathBuf::from(command));
-    crate::process_utils::new_std_command(resolved)
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .output()
-        .is_ok()
+    spawn_and_wait_bounded(
+        crate::process_utils::new_std_command(resolved)
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null()),
+        COMMAND_VERSION_PROBE_TIMEOUT,
+    )
+    .is_some()
 }
 
 fn executable_name(command: &str) -> String {
@@ -392,11 +407,14 @@ fn resolve_command_via_login_shell(command: &str) -> Option<(PathBuf, String)> {
 
         let shell_display = shell.to_string_lossy().to_string();
 
-        let Ok(output) = crate::process_utils::new_std_command(&shell)
-            .arg("-lc")
-            .arg(format!("command -v {}", command))
-            .output()
-        else {
+        let Some(output) = spawn_and_wait_bounded(
+            crate::process_utils::new_std_command(&shell)
+                .arg("-lc")
+                .arg(format!("command -v {}", command))
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped()),
+            COMMAND_LOOKUP_TIMEOUT,
+        ) else {
             continue;
         };
 
@@ -421,10 +439,13 @@ fn resolve_command_via_login_shell(command: &str) -> Option<(PathBuf, String)> {
 
 #[cfg(windows)]
 fn resolve_command_via_shell(command: &str) -> Option<PathBuf> {
-    let output = crate::process_utils::new_std_command("where")
-        .arg(command)
-        .output()
-        .ok()?;
+    let output = spawn_and_wait_bounded(
+        crate::process_utils::new_std_command("where")
+            .arg(command)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped()),
+        COMMAND_LOOKUP_TIMEOUT,
+    )?;
     if !output.status.success() {
         return None;
     }
