@@ -152,15 +152,31 @@ fn validate_and_parse_fix_command(
             }
         }
         "winget" => {
-            if args.first() != Some(&"install") {
+            // 生成的修复命令固定为 `winget install <Publisher.PackageId>`。
+            // 只校验 install 子命令而不约束其余参数会放行
+            // --manifest/--override/--installer 等可加载任意安装定义或命令的
+            // 选项——winget 本身即成任意安装/执行原语。
+            let [subcommand, package_id] = args else {
                 return Err(crate::errors::AppError::validation_with_code(
-                    "unsupported winget command (only `winget install ...` is allowed)",
+                    "unsupported winget command (only `winget install <package-id>` is allowed)",
+                    "unsupported_winget_fix_command",
+                ));
+            };
+            if *subcommand != "install"
+                || package_id.is_empty()
+                || package_id.starts_with('-')
+                || !package_id
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+            {
+                return Err(crate::errors::AppError::validation_with_code(
+                    "unsupported winget command (only `winget install <package-id>` is allowed)",
                     "unsupported_winget_fix_command",
                 ));
             }
         }
         "rustup" => {
-            if args.first() != Some(&"update") {
+            if args != ["update"] {
                 return Err(crate::errors::AppError::validation_with_code(
                     "unsupported rustup command (only `rustup update` is allowed)",
                     "unsupported_rustup_fix_command",
@@ -286,6 +302,50 @@ mod tests {
             validate_and_parse_fix_command("rustup update").expect("rustup update is allowed");
         assert_eq!(program, "rustup");
         assert_eq!(args, vec!["update".to_string()]);
+    }
+
+    #[test]
+    fn fix_command_parsing_accepts_generated_winget_package_ids() {
+        for command in [
+            "winget install Rustlang.Rustup",
+            "winget install Microsoft.DotNet.SDK.8",
+            "winget install EclipseAdoptium.Temurin.21.JDK",
+            "winget install Microsoft.EdgeWebView2Runtime",
+            "winget install pnpm.pnpm",
+        ] {
+            let (program, args) =
+                validate_and_parse_fix_command(command).expect("generated winget command");
+            assert_eq!(program, "winget");
+            assert_eq!(args[0], "install");
+        }
+    }
+
+    #[test]
+    fn fix_command_parsing_rejects_winget_options_and_extra_args() {
+        // --manifest/--override/--installer 能把 winget 变成任意安装原语，
+        // 生成的命令从不携带选项或第二参数，一律拒绝。
+        for command in [
+            "winget install --manifest",
+            "winget install Rustlang.Rustup --silent",
+            "winget install Rustlang.Rustup extra",
+            "winget install -e",
+            "winget install --override",
+        ] {
+            let err = validate_and_parse_fix_command(command)
+                .expect_err("winget options/extra args must fail");
+            assert_eq!(
+                err.code.as_deref(),
+                Some("unsupported_winget_fix_command"),
+                "command: {command}"
+            );
+        }
+    }
+
+    #[test]
+    fn fix_command_parsing_rejects_rustup_update_extra_args() {
+        let err = validate_and_parse_fix_command("rustup update --toolchain nightly")
+            .expect_err("extra args must fail");
+        assert_eq!(err.code.as_deref(), Some("unsupported_rustup_fix_command"));
     }
 
     fn action(action_type: FixType) -> FixAction {
