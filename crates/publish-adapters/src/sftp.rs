@@ -347,6 +347,15 @@ impl AdapterContract for SftpDeliveryDestination {
                     .to_string(),
             ));
         }
+        // 目标操作数是一个 argv 元素 `user@host`：username 以 `-` 开头会让
+        // 整个操作数被 openssh 客户端按选项解析（如 `-F@host`），必须在设置
+        // 校验时拒绝而不是让客户端把它变成含义不明的选项。
+        if username.starts_with('-') {
+            return Err(invalid(
+                "setting username cannot start with a dash; it would be parsed as an sftp option"
+                    .to_string(),
+            ));
+        }
         let remote_path = settings.string("remote_path", &adapter)?;
         if let Some(violation) = remote_path_violation(remote_path) {
             return Err(invalid(violation.to_string()));
@@ -1642,6 +1651,42 @@ mod tests {
         assert!(!is_remote_missing(
             "dest open \"/srv/x\": Permission denied"
         ));
+    }
+
+    /// `user@host` 是 openssh argv 的单个尾参：username 以 `-` 开头时整个
+    /// 操作数会被客户端按选项解析（`-F@host`、`-o...@host`），必须在设置
+    /// 校验时关闭这条注入通道。
+    #[test]
+    fn usernames_leading_with_a_dash_are_rejected() {
+        let destination = SftpDeliveryDestination::new(Arc::new(FakeSftpServer::new()));
+        let settings = destination
+            .default_settings()
+            .with_value("username", Value::String("-F".to_string()));
+        let error = destination
+            .validate_settings(&settings)
+            .expect_err("a dash-leading username reaches argv as an sftp option");
+        assert!(error.to_string().contains("start with a dash"));
+
+        let settings = destination
+            .default_settings()
+            .with_value("username", Value::String("-oProxyCommand=x".to_string()));
+        assert!(destination.validate_settings(&settings).is_err());
+
+        // 常规 POSIX 用户名与留空（未配置的新路线）不受影响。
+        for username in ["deploy", "release-bot", "one_publish"] {
+            let settings = destination
+                .default_settings()
+                .with_value("username", Value::String(username.to_string()));
+            destination
+                .validate_settings(&settings)
+                .unwrap_or_else(|error| panic!("username {username} must stay valid: {error}"));
+        }
+        let blank = destination
+            .default_settings()
+            .with_value("username", Value::String(String::new()));
+        destination
+            .validate_settings(&blank)
+            .expect("an unset username is allowed at configuration time");
     }
 
     #[test]
