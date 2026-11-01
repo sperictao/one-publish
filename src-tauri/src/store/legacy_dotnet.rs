@@ -327,6 +327,9 @@ pub(crate) fn draft_parameters_with_unsaved_changes(
     let edited_properties = sanitize_properties(normalize_property_map(&properties_value(
         &edited.properties,
     )));
+    // 持久化数据里 properties 可能是损坏的非对象值——归一化为空对象继续合并，
+    // 不能让存储层在迁移编辑路径上 panic。
+    let mut properties_normalized = false;
     for (key, value) in &edited_properties {
         if projected_properties
             .iter()
@@ -337,11 +340,7 @@ pub(crate) fn draft_parameters_with_unsaved_changes(
             continue;
         }
         changed = true;
-        parameters
-            .entry("properties".to_string())
-            .or_insert_with(|| Value::Object(serde_json::Map::new()))
-            .as_object_mut()
-            .expect("properties is an object")
+        editable_properties(&mut parameters, &mut properties_normalized)
             .insert(key.clone(), Value::String(value.clone()));
     }
     for (key, _) in &projected_properties {
@@ -364,19 +363,38 @@ pub(crate) fn draft_parameters_with_unsaved_changes(
     {
         changed = true;
         if edited.use_profile && !edited.profile_name.trim().is_empty() {
-            parameters
-                .entry("properties".to_string())
-                .or_insert_with(|| Value::Object(serde_json::Map::new()))
-                .as_object_mut()
-                .expect("properties is an object")
-                .insert(
-                    "PublishProfile".to_string(),
-                    Value::String(edited.profile_name.trim().to_string()),
-                );
+            editable_properties(&mut parameters, &mut properties_normalized).insert(
+                "PublishProfile".to_string(),
+                Value::String(edited.profile_name.trim().to_string()),
+            );
         }
     }
+    changed |= properties_normalized;
 
     changed.then_some(Value::Object(parameters))
+}
+
+/// `parameters["properties"]` 的可编辑对象视图：缺失补空对象，非对象值视为
+/// 损坏持久化数据替换为空对象并把 `normalized` 置位（该路径不得 panic）。
+fn editable_properties<'a>(
+    parameters: &'a mut serde_json::Map<String, Value>,
+    normalized: &mut bool,
+) -> &'a mut serde_json::Map<String, Value> {
+    if let Some(value) = parameters.get_mut("properties") {
+        if !value.is_object() {
+            *value = Value::Object(serde_json::Map::new());
+            *normalized = true;
+        }
+    } else {
+        parameters.insert(
+            "properties".to_string(),
+            Value::Object(serde_json::Map::new()),
+        );
+    }
+    match parameters.get_mut("properties") {
+        Some(Value::Object(map)) => map,
+        _ => unreachable!("properties entry was just normalized to an object"),
+    }
 }
 
 #[cfg(test)]
@@ -483,6 +501,29 @@ mod tests {
             Some(json!({
                 "configuration": "Release",
                 "runtime": "osx-x64",
+                "properties": { "Version": "9.9.9" },
+            }))
+        );
+    }
+
+    #[test]
+    fn unsaved_change_detection_normalizes_non_object_properties() {
+        // 持久化数据里 properties 为损坏标量：叠加编辑时归一化为对象，不得 panic。
+        let revision_parameters = json!({
+            "configuration": "Release",
+            "properties": "corrupted-scalar",
+        });
+        let edited = PublishConfigStore {
+            properties: [("Version".to_string(), "9.9.9".to_string())]
+                .into_iter()
+                .collect(),
+            ..rich_form_from_parameters(&revision_parameters)
+        };
+
+        assert_eq!(
+            draft_parameters_with_unsaved_changes(&revision_parameters, &edited),
+            Some(json!({
+                "configuration": "Release",
                 "properties": { "Version": "9.9.9" },
             }))
         );
