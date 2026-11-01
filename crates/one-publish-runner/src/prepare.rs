@@ -182,14 +182,30 @@ fn capture_clean_source(repository_root: &Path) -> Result<SourceSnapshot, Publis
     })
 }
 
+/// 本地 git 元数据调用的界：checkout 文件系统停滞（网络盘/代理钩子）不能
+/// 让触发路径无限等待。
+const GIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 fn git(repository_root: &Path, args: &[&str]) -> Result<String, PublishError> {
-    let output = Command::new("git")
+    let child = Command::new("git")
         .arg("-C")
         .arg(repository_root)
         .args(args)
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|error| {
             PublishError::Execution(format!("failed to run git {}: {error}", args.join(" ")))
+        })?;
+    let output = publish_adapters::process_tree::wait_piped_with_timeout(child, None, GIT_TIMEOUT)
+        .map_err(|error| {
+            PublishError::Execution(format!("failed to run git {}: {error}", args.join(" ")))
+        })?
+        .ok_or_else(|| {
+            PublishError::Execution(format!(
+                "git {} did not finish within {GIT_TIMEOUT:?}",
+                args.join(" ")
+            ))
         })?;
     if !output.status.success() {
         return Err(PublishError::Execution(format!(

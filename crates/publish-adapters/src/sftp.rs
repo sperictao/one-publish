@@ -1308,6 +1308,9 @@ impl SftpTransport for FakeSftpServer {
 
 const SFTP_PROGRAM: &str = "sftp";
 const CONNECT_TIMEOUT_SECONDS: u32 = 30;
+/// 建连后的整会话界：ConnectTimeout 只管 TCP 握手，传输中途半开/停滞
+/// 仍会把 runner job 挂到 CI 级别超时；staging 传输体积大，界取宽松值。
+const SFTP_SESSION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
 /// 通过 OpenSSH `sftp` 批处理访问真实服务器的生产端口：本机与远端执行后端
 /// 共用同一 Destination 语义，只有传输不同。私钥经安全临时文件（0600）传给
@@ -1331,7 +1334,6 @@ impl OpenSshSftpTransport {
         endpoint: &SftpEndpoint,
         batch: &str,
     ) -> Result<SftpCliOutcome, SftpTransportFailure> {
-        use std::io::Write;
         use std::process::Stdio;
 
         let key_file = materialize_key(key)?;
@@ -1353,22 +1355,22 @@ impl OpenSshSftpTransport {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut child = command
+        let child = command
             .spawn()
             .map_err(|error| SftpTransportFailure::Network {
                 message: format!("failed to start {SFTP_PROGRAM}: {error}"),
             })?;
-        if let Some(mut pipe) = child.stdin.take() {
-            pipe.write_all(batch.as_bytes())
-                .map_err(|error| SftpTransportFailure::Network {
-                    message: format!("failed to stream the batch to {SFTP_PROGRAM}: {error}"),
-                })?;
-        }
-        let output = child
-            .wait_with_output()
-            .map_err(|error| SftpTransportFailure::Network {
-                message: format!("failed to run {SFTP_PROGRAM}: {error}"),
-            })?;
+        let output = crate::process_tree::wait_piped_with_timeout(
+            child,
+            Some(batch.as_bytes().to_vec()),
+            SFTP_SESSION_TIMEOUT,
+        )
+        .map_err(|error| SftpTransportFailure::Network {
+            message: format!("failed to run {SFTP_PROGRAM}: {error}"),
+        })?
+        .ok_or_else(|| SftpTransportFailure::Network {
+            message: format!("{SFTP_PROGRAM} did not finish within {SFTP_SESSION_TIMEOUT:?}"),
+        })?;
         Ok(SftpCliOutcome {
             success: output.status.success(),
             stderr: String::from_utf8_lossy(&output.stderr).to_string(),
