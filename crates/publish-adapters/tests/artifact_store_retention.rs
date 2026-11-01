@@ -399,3 +399,62 @@ fn leases_for_unknown_sets_are_rejected() {
         .expect_err("cannot lease an artifact set that was never stored");
     assert!(error.to_string().contains("artifact set"));
 }
+
+#[test]
+fn leases_reject_non_sha256_manifest_digests() {
+    let root = tempfile::tempdir().expect("store root");
+    let store = TemporaryArtifactStore::new(root.path());
+    let settings = store_settings(root.path(), RETENTION_LONG);
+
+    let error = store
+        .acquire_artifact_set_lease(&settings, "attempt-x", "../escaped", LEASE_VALID_UNTIL)
+        .expect_err("a traversal-shaped digest must be rejected before touching the record path");
+    assert!(error.to_string().contains("SHA-256"));
+}
+
+#[test]
+fn sweeps_reject_stored_records_with_traversal_shaped_digests() {
+    let outer = tempfile::tempdir().expect("outer");
+    let root = outer.path().join("store");
+    let sibling = outer.path().join("sibling");
+    fs::create_dir_all(root.join("manifests")).expect("manifest dir");
+    fs::create_dir_all(&sibling).expect("sibling dir");
+    fs::write(sibling.join("keep.txt"), b"untouched").expect("sibling payload");
+    // 篡改的集合记录：条目 digest 是路径逃逸形状。反序列化后必须在校验
+    // 边界被拒，不得把 `..` 段带进 remove_directory 的删除路径。
+    fs::write(
+        root.join("manifests/tampered.json"),
+        json!({
+            "manifest": {
+                "version": 2,
+                "planning_snapshot_digest": "snapshot",
+                "artifacts": [{
+                    "role": "installer",
+                    "file_name": "x.bin",
+                    "media_type": "application/octet-stream",
+                    "platform": "os",
+                    "architecture": "arch",
+                    "size": 4,
+                    "digest": "../sibling",
+                    "locator": "unused",
+                    "retention": "0s",
+                    "executable": false
+                }],
+                "digest": "tampered"
+            },
+            "stored_at": "2000-01-01T00:00:00Z",
+            "retain_until": "2000-01-01T00:00:00Z"
+        })
+        .to_string(),
+    )
+    .expect("write tampered record");
+
+    let store = TemporaryArtifactStore::new(&root);
+    store
+        .enforce_retention(&store_settings(&root, RETENTION_LONG), SWEEP_NOW)
+        .expect_err("a tampered record must halt the sweep");
+    assert!(
+        sibling.join("keep.txt").exists(),
+        "an escape-shaped entry digest must never reach remove_directory"
+    );
+}

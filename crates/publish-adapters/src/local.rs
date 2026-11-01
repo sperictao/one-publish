@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use publish_domain::{
-    sha256_hex, AdapterDescriptor, AdapterKind, AdapterSchema, AdapterSettings, ArtifactManifest,
-    ArtifactManifestEntry, Capability, CapabilityRequirement, DeliveryEnvelope,
+    is_sha256_digest, sha256_hex, AdapterDescriptor, AdapterKind, AdapterSchema, AdapterSettings,
+    ArtifactManifest, ArtifactManifestEntry, Capability, CapabilityRequirement, DeliveryEnvelope,
     DeliveryIdempotencyIdentity, DeliveryReceipt, PlanNode, PlanNodeTemplate, PlanSideEffect,
     PlanStage, PlanningInputSnapshot, PublishError, PublishPlan, PublishingCapability,
 };
@@ -150,9 +150,10 @@ impl TemporaryArtifactStore {
         let digest = inputs
             .get("manifest_digest")
             .and_then(Value::as_str)
+            .filter(|digest| is_sha256_digest(digest))
             .ok_or_else(|| {
                 PublishError::Execution(format!(
-                    "node {} does not declare the promoted manifest digest",
+                    "node {} does not declare a valid promoted manifest digest",
                     node.id
                 ))
             })?;
@@ -294,6 +295,11 @@ impl ArtifactStore for TemporaryArtifactStore {
             ));
         }
         parse_rfc3339_utc_seconds(valid_until)?;
+        if !is_sha256_digest(manifest_digest) {
+            return Err(PublishError::Execution(
+                "artifact set leases require a SHA-256 manifest digest".to_string(),
+            ));
+        }
         let root = self.root_directory(settings)?;
         if !set_record_path(&root, manifest_digest).exists() {
             return Err(PublishError::Execution(format!(
@@ -353,6 +359,9 @@ impl ArtifactStore for TemporaryArtifactStore {
         for (path, record) in
             read_json_directory::<StoredArtifactSetRecord>(&root.join(SET_RECORD_DIRECTORY))?
         {
+            // 持久化记录按不可信输入再校验：损坏或被改写的条目不得把 `..`
+            // 形 digest 带进 remove_directory 的越界删除路径。
+            record.manifest.validate()?;
             let digest = record.manifest.digest.clone();
             let hold = if let Some(lease) = active_leases.get(&digest) {
                 Some(RetentionHold::LeasedByAttempt {
