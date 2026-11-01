@@ -1011,18 +1011,12 @@ fn reject_sensitive_envelope_keys(value: &serde_json::Value) -> Result<(), Publi
         }
         serde_json::Value::Object(values) => {
             for (key, value) in values {
-                let normalized = key
-                    .chars()
-                    .filter(|ch| ch.is_ascii_alphanumeric())
-                    .map(|ch| ch.to_ascii_lowercase())
-                    .collect::<String>();
+                let normalized = crate::security::normalize_key(key);
                 if crate::security::is_sensitive_key(key)
-                    || normalized == "auth"
                     || normalized.contains("authorization")
                     || normalized.contains("cookie")
                     || normalized.contains("credential")
                     || normalized.contains("session")
-                    || normalized.contains("bearer")
                 {
                     return Err(PublishError::Execution(format!(
                         "delivery envelope evidence cannot persist sensitive key {key}"
