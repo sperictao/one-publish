@@ -185,3 +185,139 @@ pub(crate) fn append_execution_history(
     history.insert(0, record);
     super::types::trim_execution_history(history, execution_history_limit);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::types::{ConfigProfile, RepoPublishConfig};
+
+    fn test_repository(id: &str) -> Repository {
+        Repository {
+            id: id.to_string(),
+            name: format!("Repo {id}"),
+            path: format!("/repos/{id}"),
+            project_file: None,
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: true,
+            provider_id: None,
+            publish_config: RepoPublishConfig::default(),
+        }
+    }
+
+    fn test_profile(id: &str, deleted_at: Option<&str>) -> ConfigProfile {
+        ConfigProfile {
+            id: id.to_string(),
+            name: id.to_string(),
+            profile_group: None,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            is_system_default: false,
+            is_draft: false,
+            current_revision_id: String::new(),
+            revisions: Vec::new(),
+            deleted_at: deleted_at.map(str::to_string),
+            blocked_reason: None,
+        }
+    }
+
+    #[test]
+    fn find_repository_locates_by_id_and_reports_missing() {
+        let repositories = vec![test_repository("repo-1"), test_repository("repo-2")];
+
+        assert_eq!(
+            find_repository(&repositories, "repo-2")
+                .map(|repo| repo.id.as_str())
+                .unwrap(),
+            "repo-2"
+        );
+
+        let err = find_repository(&repositories, "missing").unwrap_err();
+        assert_eq!(err.code.as_deref(), Some("repository_not_found"));
+        assert_eq!(err.details.as_deref(), Some("missing"));
+    }
+
+    #[test]
+    fn find_repository_mut_allows_in_place_update() {
+        let mut repositories = vec![test_repository("repo-1")];
+        find_repository_mut(&mut repositories, "repo-1")
+            .unwrap()
+            .current_branch = "release".to_string();
+        assert_eq!(repositories[0].current_branch, "release");
+        assert!(find_repository_mut(&mut repositories, "other").is_err());
+    }
+
+    #[test]
+    fn provider_requires_project_binding_defaults_fail_closed() {
+        // 未声明/空白 provider 视为需要绑定（保守语义）。
+        assert!(provider_requires_project_binding(None));
+        assert!(provider_requires_project_binding(Some("")));
+        assert!(provider_requires_project_binding(Some("   ")));
+        // 未知 provider id 同样按需要绑定处理。
+        assert!(provider_requires_project_binding(Some("no-such-provider")));
+    }
+
+    #[test]
+    fn apply_selected_repo_id_update_honours_clear_flag() {
+        let mut state = AppState::default();
+
+        apply_selected_repo_id_update(&mut state, Some("repo-1".into()), false);
+        assert_eq!(state.selected_repo_id.as_deref(), Some("repo-1"));
+
+        // 非清除调用携带 None 时保留既有选择。
+        apply_selected_repo_id_update(&mut state, None, false);
+        assert_eq!(state.selected_repo_id.as_deref(), Some("repo-1"));
+
+        apply_selected_repo_id_update(&mut state, Some("ignored".into()), true);
+        assert_eq!(state.selected_repo_id, None);
+    }
+
+    #[test]
+    fn build_frontend_state_drops_deleted_profiles_and_empties_history() {
+        let mut repo = test_repository("repo-1");
+        repo.publish_config.profiles = vec![
+            test_profile("alive", None),
+            test_profile("gone", Some("2026-01-02T00:00:00Z")),
+        ];
+        let mut state = AppState {
+            repositories: vec![repo],
+            selected_repo_id: Some("repo-1".to_string()),
+            ..AppState::default()
+        };
+        state.execution_history = vec![ExecutionRecord {
+            id: "rec-1".to_string(),
+            repo_id: Some("repo-1".to_string()),
+            configuration_id: None,
+            configuration_revision_id: None,
+            provider_id: "dotnet".to_string(),
+            project_path: "/repo/App.csproj".to_string(),
+            started_at: "2026-07-18T10:00:00.000Z".to_string(),
+            finished_at: "2026-07-18T10:00:03.000Z".to_string(),
+            success: true,
+            cancelled: false,
+            output_dir: None,
+            error: None,
+            command_line: None,
+            snapshot_path: None,
+            failure_signature: None,
+            output_excerpt: None,
+            spec: None,
+            attempt_id: None,
+            recovery_snapshot: None,
+            file_count: 0,
+            warnings: None,
+            manifest_digest: None,
+        }];
+
+        let frontend = build_frontend_state(&state);
+
+        let profiles = &frontend.repositories[0].publish_config.profiles;
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].id, "alive");
+        // 前端态绝不携带执行历史——历史经专用快照接口分发。
+        assert!(frontend.execution_history.is_empty());
+        assert_eq!(frontend.selected_repo_id.as_deref(), Some("repo-1"));
+        // 源状态不被修改。
+        assert_eq!(state.execution_history.len(), 1);
+        assert_eq!(state.repositories[0].publish_config.profiles.len(), 2);
+    }
+}
