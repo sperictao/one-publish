@@ -17,6 +17,8 @@ function run(command, args, options = {}) {
     stdio: options.stdio ?? "inherit",
     env: options.env ?? process.env,
     shell: options.shell ?? false,
+    // tauri build 冷缓存可能很慢，但挂死的子进程不得无限阻塞发布。
+    timeout: options.timeout ?? 45 * 60 * 1000,
   });
 
   if (result.error) {
@@ -24,9 +26,10 @@ function run(command, args, options = {}) {
   }
 
   if (result.status !== 0) {
-    fail(
-      `执行 ${command} ${args.join(" ")} 失败：退出码 ${result.status ?? 1}`
-    );
+    const detail = result.signal
+      ? `被信号 ${result.signal} 终止（可能超时）`
+      : `退出码 ${result.status ?? 1}`;
+    fail(`执行 ${command} ${args.join(" ")} 失败：${detail}`);
   }
 }
 

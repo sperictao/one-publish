@@ -42,6 +42,8 @@ const result = spawnSync(
     cwd: rootDir,
     encoding: "utf8",
     stdio: "pipe",
+    // 冷缓存编译可能耗时数分钟，但挂死的 cargo 不得无限阻塞校验。
+    timeout: 20 * 60 * 1000,
   }
 );
 
