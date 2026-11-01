@@ -2159,9 +2159,6 @@ export async function installMockTauri(
             case "get_current_version":
               return "0.6.3";
 
-            case "get_shortcuts_help":
-              return [{ key: "Ctrl+P", description: "Publish" }];
-
             case "get_updater_config_health":
               return clone(
                 seededUpdaterConfigHealth ?? {

@@ -101,7 +101,6 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::command_parser::CommandImportResult>(&mut declarations);
     push_contract::<crate::provider::ProviderCatalogEntry>(&mut declarations);
     push_contract::<crate::provider::ProviderProjectPathKind>(&mut declarations);
-    push_contract::<crate::shortcuts::ShortcutHelp>(&mut declarations);
     push_contract::<crate::spec::PublishSpec>(&mut declarations);
     push_contract::<crate::spec::SpecValue>(&mut declarations);
     push_contract::<crate::store::AppState>(&mut declarations);

@@ -20,7 +20,6 @@ pub mod process_utils;
 pub mod provider;
 pub mod publish_runtime;
 pub mod security;
-pub mod shortcuts;
 pub mod spec;
 pub mod store;
 pub mod tauri_release;
@@ -150,7 +149,6 @@ pub fn run() {
             commands::updater::get_updater_config_health,
             commands::updater::open_updater_help,
             commands::updater::get_current_version,
-            commands::updater::get_shortcuts_help,
             commands::provider::list_providers,
             commands::provider::get_provider_schema,
             commands::provider::import_from_command,

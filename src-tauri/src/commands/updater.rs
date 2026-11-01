@@ -670,14 +670,6 @@ pub fn get_current_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// 获取快捷键帮助
-#[tauri::command]
-pub fn get_shortcuts_help() -> Vec<crate::shortcuts::ShortcutHelp> {
-    let _timer =
-        crate::commands::middleware::CommandTimer::new("commands::updater::get_shortcuts_help");
-    crate::shortcuts::get_shortcuts_help()
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
