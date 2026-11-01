@@ -34,6 +34,16 @@ fn inspection_error(code: &str, message: impl Into<String>) -> PublishError {
     }
 }
 
+/// 仓库可控配置/版本文件的有界文本读：错误统一归入检查失败分类。
+fn read_repository_text(path: &Path, code: &str) -> Result<String, PublishError> {
+    let failed = |error: std::io::Error| {
+        inspection_error(code, format!("failed to read {}: {error}", path.display()))
+    };
+    let bytes = crate::read_file_bounded(path).map_err(failed)?;
+    String::from_utf8(bytes)
+        .map_err(|error| failed(std::io::Error::new(std::io::ErrorKind::InvalidData, error)))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TauriBuildDriver {
@@ -536,12 +546,7 @@ pub fn resolve_app_root(config_path: &Path) -> Option<PathBuf> {
 }
 
 fn read_config(config_path: &Path) -> Result<(Option<String>, Option<String>, bool), PublishError> {
-    let content = std::fs::read_to_string(config_path).map_err(|error| {
-        inspection_error(
-            "tauri_config_read_failed",
-            format!("failed to read {}: {error}", config_path.display()),
-        )
-    })?;
+    let content = read_repository_text(config_path, "tauri_config_read_failed")?;
     if config_path.file_name().and_then(|name| name.to_str()) == Some("Tauri.toml") {
         let document = content.parse::<toml_edit::DocumentMut>().map_err(|error| {
             inspection_error(
@@ -591,12 +596,7 @@ fn read_config(config_path: &Path) -> Result<(Option<String>, Option<String>, bo
 }
 
 fn read_package_version(path: &Path) -> Result<String, PublishError> {
-    let content = std::fs::read_to_string(path).map_err(|error| {
-        inspection_error(
-            "tauri_version_file_read_failed",
-            format!("failed to read version file {}: {error}", path.display()),
-        )
-    })?;
+    let content = read_repository_text(path, "tauri_version_file_read_failed")?;
     let value: Value = serde_json::from_str(&content).map_err(|error| {
         inspection_error(
             "tauri_version_file_parse_failed",
@@ -616,12 +616,7 @@ fn read_package_version(path: &Path) -> Result<String, PublishError> {
 }
 
 fn read_cargo_version(path: &Path) -> Result<String, PublishError> {
-    let content = std::fs::read_to_string(path).map_err(|error| {
-        inspection_error(
-            "tauri_cargo_toml_read_failed",
-            format!("failed to read {}: {error}", path.display()),
-        )
-    })?;
+    let content = read_repository_text(path, "tauri_cargo_toml_read_failed")?;
     let document = content.parse::<toml_edit::DocumentMut>().map_err(|error| {
         inspection_error(
             "tauri_cargo_toml_parse_failed",
@@ -755,12 +750,7 @@ fn declared_package_manager(app_root: &Path) -> Result<Option<TauriBuildDriver>,
         return Ok(None);
     }
 
-    let content = std::fs::read_to_string(&package_json_path).map_err(|error| {
-        inspection_error(
-            "tauri_package_json_read_failed",
-            format!("failed to read {}: {error}", package_json_path.display()),
-        )
-    })?;
+    let content = read_repository_text(&package_json_path, "tauri_package_json_read_failed")?;
     let value: Value = serde_json::from_str(&content).map_err(|error| {
         inspection_error(
             "tauri_package_json_invalid",
