@@ -213,6 +213,18 @@ impl AdapterContract for GitHubReleaseDestination {
                     .to_string(),
             });
         }
+        // repository 直接进入 `repos/{repository}/...` API 端点路径与公开下载
+        // URL：必须是严格的 owner/repo 形状——GitHub 名字只允许字母数字、`-`、
+        // `_`、`.`；任何分隔符、查询字符或空白都会改写请求目标。
+        let repository = settings.string("repository", &adapter)?;
+        if !repository.is_empty() && !is_valid_repository(repository) {
+            return Err(PublishError::InvalidAdapterSettings {
+                adapter,
+                message: format!(
+                    "repository must use the owner/repo form with GitHub name characters, got {repository}"
+                ),
+            });
+        }
         Ok(())
     }
 
@@ -341,7 +353,29 @@ fn updater_platform_keys(platform: &str, architecture: &str) -> Vec<String> {
 }
 
 fn download_url(repository: &str, tag: &str, asset_name: &str) -> String {
-    format!("https://github.com/{repository}/releases/download/{tag}/{asset_name}")
+    format!(
+        "https://github.com/{repository}/releases/download/{}/{}",
+        url_encode(tag),
+        url_encode(asset_name)
+    )
+}
+
+/// RFC 3986 unreserved 字符原样通过，其余一律按 UTF-8 字节百分号编码。
+/// tag、资产名与查询值在进入 gh API 端点字符串或公开下载 URL 前都必须先
+/// 过这一步：`?`/`#`/`%`/`&`/`=`/`+`/空格 在路径与查询里有自己的语义，
+/// 原样拼接会改写请求目标（asset `a&x.dmg` 会上传成 `a`；版本 `1.0+build`
+/// 是合法 semver，tag 在查询里会被读成空格）。
+fn url_encode(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
 }
 
 /// 资产字节来源：封存 Manifest 的产物，或路线专属 Delivery Envelope 派生内容
@@ -797,6 +831,23 @@ fn resolved_token<'a>(
                 "route {route_id} has no resolved {TOKEN_CREDENTIAL} credential"
             ))
         })
+}
+
+/// GitHub `owner/repo` 形状：两段非空、只含 GitHub 允许的命名字符。
+/// 空 repository 代表未配置的新路线（其余路径按缺失值另行拒绝）。
+fn is_valid_repository(repository: &str) -> bool {
+    let mut segments = repository.split('/');
+    let (Some(owner), Some(repo), None) = (segments.next(), segments.next(), segments.next())
+    else {
+        return false;
+    };
+    let valid_segment = |segment: &str| {
+        !segment.is_empty()
+            && segment
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    };
+    valid_segment(owner) && valid_segment(repo)
 }
 
 /// 版本标签由路线的标签前缀与单次发布版本拼成；staging 与幂等探测共用一条规则。
@@ -1337,7 +1388,10 @@ impl GitHubReleaseApi for GhCliGitHubReleaseApi {
         // 重跑复用同一 Draft）。
         match self.run(
             token,
-            &["api", &format!("repos/{repository}/releases/tags/{tag}")],
+            &[
+                "api",
+                &format!("repos/{repository}/releases/tags/{}", url_encode(tag)),
+            ],
             None,
         ) {
             Ok(json) => {
@@ -1399,7 +1453,8 @@ impl GitHubReleaseApi for GhCliGitHubReleaseApi {
                 "--method",
                 "POST",
                 &format!(
-                    "https://uploads.github.com/repos/{repository}/releases/{release_id}/assets?name={name}"
+                    "https://uploads.github.com/repos/{repository}/releases/{release_id}/assets?name={}",
+                    url_encode(name)
                 ),
                 "-H",
                 "Content-Type: application/octet-stream",
@@ -1572,6 +1627,62 @@ mod tests {
         assert!(parse_release_list(json, "v9.9.9")
             .expect("parse the release list")
             .is_none());
+    }
+
+    /// URL 组成部件必须先编码再进入 gh 端点或公开下载 URL：未编码的
+    /// `&`/`?`/`#`/`%`/`+`/空格 会改写请求目标或让资产以错误的远端名字落地。
+    #[test]
+    fn url_components_are_percent_encoded() {
+        assert_eq!(url_encode("app-1.2.3_x64.dmg"), "app-1.2.3_x64.dmg");
+        assert_eq!(url_encode("My App.dmg"), "My%20App.dmg");
+        assert_eq!(url_encode("a&b?c#d%e+f=g.h"), "a%26b%3Fc%23d%25e%2Bf%3Dg.h");
+        assert_eq!(url_encode("v1.0+build"), "v1.0%2Bbuild");
+        assert_eq!(url_encode("nested/dir.dmg"), "nested%2Fdir.dmg");
+        assert_eq!(url_encode("你好.dmg"), "%E4%BD%A0%E5%A5%BD.dmg");
+        assert_eq!(
+            download_url("acme/demo", "v1.0", "My App.dmg"),
+            "https://github.com/acme/demo/releases/download/v1.0/My%20App.dmg"
+        );
+    }
+
+    /// repository 直接进入 `repos/{repository}/...` 路径：只有严格的
+    /// owner/repo 形状能过设置校验，分隔符、查询字符与空白一律拒绝。
+    #[test]
+    fn repository_settings_reject_non_github_shapes() {
+        let destination = GitHubReleaseDestination::new(Arc::new(FakeGitHubReleaseApi::new()));
+        let settings = |repository: &str| {
+            destination
+                .default_settings()
+                .with_value("repository", Value::String(repository.to_string()))
+        };
+        for repository in ["acme/demo", "my-org/repo.name", "org_name/repo-2", "a/b"] {
+            destination
+                .validate_settings(&settings(repository))
+                .unwrap_or_else(|error| panic!("repository {repository} must stay valid: {error}"));
+        }
+        for repository in [
+            "a/b?admin=1",
+            "a/b#frag",
+            "a/b/c",
+            "a",
+            "a/",
+            "/b",
+            "a b/c",
+            "a\\b/c",
+            "a/b%20",
+            "a/./b",
+        ] {
+            assert!(
+                destination
+                    .validate_settings(&settings(repository))
+                    .is_err(),
+                "repository {repository:?} must be rejected"
+            );
+        }
+        // 空值照旧放行（新路线从空白开始），staging 前由 repository_missing 拦截。
+        destination
+            .validate_settings(&settings(""))
+            .expect("an unset repository is allowed at configuration time");
     }
 
     #[test]
