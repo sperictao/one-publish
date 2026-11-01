@@ -487,7 +487,7 @@ describe("usePublishExecute 守卫与恢复流", () => {
       result: { attempt: { status: "running", attemptId: "attempt-1" } },
     });
     mocks.cancelPublishRuntime.mockRejectedValue({
-      code: "publish_cancel_failed",
+      code: "publish_runtime_error",
       message: "backend refused",
     });
 
