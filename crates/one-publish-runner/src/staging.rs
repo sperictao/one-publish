@@ -8,6 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::read_metadata_bounded;
 use publish_domain::{ArtifactCandidate, PublishError, PublishEvent};
 use publish_runner_core::ShardOutcome;
 use serde::{Deserialize, Serialize};
@@ -105,12 +106,10 @@ pub fn load_staged_artifacts(root: &Path) -> Result<Vec<ArtifactCandidate>, Publ
         if !manifest_path.is_file() {
             continue;
         }
-        let manifest = std::fs::read(&manifest_path).map_err(|error| {
-            staging_io_error(
-                format!("read staging manifest {}", segment.display()),
-                error,
-            )
-        })?;
+        let manifest = read_metadata_bounded(
+            &manifest_path,
+            format!("read staging manifest {}", segment.display()),
+        )?;
         let records: Vec<StagedCandidateRecord> =
             serde_json::from_slice(&manifest).map_err(|error| {
                 staging_io_error(
@@ -164,9 +163,7 @@ pub fn load_shard_segments(root: &Path) -> Result<Vec<PublishEvent>, PublishErro
     files.sort();
     let mut events = Vec::new();
     for file in files {
-        let bytes = std::fs::read(&file).map_err(|error| {
-            staging_io_error(format!("read shard segment {}", file.display()), error)
-        })?;
+        let bytes = read_metadata_bounded(&file, format!("read shard segment {}", file.display()))?;
         let segment: ShardOutcome = serde_json::from_slice(&bytes).map_err(|error| {
             staging_io_error(format!("decode shard segment {}", file.display()), error)
         })?;

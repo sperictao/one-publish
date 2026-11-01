@@ -33,6 +33,47 @@ use publish_runner_core::{PreparedPublishPlan, PublishRuntime};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// 运行期 JSON 元数据（投影/prepared-attempt/暂存清单/事件段）上限：
+/// 这些文件按设计是 KB-MB 级 JSON；CI 产物路径可携带投毒内容，无界
+/// `fs::read` 会把病态大文件整体载入。候选字节负载不走此界。
+const MAX_METADATA_JSON_BYTES: u64 = 64 * 1024 * 1024;
+
+pub(crate) fn read_metadata_bounded(
+    path: &std::path::Path,
+    operation: String,
+) -> Result<Vec<u8>, PublishError> {
+    use std::io::Read;
+    let io = |error: std::io::Error| PublishError::Io {
+        operation: operation.clone(),
+        message: error.to_string(),
+    };
+    let file = std::fs::File::open(path).map_err(io)?;
+    let mut limited = file.take(MAX_METADATA_JSON_BYTES + 1);
+    let mut bytes = Vec::new();
+    limited.read_to_end(&mut bytes).map_err(io)?;
+    if bytes.len() as u64 > MAX_METADATA_JSON_BYTES {
+        return Err(PublishError::Io {
+            operation,
+            message: format!("file exceeds the {MAX_METADATA_JSON_BYTES} byte limit"),
+        });
+    }
+    Ok(bytes)
+}
+
+/// CLI/工作流路径上的 JSON 元数据装载：读入上限与解码合一，
+/// 投影与 prepared-attempt 文件共用同一道界。
+pub fn load_json_bounded<T: for<'de> Deserialize<'de>>(
+    path: &std::path::Path,
+    operation: impl Into<String>,
+) -> Result<T, PublishError> {
+    let operation = operation.into();
+    let bytes = read_metadata_bounded(path, operation.clone())?;
+    serde_json::from_slice(&bytes).map_err(|error| PublishError::Io {
+        operation,
+        message: error.to_string(),
+    })
+}
+
 pub const RUNNER_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const RUNNER_SOURCE_DIGEST: &str = env!("ONE_PUBLISH_RUNNER_SOURCE_DIGEST");
 
@@ -760,5 +801,38 @@ mod runtime_revision_tests {
         )
         .expect_err("floating or malformed binary digests must be rejected");
         assert!(error.to_string().contains("SHA-256"));
+    }
+}
+
+#[cfg(test)]
+mod metadata_load_tests {
+    use std::io::Write;
+
+    #[test]
+    fn oversized_metadata_json_is_rejected() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("projection.json");
+        // 稀疏文件：set_len 瞬时造出超限文件，读出即零填充超过上界。
+        let file = std::fs::File::create(&path).expect("create sparse file");
+        file.set_len(super::MAX_METADATA_JSON_BYTES + 1)
+            .expect("grow sparse file");
+
+        let error = super::load_json_bounded::<serde_json::Value>(&path, "read projection")
+            .expect_err("an oversized projection must not load unbounded");
+        assert!(error.to_string().contains("byte limit"));
+    }
+
+    #[test]
+    fn in_limit_metadata_json_decodes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("attempt.json");
+        std::fs::File::create(&path)
+            .expect("create attempt file")
+            .write_all(br#"{"value": 7}"#)
+            .expect("write attempt json");
+
+        let value: serde_json::Value =
+            super::load_json_bounded(&path, "read attempt").expect("in-limit json decodes");
+        assert_eq!(value["value"], 7);
     }
 }
