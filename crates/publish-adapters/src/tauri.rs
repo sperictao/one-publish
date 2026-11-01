@@ -379,8 +379,9 @@ fn enabled_build_targets(
 
 /// target triple 的安全形状：字母数字、`-`、`_`、`.`（如
 /// `x86_64-unknown-linux-gnu`、`universal-apple-darwin`）。任何其它字符都
-/// 不能让三元组进 argv、文件系统路径或 workflow YAML。
-fn is_safe_build_target(target: &str) -> bool {
+/// 不能让三元组进 argv、文件系统路径或 workflow YAML。桌面侧
+/// `infer_bundle_dir` 复用同一判定（三元组同时进 bundle 目录名）。
+pub fn is_safe_build_target(target: &str) -> bool {
     !target.is_empty()
         && target
             .bytes()
