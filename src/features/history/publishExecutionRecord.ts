@@ -51,7 +51,7 @@ function buildOutputExcerpt(outputLog: string): string | null {
 }
 
 function toStoredSpecValue(spec: ProviderPublishSpec): JsonValue {
-  return JSON.parse(JSON.stringify(spec)) as JsonValue;
+  return structuredClone(spec) as JsonValue;
 }
 
 export function createPublishExecutionRecord(params: {

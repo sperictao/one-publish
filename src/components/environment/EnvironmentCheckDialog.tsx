@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -129,6 +129,11 @@ export function EnvironmentCheckContent({
   const [runningFix, setRunningFix] = useState(false);
   const [lastFixResult, setLastFixResult] = useState<FixResult | null>(null);
   const [prevActive, setPrevActive] = useState(active);
+  const activeRef = useRef(active);
+
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
 
   if (prevActive !== active) {
     setPrevActive(active);
@@ -186,6 +191,9 @@ export function EnvironmentCheckContent({
     setError(null);
     try {
       const res = await runEnvironmentCheck(selectedProviderIds);
+      // 对话框已关闭的检查不再落地结果，也不回调父级——
+      // 避免把用户已放弃的检查快照推给上层。
+      if (!activeRef.current) return;
       const snapshot = createEnvironmentCheckSnapshot(res, selectedProviderIds);
       setResult(snapshot.result);
       onChecked?.(snapshot);
