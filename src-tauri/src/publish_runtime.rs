@@ -2884,14 +2884,16 @@ fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
             .events
             .into_iter()
             .map(|event| {
-                let receipt = event
-                    .payload
-                    .get("receipt")
-                    .cloned()
-                    .map(|value| {
-                        serde_json::from_value(value)
-                            .expect("Publish Core must only return reduced receipt events")
+                // 仅 delivery_receipt_observed 的载荷经归约校验是 Receipt；
+                // 其他事件携带同名键不是收据证据，必须原样保留而不是解码。
+                let receipt = (event.kind == "delivery_receipt_observed")
+                    .then(|| {
+                        event.payload.get("receipt").cloned().map(|value| {
+                            serde_json::from_value(value)
+                                .expect("Publish Core must only return reduced receipt events")
+                        })
                     })
+                    .flatten()
                     .map(|receipt: publish_domain::DeliveryReceipt| {
                         RuntimeDeliveryReceiptSummary {
                             version: receipt.version,
@@ -6540,6 +6542,90 @@ mod tests {
         )
         .expect("deserialize cancel request");
         assert_eq!(cancel.attempt_id.as_deref(), Some("attempt-A"));
+    }
+
+    #[test]
+    fn stray_receipt_keys_on_non_receipt_events_do_not_panic_the_summary() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared_runtime = prepare_test_runtime(repository.path(), &output_directory);
+        let prepared: PreparedPublishPlan =
+            serde_json::from_str(prepared_runtime.runtime_token()).expect("decode prepared plan");
+        let attempt_id = "attempt-stray-receipt".to_string();
+        let backend_run_id = "backend-stray-receipt".to_string();
+        let lease = publish_runner_core::PublishLeaseCoordinator::new()
+            .acquire(
+                &attempt_id,
+                std::collections::BTreeSet::from([publish_domain::PublishResource::new(
+                    publish_domain::PublishResourceKind::RepositoryWrite,
+                    repository.path().to_string_lossy(),
+                )]),
+                100,
+                super::LOCAL_LEASE_TTL_SECONDS,
+            )
+            .expect("acquire attempt lease");
+        let attempt = publish_domain::ReleaseAttempt {
+            version: publish_domain::RELEASE_ATTEMPT_VERSION,
+            attempt_id: attempt_id.clone(),
+            configuration_revision: prepared.snapshot.configuration_revision.clone(),
+            planning_snapshot_digest: prepared.plan.snapshot_digest.clone(),
+            plan_version: prepared.plan.version,
+            plan_digest: prepared.plan.digest.clone(),
+            release_identity: super::release_identity(&prepared.snapshot)
+                .expect("derive release identity"),
+            execution_backend: prepared.plan.execution_backend.clone(),
+            runtime_revision: prepared.snapshot.runtime_revision.clone(),
+            backend_run_id: backend_run_id.clone(),
+            manifest_digest: None,
+        };
+        let journals =
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf());
+        let persistence = super::journal::AttemptJournalPersistence::new(
+            journals.clone(),
+            prepared.clone(),
+            repository.path().to_string_lossy().to_string(),
+            1,
+            lease,
+        );
+        publish_runner_core::AttemptPersistencePort::begin_attempt(&persistence, &attempt)
+            .expect("persist attempt header");
+        let registry = super::build_registry(&prepared.snapshot, None)
+            .expect("rebuild sealed adapter registry");
+        let runtime = publish_runner_core::PublishRuntime::new(registry);
+
+        // 归约只校验 delivery_receipt_observed 的 receipt 载荷；其他事件携带
+        // 同名键穿过同步成为权威证据。之前 summarize 对全事件解码 receipt
+        // 会 panic——载入即崩，且每次 resume/同步都崩。
+        let completed_node = prepared.plan.nodes.first().expect("sealed plan has nodes");
+        let stray = publish_domain::PublishEvent {
+            version: publish_domain::PUBLISH_EVENT_VERSION,
+            event_id: "event-stray-receipt".to_string(),
+            attempt_id: attempt_id.clone(),
+            backend_run_id: backend_run_id.clone(),
+            sequence: 1,
+            plan_digest: prepared.plan.digest.clone(),
+            plan_node_id: completed_node.id.clone(),
+            kind: "plan_node_completed".to_string(),
+            payload: BTreeMap::from([(
+                "receipt".to_string(),
+                serde_json::Value::String("not-a-receipt".to_string()),
+            )]),
+        };
+        let report = journals
+            .synchronize(&runtime, &attempt_id, vec![stray], None, Some(1))
+            .expect("persist an event carrying a foreign receipt key");
+        assert_eq!(report.accepted, 1);
+        let loaded = journals
+            .load_attempt(&attempt_id)
+            .expect("reload the stray-key attempt");
+        let summary = super::summarize_attempt(loaded.view);
+        assert_eq!(summary.events.len(), 1);
+        assert!(
+            summary.events[0].receipt.is_none(),
+            "a receipt key on a non-receipt event is not receipt evidence"
+        );
     }
 
     #[test]
