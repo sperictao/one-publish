@@ -306,7 +306,7 @@ impl AttemptJournalRepository {
         path: &Path,
         label: &str,
     ) -> Result<T, PublishError> {
-        let bytes = fs::read(path)
+        let bytes = crate::security::read_file_bounded(path, crate::security::MAX_REPO_FILE_BYTES)
             .map_err(|error| journal_error(&format!("read attempt {label}"), error))?;
         serde_json::from_slice(&bytes)
             .map_err(|error| journal_error(&format!("decode attempt {label}"), error))
@@ -349,8 +349,9 @@ impl AttemptJournalRepository {
         let mut leases = BTreeMap::from([(initial_lease.lease_id.clone(), initial_lease.clone())]);
         let mut released_leases = BTreeSet::new();
         for path in paths {
-            let bytes = fs::read(&path)
-                .map_err(|error| journal_error("read attempt event batch", error))?;
+            let bytes =
+                crate::security::read_file_bounded(&path, crate::security::MAX_REPO_FILE_BYTES)
+                    .map_err(|error| journal_error("read attempt event batch", error))?;
             let expected_digest = path
                 .file_name()
                 .and_then(|name| name.to_str())
@@ -462,8 +463,9 @@ impl AttemptJournalRepository {
         match publish_private_file(&path, &bytes, "attempt event batch")? {
             PrivateFilePublish::Created => Ok(()),
             PrivateFilePublish::AlreadyExists => {
-                let existing = fs::read(&path)
-                    .map_err(|error| journal_error("read attempt event batch", error))?;
+                let existing =
+                    crate::security::read_file_bounded(&path, crate::security::MAX_REPO_FILE_BYTES)
+                        .map_err(|error| journal_error("read attempt event batch", error))?;
                 if existing == bytes {
                     Ok(())
                 } else {
@@ -559,7 +561,10 @@ impl AttemptJournalRepository {
                 continue;
             }
             let path = entry.path().join(HEADER_FILE);
-            let bytes = match fs::read(&path) {
+            let bytes = match crate::security::read_file_bounded(
+                &path,
+                crate::security::MAX_REPO_FILE_BYTES,
+            ) {
                 Ok(bytes) => bytes,
                 Err(error) if error.kind() == ErrorKind::NotFound => continue,
                 Err(error) => return Err(journal_error("read attempt header", error)),
@@ -658,7 +663,10 @@ impl AttemptJournalRepository {
                 continue;
             }
             let path = entry.path().join(HEADER_FILE);
-            let bytes = match fs::read(&path) {
+            let bytes = match crate::security::read_file_bounded(
+                &path,
+                crate::security::MAX_REPO_FILE_BYTES,
+            ) {
                 Ok(bytes) => bytes,
                 Err(error) if error.kind() == ErrorKind::NotFound => continue,
                 Err(error) => return Err(journal_error("read attempt header", error)),
