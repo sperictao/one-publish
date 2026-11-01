@@ -91,8 +91,12 @@ pub fn load_staged_artifacts(root: &Path) -> Result<Vec<ArtifactCandidate>, Publ
     }
     let mut segments: Vec<PathBuf> = std::fs::read_dir(root)
         .map_err(|error| staging_io_error(format!("read staging root {}", root.display()), error))?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.is_dir())
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            // file_type 不跟随符号链接：链接出的"段目录"一律不算暂存证据，
+            // 防止损坏/替换的归档把根外内容折进候选摘要。
+            entry.file_type().ok()?.is_dir().then(|| entry.path())
+        })
         .collect();
     segments.sort();
     let mut artifacts = Vec::new();
@@ -121,7 +125,19 @@ pub fn load_staged_artifacts(root: &Path) -> Result<Vec<ArtifactCandidate>, Publ
                     record.path
                 )));
             }
-            let bytes = std::fs::read(segment.join(&record.path)).map_err(|error| {
+            let candidate_path = segment.join(&record.path);
+            // 词法路径校验拦不住指向外部的符号链接：落盘字节必须来自真实
+            // 常规文件，链接一律拒绝而不是跟随。
+            let metadata = std::fs::symlink_metadata(&candidate_path).map_err(|error| {
+                staging_io_error(format!("inspect staged candidate {}", record.path), error)
+            })?;
+            if metadata.file_type().is_symlink() {
+                return Err(PublishError::Execution(format!(
+                    "staged candidate {} is a symlink, not stored bytes",
+                    record.path
+                )));
+            }
+            let bytes = std::fs::read(&candidate_path).map_err(|error| {
                 staging_io_error(format!("read staged candidate {}", record.path), error)
             })?;
             artifacts.push(
@@ -170,8 +186,15 @@ fn collect_segment_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(
         )
     };
     for entry in std::fs::read_dir(directory).map_err(read_error)? {
-        let path = entry.map_err(read_error)?.path();
-        if path.is_dir() {
+        let entry = entry.map_err(read_error)?;
+        let file_type = entry.file_type().map_err(read_error)?;
+        // 符号链接不进证据树：链接目录会造成递归环或把根外 JSON 读作段；
+        // file_type 取链接自身类型，真目录/真文件才继续。
+        if file_type.is_symlink() {
+            continue;
+        }
+        let path = entry.path();
+        if file_type.is_dir() {
             collect_segment_files(&path, files)?;
         } else if path
             .extension()
@@ -267,5 +290,85 @@ mod tests {
         let error = load_shard_segments(temp.path())
             .expect_err("an undecodable segment must not read as missing evidence");
         assert!(error.to_string().contains("decode shard segment"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_never_enter_the_segment_or_candidate_evidence_trees() {
+        use std::os::unix::fs::symlink;
+
+        // 符号链接目录不被当段：防递归环与根外 JSON 混入证据。
+        let segments_root = tempfile::tempdir().expect("segments root");
+        let outside = tempfile::tempdir().expect("outside directory");
+        let segment = segments_root.path().join("one-publish-events-1-1-linux");
+        std::fs::create_dir_all(&segment).expect("segment dir");
+        std::fs::write(
+            segment.join("one-publish-events-linux.json"),
+            serde_json::to_vec(&ShardOutcome {
+                events: Vec::new(),
+                manifest: None,
+                artifacts: Vec::new(),
+            })
+            .expect("serialize segment"),
+        )
+        .expect("write segment");
+        std::fs::write(
+            outside.path().join("smuggled.json"),
+            serde_json::to_vec(&ShardOutcome {
+                events: Vec::new(),
+                manifest: None,
+                artifacts: Vec::new(),
+            })
+            .expect("serialize smuggled"),
+        )
+        .expect("write outside payload");
+        symlink(outside.path(), segments_root.path().join("linked-outside"))
+            .expect("create directory symlink");
+        symlink(
+            outside.path().join("smuggled.json"),
+            segment.join("smuggled.json"),
+        )
+        .expect("create file symlink");
+        let events = load_shard_segments(segments_root.path()).expect("load segments");
+        assert!(
+            events.is_empty(),
+            "only the real segment is read; symlinked dirs and files are skipped"
+        );
+
+        // 符号链接候选：词法路径合法但字节在外——落盘证据必须拒绝跟随。
+        let staging_root = tempfile::tempdir().expect("staging root");
+        let segment_dir = staging_root.path().join("linux");
+        std::fs::create_dir_all(segment_dir.join("files")).expect("files dir");
+        symlink(
+            outside.path().join("smuggled.json"),
+            segment_dir.join("files").join("0-app.bin"),
+        )
+        .expect("create candidate symlink");
+        std::fs::write(
+            segment_dir.join("candidates.json"),
+            serde_json::to_vec(&[serde_json::json!({
+                "role": "app",
+                "file_name": "app.bin",
+                "media_type": "application/octet-stream",
+                "platform": "linux",
+                "architecture": "x86_64",
+                "path": "files/0-app.bin",
+                "executable": false
+            })])
+            .expect("serialize candidates"),
+        )
+        .expect("write candidates manifest");
+        let error = load_staged_artifacts(staging_root.path())
+            .expect_err("a symlinked candidate must not be followed");
+        assert!(error.to_string().contains("is a symlink"));
+
+        // 链接出的"段目录"同样不算候选（独立 fixture：上面的候选符号链接
+        // 会先报错，无法隔离本条断言）。
+        let linked_root = tempfile::tempdir().expect("linked staging root");
+        symlink(outside.path(), linked_root.path().join("linked-segment"))
+            .expect("create staging segment symlink");
+        assert!(load_staged_artifacts(linked_root.path())
+            .expect("load staging root")
+            .is_empty());
     }
 }
