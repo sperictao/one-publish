@@ -337,7 +337,16 @@ fn gpg_sign_plan(
     ];
 
     if let Some(key) = key_id {
-        if !key.trim().is_empty() {
+        let key = key.trim();
+        if !key.is_empty() {
+            // `-` 前缀的 key_id 会被 gpg 解析成选项而非签名者值（如
+            // `--homedir=...` 改变密钥环路径）——密钥标识是指纹/用户 ID，
+            // 合法值从不会以 `-` 开头。
+            if key.starts_with('-') {
+                return Err(validation_error(
+                    "signing key id must not start with '-'".to_string(),
+                ));
+            }
             args.push("--local-user".to_string());
             args.push(key.to_string());
         }
@@ -558,6 +567,32 @@ mod tests {
     }
 
     #[test]
+    fn gpg_sign_plan_rejects_flag_like_key_id() {
+        let dir = tempdir().expect("tempdir");
+        let artifact = dir.path().join("app.zip");
+        fs::write(&artifact, "zip-bytes").expect("write artifact");
+
+        // `-` 前缀值若直插 argv 会被 gpg 解析为选项（如 --homedir=...），
+        // 而不是 --local-user 的签名者值。
+        for bad_key in ["--homedir=/tmp/evil", "--no-keyring", "-r"] {
+            let error = gpg_sign_plan(&artifact, None, Some(bad_key))
+                .expect_err("flag-like key id must fail");
+            assert!(
+                error.to_string().contains("must not start with"),
+                "{bad_key} 应被拒: {error}"
+            );
+        }
+
+        // 合法指纹/用户 ID 照常进入 --local-user。
+        let (_, args) = gpg_sign_plan(&artifact, None, Some("A1B2C3D4")).expect("fingerprint key");
+        let position = args
+            .iter()
+            .position(|arg| arg == "--local-user")
+            .expect("local-user flag");
+        assert_eq!(args[position + 1], "A1B2C3D4");
+    }
+
+    #[test]
     fn gpg_sign_plan_derives_signature_path_and_args() {
         let dir = tempdir().expect("tempdir");
         let artifact = dir.path().join("app.zip");
@@ -595,7 +630,8 @@ mod tests {
             .iter()
             .position(|arg| arg == "--local-user")
             .expect("local-user flag");
-        assert_eq!(args[key_position + 1], " KEY-ID ");
+        // key_id 入参裁剪后进入 argv——gpg 查不到带首尾空格的签名者值。
+        assert_eq!(args[key_position + 1], "KEY-ID");
 
         // 空白 key 按无 key 处理
         let (_, args) = gpg_sign_plan(&artifact, None, Some("   ")).expect("blank key");
