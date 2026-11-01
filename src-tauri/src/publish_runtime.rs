@@ -2886,12 +2886,16 @@ fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
             .map(|event| {
                 // 仅 delivery_receipt_observed 的载荷经归约校验是 Receipt；
                 // 其他事件携带同名键不是收据证据，必须原样保留而不是解码。
+                // 载荷畸形的收据事件（篡改/版本漂移）按无收据渲染而不是
+                // panic——每次视图载入都解码，expect 会把单条坏事件放大成
+                // 该 attempt 的永久崩溃（与 #386 同纪律）。
                 let receipt = (event.kind == "delivery_receipt_observed")
                     .then(|| {
-                        event.payload.get("receipt").cloned().map(|value| {
-                            serde_json::from_value(value)
-                                .expect("Publish Core must only return reduced receipt events")
-                        })
+                        event
+                            .payload
+                            .get("receipt")
+                            .cloned()
+                            .and_then(|value| serde_json::from_value(value).ok())
                     })
                     .flatten()
                     .map(|receipt: publish_domain::DeliveryReceipt| {
@@ -6641,6 +6645,41 @@ mod tests {
             summary.events[0].receipt.is_none(),
             "a receipt key on a non-receipt event is not receipt evidence"
         );
+    }
+
+    #[test]
+    fn summarize_renders_malformed_receipt_payloads_as_missing_receipts() {
+        let (_repository, _delivery, _journal_directory, journals) =
+            completed_attempt_fixture("attempt-malformed-receipt");
+        let attempt_id = "attempt-malformed-receipt";
+        let mut view = journals
+            .load_attempt(attempt_id)
+            .expect("reload completed attempt")
+            .view;
+        // 归约已在写盘前拒绝畸形收据；视图投影仍须对不可达路径保持宽容——
+        // 载荷畸形的 receipt 事件渲染为无收据而不是 panic（#386 同纪律）。
+        view.events.push(publish_domain::PublishEvent {
+            version: publish_domain::PUBLISH_EVENT_VERSION,
+            event_id: "event-malformed-receipt".to_string(),
+            attempt_id: attempt_id.to_string(),
+            backend_run_id: view.attempt.backend_run_id.clone(),
+            sequence: 999,
+            plan_digest: view.attempt.plan_digest.clone(),
+            plan_node_id: "node".to_string(),
+            kind: "delivery_receipt_observed".to_string(),
+            payload: BTreeMap::from([(
+                "receipt".to_string(),
+                serde_json::Value::String("not-a-receipt".to_string()),
+            )]),
+        });
+
+        let summary = super::summarize_attempt(view);
+        let rendered = summary
+            .events
+            .iter()
+            .find(|event| event.event_id == "event-malformed-receipt")
+            .expect("malformed receipt event is still summarized");
+        assert!(rendered.receipt.is_none());
     }
 
     #[test]
