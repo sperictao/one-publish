@@ -308,6 +308,20 @@ fn tail_truncation_is_detected_against_a_declared_high_watermark() {
 }
 
 #[test]
+fn max_sequence_is_rejected_before_it_can_poison_gap_arithmetic() {
+    // 腐化 journal/远端证据可携带 u64::MAX 序号：接受会让缺失范围计算的
+    // `sequence + 1` 溢出（debug panic / release 假缺口）。
+    let mut log = open_ledger();
+    let error = log
+        .sync(&[node_completed_event(u64::MAX, "node-a")])
+        .expect_err("u64::MAX sequence must be rejected");
+    assert!(error.to_string().contains(&u64::MAX.to_string()));
+    // 被拒绝的批次不留痕迹：账本保持空。
+    assert!(log.events().is_empty());
+    assert!(log.missing_ranges().is_empty());
+}
+
+#[test]
 fn incompatible_receipt_revisions_block_the_reduction() {
     let mut incompatible = receipt_observed_event(
         2,
