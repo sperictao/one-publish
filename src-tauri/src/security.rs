@@ -10,7 +10,7 @@ pub(crate) use recovery_snapshot::sanitize_publish_recovery_snapshot;
 pub(crate) const REDACTED_VALUE: &str = "<redacted>";
 pub(crate) const LOCAL_PATH_VALUE: &str = "<local-path>";
 
-fn normalize_key(key: &str) -> String {
+pub(crate) fn normalize_key(key: &str) -> String {
     key.chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
         .map(|ch| ch.to_ascii_lowercase())
@@ -19,7 +19,10 @@ fn normalize_key(key: &str) -> String {
 
 pub(crate) fn is_sensitive_key(key: &str) -> bool {
     let normalized = normalize_key(key);
-    [
+    if normalized.is_empty() {
+        return false;
+    }
+    if [
         "password",
         "passwd",
         "pwd",
@@ -31,9 +34,26 @@ pub(crate) fn is_sensitive_key(key: &str) -> bool {
         "privatekey",
         "signingkey",
         "passphrase",
+        "bearer",
     ]
     .iter()
     .any(|pattern| normalized.contains(pattern))
+    {
+        return true;
+    }
+    // 后缀泛化：`sshKey`/`deploy_key`/`encryptionKey`/`appKey`/`consumerKey`/
+    // `basicAuth`/`proxyAuth`/`sessionCookie` 等复合命名都承载秘密材料，但不含
+    // 上面的子串模式。用 ends_with 而非 contains，规避 `keyStore`/`keyAlias`/
+    // `keyPair`/`keyPath`/`authorizationUrl`/`oauthMethod`/`cookieName` 等合法
+    // 非秘密命名（`key`/`auth`/`cookie`/`authorization` 出现在词首或词中）。
+    // `*publicKey`/`*pubkey` 同理按定义非秘密（updater 公钥随发布包分发），
+    // 从 `*key` 后缀中豁免。
+    normalized.ends_with("auth")
+        || normalized.ends_with("cookie")
+        || normalized.ends_with("authorization")
+        || (normalized.ends_with("key")
+            && !normalized.ends_with("publickey")
+            && !normalized.ends_with("pubkey"))
 }
 
 fn is_path_like_key(key: &str) -> bool {
@@ -541,10 +561,41 @@ mod tests {
             "signing_key",
             "sshPassphrase",
             "KEY_PASSPHRASE",
+            // 复合后缀：枚举子串模式覆盖不到的密钥材料命名。
+            "sshKey",
+            "deploy_key",
+            "encryptionKey",
+            "license_key",
+            "appKey",
+            "consumerKey",
+            "masterKey",
+            "pgp_key",
+            "basicAuth",
+            "proxy_auth",
+            "sessionCookie",
+            "auth_cookie",
+            "bearer",
+            "Authorization",
         ] {
             assert!(is_sensitive_key(key), "{key} should be sensitive");
         }
-        for key in ["output", "projectFile", "credentialId", "authorizationUrl"] {
+        for key in [
+            "output",
+            "projectFile",
+            "credentialId",
+            "authorizationUrl",
+            "keyStore",
+            "keyAlias",
+            "keyPair",
+            "keyPath",
+            "oauthMethod",
+            "cookieName",
+            // 公钥材料按定义非秘密（随发布包分发），不进 mask/block 链。
+            "publicKey",
+            "ssh_public_key",
+            "pubkey",
+            "updaterPubKey",
+        ] {
             assert!(!is_sensitive_key(key), "{key} should stay readable");
         }
     }
