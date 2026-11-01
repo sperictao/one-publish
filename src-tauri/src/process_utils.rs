@@ -64,8 +64,8 @@ pub(crate) fn wait_child_with_timeout(
             _ => {
                 let _ = child.kill();
                 let _ = child.wait();
-                let _ = stdout.join();
-                let _ = stderr.join();
+                // 超时路径不再 join drain 线程：孙进程可能继续持有管道写端，
+                // join 会阻塞到孙进程退出。detach 让其在管道 EOF 后自行退出。
                 return None;
             }
         }
@@ -105,8 +105,16 @@ mod tests {
 
     #[test]
     fn hung_command_is_killed_and_returns_none() {
+        // 直接子进程：kill 即释放管道写端。经 sh 包装的孙进程不在此覆盖，
+        // 超时路径按 detach 语义不等待其退出。
+        let child = new_std_command("sleep")
+            .arg("30")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn sleep");
         let started = Instant::now();
-        let output = wait_child_with_timeout(piped_sh("sleep 30"), Duration::from_millis(200));
+        let output = wait_child_with_timeout(child, Duration::from_millis(200));
 
         assert!(output.is_none());
         assert!(started.elapsed() < Duration::from_secs(5));
