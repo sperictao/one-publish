@@ -10,19 +10,42 @@ import type {
 // 此上限仅约束渲染到 DOM 的文本量，避免超长发布日志拖垮渲染性能。
 const MAX_VISIBLE_LOG_CHARS = 200_000;
 
-// 超限时保留尾部，并对齐到下一个换行，避免在行中间截断。
+// 捕获层上限：capturedOutputLogRef 会进入执行记录，失控构建输出不能让
+// renderer 内存无界增长。超出后保留末尾并对齐换行，截断标记在快照读出时钉入。
+export const MAX_CAPTURED_LOG_CHARS = 5_000_000;
+const CAPTURE_TRUNCATION_SLACK = 64_000;
+const TRUNCATED_CAPTURE_MARKER = "[one-publish: earlier output truncated]\n";
+
+// 换行对齐只在截断点后的有限前瞻内查找——超长单行不能让对齐丢弃整段保留内容。
+const TRUNCATION_ALIGN_LOOKAHEAD = 4096;
+
+// 超限时保留尾部：优先在截断点后的前瞻窗口内对齐到换行；窗口内没有换行
+// 就保留完整尾部，不能让对齐逻辑反过来丢掉内容。
+function retainTail(log: string, maxChars: number): string {
+  const tail = log.slice(log.length - maxChars);
+  const newlineIndex = tail.slice(0, TRUNCATION_ALIGN_LOOKAHEAD).indexOf("\n");
+  return newlineIndex >= 0 ? tail.slice(newlineIndex + 1) : tail;
+}
+
 function clampVisibleLog(log: string): string {
   if (log.length <= MAX_VISIBLE_LOG_CHARS) {
     return log;
   }
-  const tail = log.slice(log.length - MAX_VISIBLE_LOG_CHARS);
-  const newlineIndex = tail.indexOf("\n");
-  return newlineIndex >= 0 ? tail.slice(newlineIndex + 1) : tail;
+  return retainTail(log, MAX_VISIBLE_LOG_CHARS);
+}
+
+// 捕获缓冲的 tail 截断：返回 null 表示未超限；否则返回保留下来的尾部文本。
+export function retainCapturedLogTail(log: string): string | null {
+  if (log.length <= MAX_CAPTURED_LOG_CHARS + CAPTURE_TRUNCATION_SLACK) {
+    return null;
+  }
+  return retainTail(log, MAX_CAPTURED_LOG_CHARS);
 }
 
 export function usePublishLogStream() {
   const [outputLog, setOutputLogState] = useState("");
   const capturedOutputLogRef = useRef("");
+  const capturedTruncatedRef = useRef(false);
   const activeSessionIdRef = useRef<string | null>(null);
   const isCaptureEnabledRef = useRef(false);
   const isVisibleCaptureEnabledRef = useRef(false);
@@ -40,7 +63,10 @@ export function usePublishLogStream() {
   }, []);
 
   const getOutputLogSnapshot = useCallback(
-    () => capturedOutputLogRef.current,
+    () =>
+      capturedTruncatedRef.current
+        ? `${TRUNCATED_CAPTURE_MARKER}${capturedOutputLogRef.current}`
+        : capturedOutputLogRef.current,
     []
   );
 
@@ -49,6 +75,7 @@ export function usePublishLogStream() {
     isVisibleCaptureEnabledRef.current = true;
     activeSessionIdRef.current = null;
     capturedOutputLogRef.current = "";
+    capturedTruncatedRef.current = false;
     replaceVisibleOutputLog("");
   }, [replaceVisibleOutputLog]);
 
@@ -62,14 +89,17 @@ export function usePublishLogStream() {
     isVisibleCaptureEnabledRef.current = false;
     activeSessionIdRef.current = null;
     capturedOutputLogRef.current = "";
+    capturedTruncatedRef.current = false;
     replaceVisibleOutputLog("");
   }, [replaceVisibleOutputLog]);
 
   const replaceCapturedOutputLog = useCallback(
     (nextLog: string) => {
-      capturedOutputLogRef.current = nextLog;
+      const retained = retainCapturedLogTail(nextLog);
+      capturedOutputLogRef.current = retained ?? nextLog;
+      capturedTruncatedRef.current = retained !== null;
       if (isVisibleCaptureEnabledRef.current) {
-        replaceVisibleOutputLog(nextLog);
+        replaceVisibleOutputLog(capturedOutputLogRef.current);
       }
     },
     [replaceVisibleOutputLog]
@@ -122,7 +152,14 @@ export function usePublishLogStream() {
         return;
       }
 
-      capturedOutputLogRef.current = `${capturedOutputLogRef.current}${line}`;
+      const next = `${capturedOutputLogRef.current}${line}`;
+      const retained = retainCapturedLogTail(next);
+      if (retained !== null) {
+        capturedTruncatedRef.current = true;
+        capturedOutputLogRef.current = retained;
+      } else {
+        capturedOutputLogRef.current = next;
+      }
 
       if (isVisibleCaptureEnabledRef.current) {
         appendOutputLog(line);
