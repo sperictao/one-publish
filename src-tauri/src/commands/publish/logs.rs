@@ -34,6 +34,38 @@ pub(crate) fn emit_publish_session_started<R: tauri::Runtime>(
     }
 }
 
+/// 聚合保留日志上限（约 5 MB UTF-8 字节）。超出后保留末尾并按换行对齐，
+/// 失控构建输出不会把内存耗尽；实时事件流与 warning 收集不受影响。
+const MAX_AGGREGATE_OUTPUT_BYTES: usize = 5_000_000;
+/// 超出上限后允许继续累积的字数，摊薄尾部截断的 drain 成本。
+const OUTPUT_TRUNCATION_SLACK: usize = 64_000;
+/// 换行对齐只在截断点后的有限前瞻内查找——超长单行不能让对齐丢弃整段保留内容。
+const OUTPUT_TRUNCATION_ALIGN_LOOKAHEAD: usize = 4096;
+/// 截断标记：发生过一次截断就钉在保留输出头部，让持久化记录如实反映。
+const TRUNCATED_OUTPUT_MARKER: &str = "[one-publish: earlier output truncated]\n";
+/// warning 列表上限：文本去重后仍按条数封顶，防病态输出无限增长。
+const MAX_COLLECTED_WARNINGS: usize = 10_000;
+
+fn append_capped_output(output: &mut String, rendered: &str, truncated: &mut bool) {
+    output.push_str(rendered);
+    if output.len() <= MAX_AGGREGATE_OUTPUT_BYTES + OUTPUT_TRUNCATION_SLACK {
+        return;
+    }
+    *truncated = true;
+    let mut boundary = output.len() - MAX_AGGREGATE_OUTPUT_BYTES;
+    while !output.is_char_boundary(boundary) {
+        boundary += 1;
+    }
+    let lookahead_end = (boundary + OUTPUT_TRUNCATION_ALIGN_LOOKAHEAD).min(output.len());
+    if let Some(offset) = output.as_bytes()[boundary..lookahead_end]
+        .iter()
+        .position(|byte| *byte == b'\n')
+    {
+        boundary += offset + 1;
+    }
+    output.drain(..boundary);
+}
+
 fn render_stream_chunk(stream: &str, chunk: &str, stderr_needs_prefix: &mut bool) -> String {
     if stream != "stderr" {
         return chunk.to_string();
@@ -82,6 +114,7 @@ impl WarningCollector {
             let lower = trimmed.to_lowercase();
             if lower.contains("warning")
                 && lower.contains(':')
+                && self.warnings.len() < MAX_COLLECTED_WARNINGS
                 && self.seen.insert(trimmed.to_string())
             {
                 self.warnings.push(trimmed.to_string());
@@ -98,6 +131,7 @@ pub(crate) async fn collect_log_chunks<R: tauri::Runtime>(
     let mut stderr_needs_prefix = true;
     let mut ends_with_newline = true;
     let mut output = String::new();
+    let mut output_truncated = false;
     let mut warnings = WarningCollector::new();
 
     while let Some((stream, chunk)) = receiver.recv().await {
@@ -108,8 +142,12 @@ pub(crate) async fn collect_log_chunks<R: tauri::Runtime>(
 
         warnings.scan(&rendered);
         emit_publish_log(&app, &session_id, &rendered);
-        output.push_str(&rendered);
+        append_capped_output(&mut output, &rendered, &mut output_truncated);
         ends_with_newline = rendered.ends_with('\n') || rendered.ends_with('\r');
+    }
+
+    if output_truncated {
+        output.insert_str(0, TRUNCATED_OUTPUT_MARKER);
     }
 
     PublishLogSummary {
@@ -147,7 +185,9 @@ pub(crate) async fn read_stream_chunks<R>(
 
 #[cfg(test)]
 mod tests {
-    use super::WarningCollector;
+    use super::{
+        append_capped_output, WarningCollector, MAX_AGGREGATE_OUTPUT_BYTES, OUTPUT_TRUNCATION_SLACK,
+    };
 
     #[test]
     fn warning_collector_matches_msbuild_warning_lines() {
@@ -212,5 +252,92 @@ mod tests {
         assert!(collector.warnings[0].contains("CS0168"));
         assert!(collector.warnings[1].contains("NU1903"));
         assert!(collector.warnings[2].contains("CS0219"));
+    }
+
+    #[test]
+    fn append_capped_output_keeps_small_logs_intact() {
+        let mut output = String::new();
+        let mut truncated = false;
+
+        append_capped_output(&mut output, "line one\nline two\n", &mut truncated);
+
+        assert_eq!(output, "line one\nline two\n");
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn append_capped_output_retains_only_tail_beyond_cap() {
+        let mut output = String::new();
+        let mut truncated = false;
+        let head = "h".repeat(MAX_AGGREGATE_OUTPUT_BYTES + OUTPUT_TRUNCATION_SLACK);
+        append_capped_output(&mut output, &head, &mut truncated);
+        append_capped_output(&mut output, "tail-line\n", &mut truncated);
+
+        assert!(truncated, "超出上限后必须标记截断");
+        assert!(
+            output.len() <= MAX_AGGREGATE_OUTPUT_BYTES,
+            "保留输出不得超过上限，实际 {} 字节",
+            output.len()
+        );
+        assert!(output.ends_with("tail-line\n"), "必须保留末尾内容");
+    }
+
+    #[test]
+    fn append_capped_output_aligns_truncation_to_newline() {
+        // boundary = 追加后 len - MAX = 64_006；'\n' 位于 64_101，落在前瞻窗口内，
+        // 截断应对齐到该换行之后，保留 'z' 段与追加尾部。
+        let mut output = format!("{}\n{}", "x".repeat(64_101), "z".repeat(4_999_899));
+        let mut truncated = false;
+
+        append_capped_output(&mut output, "tail\n", &mut truncated);
+
+        assert!(truncated);
+        assert!(output.starts_with('z'), "截断起点应对齐到换行之后");
+        assert!(output.ends_with("tail\n"), "必须保留末尾内容");
+        assert!(output.len() <= MAX_AGGREGATE_OUTPUT_BYTES);
+    }
+
+    #[test]
+    fn append_capped_output_keeps_tail_when_no_newline_within_lookahead() {
+        // '\n' 位于 69_001，超出前瞻窗口（boundary 64_006 + 4KB）：对齐不得
+        // 丢弃整段保留内容，直接从边界保留尾部。
+        let mut output = format!("{}\n{}", "x".repeat(69_001), "z".repeat(4_994_999));
+        let mut truncated = false;
+
+        append_capped_output(&mut output, "tail\n", &mut truncated);
+
+        assert!(truncated);
+        assert!(output.ends_with("tail\n"));
+        assert_eq!(output.len(), MAX_AGGREGATE_OUTPUT_BYTES);
+    }
+
+    #[test]
+    fn append_capped_output_handles_multibyte_boundaries() {
+        // 多字节字符 + 周期换行：截断起点可能落在 UTF-8 序列中间，
+        // 必须先推进到字符边界再对齐换行，且不得 panic。
+        let mut output = "界界\n".repeat(MAX_AGGREGATE_OUTPUT_BYTES / 2);
+        let mut truncated = false;
+
+        append_capped_output(&mut output, "end\n", &mut truncated);
+
+        assert!(truncated);
+        assert!(output.ends_with("end\n"));
+        assert!(output.len() <= MAX_AGGREGATE_OUTPUT_BYTES);
+    }
+
+    #[test]
+    fn warning_collector_stops_growing_at_cap() {
+        let mut collector = WarningCollector::new();
+        for index in 0..(super::MAX_COLLECTED_WARNINGS + 5) {
+            collector.scan(&format!(
+                "warning CS{index:04}: synthetic warning {index}\n"
+            ));
+        }
+
+        assert_eq!(
+            collector.warnings.len(),
+            super::MAX_COLLECTED_WARNINGS,
+            "warning 列表必须封顶，防失控输出无限增长"
+        );
     }
 }
