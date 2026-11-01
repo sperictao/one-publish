@@ -76,12 +76,16 @@ impl<'a> WebviewWindowExt for WebviewWindow {
                                 Err(_) => false,
                             })
                     {
-                        let mut icon_data = String::new();
-                        let mut f = std::fs::File::open(control_icon.path).unwrap();
-                        let _ = f.read_to_string(&mut icon_data);
+                        // 本地 patch：主题解析出的图标路径可能已不存在（主题残缺/
+                        // 中途换主题），原 unwrap 会让窗口设置 panic。打不开就跳过
+                        // 内联替换，保留 @win-<control> 占位回退到脚本默认图标。
+                        if let Ok(mut f) = std::fs::File::open(control_icon.path) {
+                            let mut icon_data = String::new();
+                            let _ = f.read_to_string(&mut icon_data);
 
-                        control_script =
-                            control_script.replace(&format!("@win-{}", control), &icon_data);
+                            control_script =
+                                control_script.replace(&format!("@win-{}", control), &icon_data);
+                        }
                     };
                 }
 
@@ -106,7 +110,10 @@ impl<'a> WebviewWindowExt for WebviewWindow {
                     1,
                 );
 
-                win2.eval(&control_script).expect("couldn't run js");
+                // 本地 patch：eval 失败降级为默认装饰而非 panic（与上方
+                // titlebar 注入的 unwrap_or_else 处理一致）。
+                win2.eval(&control_script)
+                    .unwrap_or_else(|e| println!("decorum controls eval error: {:?}", e));
             }
 
             // On Windows, create custom window controls
@@ -137,8 +144,10 @@ impl<'a> WebviewWindowExt for WebviewWindow {
                     1,
                 );
 
+                // 本地 patch：eval 失败降级为默认装饰而非 panic（与 titlebar
+                // 注入的 unwrap_or_else 处理一致）。
                 win2.eval(script_controls.as_str())
-                    .expect("couldn't run js");
+                    .unwrap_or_else(|e| println!("decorum controls eval error: {:?}", e));
 
                 let win3 = win2.clone();
                 win2.on_window_event(move |eve| match eve {
