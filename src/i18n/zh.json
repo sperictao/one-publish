@@ -993,6 +993,8 @@
     "snapshot_output_dir_missing": "记录中没有可用的输出目录",
     "snapshot_not_found_for_output_dir": "未找到该输出目录的执行快照",
     "snapshot_file_not_found": "执行快照文件不存在",
+    "snapshot_path_outside_root": "记录中的快照路径不在快照目录内",
+    "snapshot_path_resolve_failed": "无法解析记录中的快照路径",
     "snapshot_path_missing": "记录中没有快照路径",
     "snapshot_and_output_dir_missing": "记录中没有可用的快照路径和输出目录",
     "directory_path_empty": "目录路径为空",
