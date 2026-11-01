@@ -150,13 +150,18 @@ impl TemporaryArtifactStore {
         let digest = inputs
             .get("manifest_digest")
             .and_then(Value::as_str)
-            .filter(|digest| is_sha256_digest(digest))
             .ok_or_else(|| {
                 PublishError::Execution(format!(
-                    "node {} does not declare a valid promoted manifest digest",
+                    "node {} does not declare the promoted manifest digest",
                     node.id
                 ))
             })?;
+        if !is_sha256_digest(digest) {
+            return Err(PublishError::Execution(format!(
+                "node {} declares an invalid promoted manifest digest",
+                node.id
+            )));
+        }
         let unresumable = |reason: String| PublishError::UnresumableDelivery {
             manifest_digest: digest.to_string(),
             reason,
