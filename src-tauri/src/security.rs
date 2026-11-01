@@ -144,6 +144,72 @@ fn is_path_switch(token: &str) -> bool {
     )
 }
 
+/// 空格分隔秘密旗标：`--password hunter2`、`--token abc`、curl `-u user:pass`。
+/// 与路径旗标不同，秘密值没有形态特征——命中旗标后下一个 token 无条件遮蔽。
+fn is_secret_switch(token: &str) -> bool {
+    matches!(
+        trim_token_wrappers(token).to_ascii_lowercase().as_str(),
+        "--password"
+            | "--passwd"
+            | "--pwd"
+            | "--token"
+            | "--api-key"
+            | "--apikey"
+            | "--secret"
+            | "--client-secret"
+            | "--access-key"
+            | "--private-key"
+            | "--signing-key"
+            | "--passphrase"
+            | "--credential"
+            | "--credentials"
+            | "--auth"
+            | "--authorization"
+            | "--bearer"
+            | "--bearer-token"
+            | "--session-token"
+            | "--session-key"
+            | "--encryption-key"
+            | "--license-key"
+            | "--sas-token"
+            | "--connection-string"
+            | "-u"
+    )
+}
+
+/// `Authorization:` 形态的 HTTP 头名——头值（或 scheme 词之后的令牌）是秘密。
+fn is_secret_header(token: &str) -> bool {
+    let Some(name) = token.strip_suffix(':') else {
+        return false;
+    };
+    let normalized: String = name
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .map(|ch| ch.to_ascii_lowercase())
+        .collect();
+    matches!(
+        normalized.as_str(),
+        "authorization"
+            | "proxyauthorization"
+            | "proxyauthenticate"
+            | "wwwauthenticate"
+            | "xapikey"
+            | "xauthtoken"
+            | "xtoken"
+            | "xaccesstoken"
+            | "cookie"
+            | "setcookie"
+    )
+}
+
+/// `Authorization: Bearer <token>` 的 scheme 词——放行以保留可读性，只遮蔽其后的令牌。
+fn is_auth_scheme_word(token: &str) -> bool {
+    matches!(
+        token.to_ascii_lowercase().as_str(),
+        "bearer" | "basic" | "digest" | "token" | "negotiate" | "oauth" | "mutual" | "hoba"
+    )
+}
+
 fn sanitize_secret_assignment_token(token: &str) -> Option<String> {
     let stripped = trim_token_wrappers(token);
     let (left, _) = stripped.split_once('=')?;
@@ -173,21 +239,53 @@ pub(crate) fn sanitize_assignment_token(token: &str) -> Option<String> {
     None
 }
 
-fn sanitize_text_token(token: &str, pending_path_value: &mut bool) -> String {
+/// pending_secret：0=无；1=下一个 token 是秘密值；2=下一个 token 可能是
+/// auth-scheme 词（放行后转为 1），否则直接是秘密值。
+#[derive(Default)]
+struct FreeformMaskState {
+    pending_path_value: bool,
+    pending_secret: u8,
+}
+
+fn consume_secret_token(stripped: &str, original: &str, pending_secret: &mut u8) -> String {
+    let allow_scheme = *pending_secret == 2;
+    *pending_secret = 0;
+    if allow_scheme && is_auth_scheme_word(stripped) {
+        *pending_secret = 1;
+        return original.to_string();
+    }
+    REDACTED_VALUE.to_string()
+}
+
+fn sanitize_text_token(token: &str, state: &mut FreeformMaskState) -> String {
     let stripped = trim_token_wrappers(token);
     if stripped.is_empty() {
         return token.to_string();
     }
 
-    if *pending_path_value {
-        *pending_path_value = false;
+    if state.pending_secret != 0 {
+        return consume_secret_token(stripped, token, &mut state.pending_secret);
+    }
+
+    if state.pending_path_value {
+        state.pending_path_value = false;
         if looks_like_absolute_path(stripped) {
             return LOCAL_PATH_VALUE.to_string();
         }
     }
 
     if is_path_switch(stripped) {
-        *pending_path_value = true;
+        state.pending_path_value = true;
+        return token.to_string();
+    }
+
+    if is_secret_header(stripped) {
+        state.pending_secret = 2;
+        return token.to_string();
+    }
+
+    if is_secret_switch(stripped) {
+        state.pending_secret = 1;
         return token.to_string();
     }
 
@@ -205,12 +303,12 @@ fn sanitize_text_token(token: &str, pending_path_value: &mut bool) -> String {
 pub(crate) fn sanitize_freeform_text(text: &str) -> String {
     let mut output = String::with_capacity(text.len());
     let mut token = String::new();
-    let mut pending_path_value = false;
+    let mut state = FreeformMaskState::default();
 
     for ch in text.chars() {
         if ch.is_whitespace() {
             if !token.is_empty() {
-                output.push_str(&sanitize_text_token(&token, &mut pending_path_value));
+                output.push_str(&sanitize_text_token(&token, &mut state));
                 token.clear();
             }
             output.push(ch);
@@ -220,7 +318,7 @@ pub(crate) fn sanitize_freeform_text(text: &str) -> String {
     }
 
     if !token.is_empty() {
-        output.push_str(&sanitize_text_token(&token, &mut pending_path_value));
+        output.push_str(&sanitize_text_token(&token, &mut state));
     }
 
     output
@@ -231,13 +329,12 @@ pub(crate) fn sanitize_freeform_text(text: &str) -> String {
 pub(crate) fn sanitize_secrets_in_text(text: &str) -> String {
     let mut output = String::with_capacity(text.len());
     let mut token = String::new();
+    let mut pending_secret = 0u8;
 
     for ch in text.chars() {
         if ch.is_whitespace() {
             if !token.is_empty() {
-                output.push_str(
-                    &sanitize_secret_assignment_token(&token).unwrap_or_else(|| token.clone()),
-                );
+                output.push_str(&sanitize_secret_text_token(&token, &mut pending_secret));
                 token.clear();
             }
             output.push(ch);
@@ -247,10 +344,29 @@ pub(crate) fn sanitize_secrets_in_text(text: &str) -> String {
     }
 
     if !token.is_empty() {
-        output.push_str(&sanitize_secret_assignment_token(&token).unwrap_or_else(|| token.clone()));
+        output.push_str(&sanitize_secret_text_token(&token, &mut pending_secret));
     }
 
     output
+}
+
+/// 持久化变体的 token 处理：只遮蔽秘密（赋值形 + 空格旗标 + HTTP 头形），
+/// 不做路径替换——历史记录重跑依赖路径原值。
+fn sanitize_secret_text_token(token: &str, pending_secret: &mut u8) -> String {
+    let stripped = trim_token_wrappers(token);
+
+    if *pending_secret != 0 {
+        return consume_secret_token(stripped, token, pending_secret);
+    }
+    if is_secret_header(stripped) {
+        *pending_secret = 2;
+        return token.to_string();
+    }
+    if is_secret_switch(stripped) {
+        *pending_secret = 1;
+        return token.to_string();
+    }
+    sanitize_secret_assignment_token(stripped).unwrap_or_else(|| token.to_string())
 }
 
 fn sanitize_json_value(value: &mut Value, key_hint: Option<&str>, mask_paths: bool) {
@@ -470,6 +586,42 @@ mod tests {
             assert!(!sanitized.contains(original), "{original} leaked");
         }
         assert_eq!(sanitize_freeform_text(&sanitized), sanitized);
+    }
+
+    #[test]
+    fn freeform_text_masks_space_separated_secret_flags() {
+        let text = "curl --token hunter2 --password p@ss -u user:pass https://api.example.com";
+        let sanitized = sanitize_freeform_text(text);
+        assert!(!sanitized.contains("hunter2"));
+        assert!(!sanitized.contains("p@ss"));
+        assert!(!sanitized.contains("user:pass"));
+        assert!(sanitized.contains("https://api.example.com"));
+        assert_eq!(sanitize_freeform_text(&sanitized), sanitized);
+    }
+
+    #[test]
+    fn freeform_text_masks_authorization_header_values() {
+        let text = "header Authorization: Bearer abc123.def X-Api-Key: k3y Cookie: sid=xyz";
+        let sanitized = sanitize_freeform_text(text);
+        assert!(sanitized.contains("Authorization: Bearer <redacted>"));
+        assert!(sanitized.contains("X-Api-Key: <redacted>"));
+        assert!(sanitized.contains("Cookie: <redacted>"));
+        assert!(!sanitized.contains("abc123.def"));
+        assert!(!sanitized.contains("k3y"));
+        assert!(!sanitized.contains("sid=xyz"));
+    }
+
+    #[test]
+    fn secrets_in_text_masks_space_form_but_preserves_paths() {
+        // 持久化变体：秘密遮蔽与 freeform 一致，但路径必须原样保留
+        let text = "tool --api-key hunter2 --output /tmp/out -p:Password=p@ss";
+        let sanitized = sanitize_secrets_in_text(text);
+        assert!(sanitized.contains("--api-key <redacted>"));
+        assert!(sanitized.contains("-p:Password=<redacted>"));
+        assert!(!sanitized.contains("hunter2"));
+        assert!(!sanitized.contains("p@ss"));
+        assert!(sanitized.contains("/tmp/out"));
+        assert!(sanitized.contains("--output"));
     }
 
     #[test]
