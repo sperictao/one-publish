@@ -7,6 +7,12 @@
 //! - 快照与运行时构造工具
 //! - 共享断言工具
 //! - 环境检测与跳过工具
+//!
+//! 本模块经 `#[path]` 分别包含进每个 `e2e_*` 测试二进制，单个二进制只消费
+//! 其中一部分 helper；`--all-features` 下按二进制粒度报 dead_code /
+//! unused_imports 属预期，统一在此豁免而不是逐 item 标注。
+//! `pub` 项跨 common/ 内子模块可见即可，测试二进制不构成对外的 pub 面。
+#![allow(dead_code, unused_imports, unreachable_pub)]
 
 use std::collections::BTreeMap;
 use std::fs;
