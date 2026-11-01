@@ -597,8 +597,10 @@ fn synchronize_run(
                     run.run_id, run.run_attempt
                 ))
             });
-            if let Some(artifact) = prepared_artifact {
-                if !artifact.expired {
+            match prepared_artifact {
+                // 过期 prepared 与过期段同为不可恢复证据（决议 #88）。
+                Some(artifact) if artifact.expired => expired.push("prepared".to_string()),
+                Some(artifact) => {
                     let bytes = source.download_artifact(repo_root, artifact.id)?;
                     verify_artifact_digest(artifact, &bytes)?;
                     let payload = unzip_single_json(&bytes)?;
@@ -611,6 +613,7 @@ fn synchronize_run(
                     })?;
                     archive.write(&archive.prepared_path(&archive_key)?, &payload)?;
                 }
+                None => {}
             }
         }
         missing = missing_segments(archive)?;
@@ -618,18 +621,16 @@ fn synchronize_run(
 
     let prepared: Option<PreparedAttempt> =
         archive.read_json(&archive.prepared_path(&archive_key)?)?;
+    // prepared 与事件段同列为缺项：缺失时以 "prepared" 占位名计入缺项清单。
+    if prepared.is_none() {
+        missing.push("prepared".to_string());
+    }
     let (state, attempt_id) = if missing.is_empty() {
-        let Some(prepared) = prepared else {
-            return Ok(RemoteAttemptEvidenceView {
-                attempt_id: archive_key,
-                binding_id: binding.id.clone(),
-                run_id: run.run_id,
-                state: RemoteEvidenceState::MissingSegments {
-                    missing: vec!["prepared".to_string()],
-                },
-            });
-        };
-        reduce_archived_attempt(archive, &archive_key, expected_segments, &prepared)?
+        // missing 为空蕴含 prepared 已归档。
+        let prepared = prepared
+            .as_ref()
+            .ok_or_else(|| remote_error("prepared attempt 归档缺失".to_string()))?;
+        reduce_archived_attempt(archive, &archive_key, expected_segments, prepared)?
     } else if !expired.is_empty() {
         (RemoteEvidenceState::Expired { missing }, None)
     } else {
@@ -1150,6 +1151,78 @@ mod tests {
             views[0].state,
             RemoteEvidenceState::Expired {
                 missing: vec!["macos".to_string()],
+            }
+        );
+    }
+
+    #[test]
+    fn expired_prepared_artifact_reports_unrecoverable_evidence() {
+        let checkout = fixture_checkout();
+        let prepared = fixture_prepared(checkout.path());
+        let mut source = seed_source(&prepared);
+        for artifact in source.artifacts.get_mut(&7).expect("run artifacts") {
+            if artifact.name.starts_with(PREPARED_ARTIFACT_PREFIX) {
+                artifact.expired = true;
+            }
+        }
+        let archive_root = tempfile::tempdir().expect("archive root");
+        let archive = RemoteEvidenceArchive::new(archive_root.path().to_path_buf());
+
+        let views =
+            synchronize_remote_evidence(checkout.path(), &fixture_config(), &source, &archive)
+                .expect("synchronize expired prepared");
+        assert_eq!(
+            views[0].state,
+            RemoteEvidenceState::Expired {
+                missing: vec!["prepared".to_string()],
+            }
+        );
+    }
+
+    #[test]
+    fn missing_prepared_is_listed_alongside_missing_segments() {
+        let checkout = fixture_checkout();
+        let prepared = fixture_prepared(checkout.path());
+        let mut source = seed_source(&prepared);
+        let artifacts = source.artifacts.get_mut(&7).expect("run artifacts");
+        artifacts.retain(|artifact| {
+            !artifact.name.ends_with("-windows")
+                && !artifact.name.starts_with(PREPARED_ARTIFACT_PREFIX)
+        });
+        let archive_root = tempfile::tempdir().expect("archive root");
+        let archive = RemoteEvidenceArchive::new(archive_root.path().to_path_buf());
+
+        let views =
+            synchronize_remote_evidence(checkout.path(), &fixture_config(), &source, &archive)
+                .expect("synchronize with missing prepared and segment");
+        assert_eq!(
+            views[0].state,
+            RemoteEvidenceState::MissingSegments {
+                missing: vec!["windows".to_string(), "prepared".to_string()],
+            }
+        );
+    }
+
+    #[test]
+    fn missing_prepared_alone_still_reports_as_missing() {
+        let checkout = fixture_checkout();
+        let prepared = fixture_prepared(checkout.path());
+        let mut source = seed_source(&prepared);
+        source
+            .artifacts
+            .get_mut(&7)
+            .expect("run artifacts")
+            .retain(|artifact| !artifact.name.starts_with(PREPARED_ARTIFACT_PREFIX));
+        let archive_root = tempfile::tempdir().expect("archive root");
+        let archive = RemoteEvidenceArchive::new(archive_root.path().to_path_buf());
+
+        let views =
+            synchronize_remote_evidence(checkout.path(), &fixture_config(), &source, &archive)
+                .expect("synchronize with missing prepared");
+        assert_eq!(
+            views[0].state,
+            RemoteEvidenceState::MissingSegments {
+                missing: vec!["prepared".to_string()],
             }
         );
     }
