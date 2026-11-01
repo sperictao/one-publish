@@ -57,11 +57,13 @@ pub(crate) struct GhCliRemoteEvidenceSource;
 
 impl GhCliRemoteEvidenceSource {
     fn gh_api(repo_root: &Path, path: &str) -> Result<Vec<u8>, AppError> {
-        let output = crate::process_utils::new_std_command("gh")
-            .current_dir(repo_root)
-            .args(["api", path])
-            .output()
-            .map_err(|error| remote_error(format!("无法运行 gh api: {error}")))?;
+        let output = gh_output_with_timeout(
+            crate::process_utils::new_std_command("gh")
+                .current_dir(repo_root)
+                .args(["api", path])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped()),
+        )?;
         if !output.status.success() {
             return Err(remote_error(format!(
                 "gh api {path} 失败: {}",
@@ -154,6 +156,20 @@ fn remote_error(message: String) -> AppError {
         .with_details(message)
 }
 
+/// gh CLI 网络调用统一 60s 界：API/dispatch/cancel 任一挂死（网络停顿、
+/// 凭证提示）都会显式超时而不是无限阻塞调用方。
+const GH_CLI_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+fn gh_output_with_timeout(
+    command: &mut std::process::Command,
+) -> Result<std::process::Output, AppError> {
+    let child = command
+        .spawn()
+        .map_err(|error| remote_error(format!("无法运行 gh: {error}")))?;
+    crate::process_utils::wait_child_with_timeout(child, GH_CLI_TIMEOUT)
+        .ok_or_else(|| remote_error(format!("gh 调用超时（{}s）", GH_CLI_TIMEOUT.as_secs())))
+}
+
 /// 手动 dispatch 与强取消端口（决议 #89/#84）：dispatch 经 workflow
 /// dispatches API 并以 `return_run_details` 直取 run id；取消经 cancel run
 /// API——语义限定为强取消，runner 协作清理不保证、事件段可能截尾。
@@ -192,9 +208,10 @@ impl RemoteDispatchPort for GhCliRemoteDispatchPort {
         for (key, value) in inputs {
             command.args(["-f", &format!("inputs[{key}]={value}")]);
         }
-        let output = command
-            .output()
-            .map_err(|error| remote_error(format!("无法运行 gh api dispatch: {error}")))?;
+        command
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let output = gh_output_with_timeout(&mut command)?;
         if !output.status.success() {
             return Err(remote_error(format!(
                 "workflow dispatch 失败: {}",
@@ -211,16 +228,18 @@ impl RemoteDispatchPort for GhCliRemoteDispatchPort {
     }
 
     fn cancel(&self, repo_root: &Path, run_id: u64) -> Result<(), AppError> {
-        let output = crate::process_utils::new_std_command("gh")
-            .current_dir(repo_root)
-            .args([
-                "api",
-                &format!("repos/{{owner}}/{{repo}}/actions/runs/{run_id}/cancel"),
-                "-X",
-                "POST",
-            ])
-            .output()
-            .map_err(|error| remote_error(format!("无法运行 gh api cancel: {error}")))?;
+        let output = gh_output_with_timeout(
+            crate::process_utils::new_std_command("gh")
+                .current_dir(repo_root)
+                .args([
+                    "api",
+                    &format!("repos/{{owner}}/{{repo}}/actions/runs/{run_id}/cancel"),
+                    "-X",
+                    "POST",
+                ])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped()),
+        )?;
         if !output.status.success() {
             return Err(remote_error(format!(
                 "取消 run {run_id} 失败: {}",
@@ -717,12 +736,15 @@ pub async fn synchronize_remote_publish_evidence(
     let state = crate::store::get_state();
     let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
     let repo_root = repository_root(&repo.path)?;
-    synchronize_remote_evidence(
-        &repo_root,
-        &repo.publish_config,
-        &GhCliRemoteEvidenceSource,
-        &RemoteEvidenceArchive::for_current_user()?,
-    )
+    let config = repo.publish_config.clone();
+    let archive = RemoteEvidenceArchive::for_current_user()?;
+    // gh api 轮询与 artifact 下载是网络型同步调用，卸载到 blocking 线程池，
+    // 不占用 executor。
+    tokio::task::spawn_blocking(move || {
+        synchronize_remote_evidence(&repo_root, &config, &GhCliRemoteEvidenceSource, &archive)
+    })
+    .await
+    .map_err(|error| remote_error(format!("远端证据同步任务未能完成: {error}")))?
 }
 
 #[tauri::command]
@@ -737,16 +759,22 @@ pub async fn dispatch_manual_publish_run(
     let state = crate::store::get_state();
     let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
     let repo_root = repository_root(&repo.path)?;
-    let reference = crate::automation::repository_default_branch(&repo_root)?;
-    dispatch_manual_publish(
-        &repo_root,
-        &repo.publish_config,
-        &binding_id,
-        &version,
-        &reference,
-        &GhCliRemoteDispatchPort,
-        &RemoteEvidenceArchive::for_current_user()?,
-    )
+    let config = repo.publish_config.clone();
+    let archive = RemoteEvidenceArchive::for_current_user()?;
+    tokio::task::spawn_blocking(move || {
+        let reference = crate::automation::repository_default_branch(&repo_root)?;
+        dispatch_manual_publish(
+            &repo_root,
+            &config,
+            &binding_id,
+            &version,
+            &reference,
+            &GhCliRemoteDispatchPort,
+            &archive,
+        )
+    })
+    .await
+    .map_err(|error| remote_error(format!("手动发布触发任务未能完成: {error}")))?
 }
 
 #[tauri::command]
@@ -757,7 +785,9 @@ pub async fn cancel_remote_publish_run(repo_id: String, run_id: u64) -> Result<(
     let state = crate::store::get_state();
     let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
     let repo_root = repository_root(&repo.path)?;
-    GhCliRemoteDispatchPort.cancel(&repo_root, run_id)
+    tokio::task::spawn_blocking(move || GhCliRemoteDispatchPort.cancel(&repo_root, run_id))
+        .await
+        .map_err(|error| remote_error(format!("取消任务未能完成: {error}")))?
 }
 
 fn repository_root(path: &str) -> Result<PathBuf, AppError> {

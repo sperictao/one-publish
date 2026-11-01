@@ -191,9 +191,12 @@ pub(crate) trait RunnerAssetDigestSource {
 
 pub(crate) struct GhCliRunnerAssetDigestSource;
 
+/// gh api 网络调用统一 60s 界：避免远端/API 停顿挂死同步调用方。
+const GH_API_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 impl RunnerAssetDigestSource for GhCliRunnerAssetDigestSource {
     fn binary_digests(&self, release_tag: &str) -> Result<BTreeMap<String, String>, AppError> {
-        let output = crate::process_utils::new_std_command("gh")
+        let child = crate::process_utils::new_std_command("gh")
             .args([
                 "api",
                 &format!(
@@ -201,8 +204,12 @@ impl RunnerAssetDigestSource for GhCliRunnerAssetDigestSource {
                     one_publish_runner::RUNNER_DISTRIBUTION_REPOSITORY
                 ),
             ])
-            .output()
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
             .map_err(|error| runner_digest_error(format!("无法运行 gh api: {error}")))?;
+        let output = crate::process_utils::wait_child_with_timeout(child, GH_API_TIMEOUT)
+            .ok_or_else(|| runner_digest_error("gh api 请求超时".to_string()))?;
         if !output.status.success() {
             return Err(runner_digest_error(format!(
                 "runner 分发 release {release_tag} 不可用: {}",
@@ -1627,18 +1634,34 @@ fn change_view(
     }
 }
 
+/// 自动化 git 调用含 fetch/push 等网络操作：远端停顿或凭证提示会把
+/// `.output()` 挂死。统一 120s 界住，超时回收子进程并显式失败。
+const AUTOMATION_GIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 fn git(repository_root: &Path, args: &[&str]) -> Result<Output, AppError> {
-    crate::process_utils::new_std_command("git")
+    let child = crate::process_utils::new_std_command("git")
         .arg("-C")
         .arg(repository_root)
         .args(args)
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|error| {
             AppError::external_command_with_code(
                 format!("failed to run git {}: {error}", args.join(" ")),
                 "automation_git_failed",
             )
-        })
+        })?;
+    crate::process_utils::wait_child_with_timeout(child, AUTOMATION_GIT_TIMEOUT).ok_or_else(|| {
+        AppError::external_command_with_code(
+            format!(
+                "git {} timed out after {}s",
+                args.join(" "),
+                AUTOMATION_GIT_TIMEOUT.as_secs()
+            ),
+            "automation_git_failed",
+        )
+    })
 }
 
 fn successful_git(repository_root: &Path, args: &[&str]) -> Result<String, AppError> {
@@ -1944,6 +1967,15 @@ fn repository_root_from_path(path: &str) -> Result<&Path, AppError> {
     Ok(root)
 }
 
+/// spawn_blocking 闭包 panic/取消的统一映射：这些命令把工作卸载到 blocking
+/// 线程池（git fetch/push、gh api 是网络型同步调用，不能占住 executor）。
+fn automation_join_error(error: tokio::task::JoinError) -> AppError {
+    AppError::external_command_with_code(
+        format!("automation work failed to complete: {error}"),
+        "automation_task_join_failed",
+    )
+}
+
 #[tauri::command]
 pub async fn list_automation_bindings(repo_id: String) -> Result<AutomationBindingsView, AppError> {
     let _timer =
@@ -1951,12 +1983,13 @@ pub async fn list_automation_bindings(repo_id: String) -> Result<AutomationBindi
     let state = crate::store::get_state();
     let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
     let now = chrono::Utc::now().to_rfc3339();
-    bindings_view(
-        repository_root_from_path(&repo.path)?,
-        &repo.publish_config,
-        &now,
-        &GhCliRunnerAssetDigestSource,
-    )
+    let repo_root = repository_root_from_path(&repo.path)?.to_path_buf();
+    let config = repo.publish_config.clone();
+    tokio::task::spawn_blocking(move || {
+        bindings_view(&repo_root, &config, &now, &GhCliRunnerAssetDigestSource)
+    })
+    .await
+    .map_err(automation_join_error)?
 }
 
 #[tauri::command]
@@ -1969,13 +2002,19 @@ pub async fn preview_automation_change(
     let state = crate::store::get_state();
     let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
     let now = chrono::Utc::now().to_rfc3339();
-    let outcome = preview_change(
-        repository_root_from_path(&repo.path)?,
-        &repo.publish_config,
-        &change,
-        &now,
-        &GhCliRunnerAssetDigestSource,
-    )?;
+    let repo_root = repository_root_from_path(&repo.path)?.to_path_buf();
+    let config = repo.publish_config.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        preview_change(
+            &repo_root,
+            &config,
+            &change,
+            &now,
+            &GhCliRunnerAssetDigestSource,
+        )
+    })
+    .await
+    .map_err(automation_join_error)??;
     Ok(AutomationProjectionPreview {
         change: outcome.normalized_change,
         confirmation_digest: outcome.confirmation_digest,
@@ -1998,16 +2037,23 @@ pub async fn apply_automation_change(
         crate::commands::middleware::CommandTimer::new("automation::apply_automation_change");
     let mut state = crate::store::get_state();
     let repo = crate::store::find_repository_mut(&mut state.repositories, &repo_id)?;
-    let repo_path = repo.path.clone();
+    let repo_root = repository_root_from_path(&repo.path)?.to_path_buf();
     let now = chrono::Utc::now().to_rfc3339();
-    let result = apply_change(
-        repository_root_from_path(&repo_path)?,
-        &mut repo.publish_config,
-        &change,
-        &confirmed_digest,
-        &now,
-        &GhCliRunnerAssetDigestSource,
-    )?;
+    let mut config = repo.publish_config.clone();
+    let (result, config) = tokio::task::spawn_blocking(move || {
+        apply_change(
+            &repo_root,
+            &mut config,
+            &change,
+            &confirmed_digest,
+            &now,
+            &GhCliRunnerAssetDigestSource,
+        )
+        .map(|result| (result, config))
+    })
+    .await
+    .map_err(automation_join_error)??;
+    repo.publish_config = config;
     crate::store::persist_state_and_refresh_tray(&app, state).await?;
     Ok(result)
 }
