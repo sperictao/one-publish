@@ -45,6 +45,43 @@ const OUTPUT_TRUNCATION_ALIGN_LOOKAHEAD: usize = 4096;
 const TRUNCATED_OUTPUT_MARKER: &str = "[one-publish: earlier output truncated]\n";
 /// warning 列表上限：文本去重后仍按条数封顶，防病态输出无限增长。
 const MAX_COLLECTED_WARNINGS: usize = 10_000;
+/// 实时日志 emit 的批量阈值：4KB 读粒度逐条 emit 在失控输出下是数万次/秒的
+/// IPC 泛洪；攒到该阈值或 flush 间隔到期时合并发送（合并保持字节序不变）。
+const EMIT_BATCH_BYTES: usize = 256 * 1024;
+/// 实时日志 emit 的最大攒批延迟：输出静默期到期即发，保证可见延迟有界。
+const EMIT_FLUSH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(80);
+
+/// 实时日志的待发送攒批缓冲：纯数据策略（阈值判断 + 顺序拼接），emit 副作用
+/// 留给调用方以便单测。多块拼成一个 payload 与逐块 append 语义相同——前端按
+/// 原文拼接 `payload.line`，顺序与内容不变。
+struct PendingEmit {
+    pending: String,
+}
+
+impl PendingEmit {
+    fn new() -> Self {
+        Self {
+            pending: String::new(),
+        }
+    }
+
+    fn push(&mut self, rendered: &str) {
+        self.pending.push_str(rendered);
+    }
+
+    fn batch_full(&self) -> bool {
+        self.pending.len() >= EMIT_BATCH_BYTES
+    }
+
+    /// 取走攒批内容（无内容返回 None）；阈值/定时器/关闭三种触发共用。
+    fn take(&mut self) -> Option<String> {
+        if self.pending.is_empty() {
+            None
+        } else {
+            Some(std::mem::take(&mut self.pending))
+        }
+    }
+}
 
 fn append_capped_output(output: &mut String, rendered: &str, truncated: &mut bool) {
     output.push_str(rendered);
@@ -133,17 +170,40 @@ pub(crate) async fn collect_log_chunks<R: tauri::Runtime>(
     let mut output = String::new();
     let mut output_truncated = false;
     let mut warnings = WarningCollector::new();
+    let mut pending = PendingEmit::new();
+    let mut flush = tokio::time::interval(EMIT_FLUSH_INTERVAL);
+    // interval 首 tick 立即返回；pending 为空时 take 是 no-op，不单独跳过。
+    flush.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
-    while let Some((stream, chunk)) = receiver.recv().await {
-        let rendered = render_stream_chunk(&stream, &chunk, &mut stderr_needs_prefix);
-        if rendered.is_empty() {
-            continue;
+    loop {
+        tokio::select! {
+            chunk = receiver.recv() => {
+                let Some((stream, chunk)) = chunk else { break };
+                let rendered = render_stream_chunk(&stream, &chunk, &mut stderr_needs_prefix);
+                if rendered.is_empty() {
+                    continue;
+                }
+                warnings.scan(&rendered);
+                pending.push(&rendered);
+                append_capped_output(&mut output, &rendered, &mut output_truncated);
+                ends_with_newline = rendered.ends_with('\n') || rendered.ends_with('\r');
+                if pending.batch_full() {
+                    if let Some(batch) = pending.take() {
+                        emit_publish_log(&app, &session_id, &batch);
+                    }
+                }
+            }
+            _ = flush.tick() => {
+                if let Some(batch) = pending.take() {
+                    emit_publish_log(&app, &session_id, &batch);
+                }
+            }
         }
+    }
 
-        warnings.scan(&rendered);
-        emit_publish_log(&app, &session_id, &rendered);
-        append_capped_output(&mut output, &rendered, &mut output_truncated);
-        ends_with_newline = rendered.ends_with('\n') || rendered.ends_with('\r');
+    // 读端关闭后发出剩余攒批，尾部内容不丢。
+    if let Some(batch) = pending.take() {
+        emit_publish_log(&app, &session_id, &batch);
     }
 
     if output_truncated {
@@ -186,8 +246,38 @@ pub(crate) async fn read_stream_chunks<R>(
 #[cfg(test)]
 mod tests {
     use super::{
-        append_capped_output, WarningCollector, MAX_AGGREGATE_OUTPUT_BYTES, OUTPUT_TRUNCATION_SLACK,
+        append_capped_output, PendingEmit, WarningCollector, EMIT_BATCH_BYTES,
+        MAX_AGGREGATE_OUTPUT_BYTES, OUTPUT_TRUNCATION_SLACK,
     };
+
+    #[test]
+    fn pending_emit_joins_chunks_in_order() {
+        let mut pending = PendingEmit::new();
+        pending.push("first\n");
+        pending.push("second\n");
+        pending.push("third\n");
+
+        assert_eq!(pending.take().as_deref(), Some("first\nsecond\nthird\n"));
+        assert!(pending.take().is_none(), "取走后缓冲应为空");
+    }
+
+    #[test]
+    fn pending_emit_take_on_empty_returns_none() {
+        let mut pending = PendingEmit::new();
+        assert!(pending.take().is_none());
+    }
+
+    #[test]
+    fn pending_emit_reports_batch_full_at_threshold() {
+        let mut pending = PendingEmit::new();
+        assert!(!pending.batch_full());
+
+        pending.push(&"x".repeat(EMIT_BATCH_BYTES));
+        assert!(pending.batch_full(), "达到批量阈值应触发 flush");
+
+        pending.take();
+        assert!(!pending.batch_full());
+    }
 
     #[test]
     fn warning_collector_matches_msbuild_warning_lines() {
