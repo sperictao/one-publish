@@ -225,6 +225,7 @@ test.describe("Settings dialog", () => {
     await expect(dialog.getByText("执行发布")).toBeVisible({
       timeout: 10000,
     });
-    await expect(dialog.getByText("Ctrl P")).toBeVisible();
+    // 修饰键随宿主平台渲染（macOS ⌘ / 其它 Ctrl），断言覆盖两种分支。
+    await expect(dialog.getByText(/^(⌘|Ctrl) P$/)).toBeVisible();
   });
 });
