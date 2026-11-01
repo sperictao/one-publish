@@ -29,6 +29,16 @@ yarn-error.log*
 !.env.example
 !.env.*.example
 
+# Signing keys, certificates, and SSH material must never be committed.
+# Release signing arrives via CI secrets/keychain, not repository files.
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+id_rsa*
+id_ed25519*
+
 # TypeScript and tool caches
 *.tsbuildinfo
 .cache/
