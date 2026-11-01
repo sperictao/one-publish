@@ -6,6 +6,7 @@ export function useLazyRef<T>(init: () => T): React.MutableRefObject<T> {
   const ref = useRef<T | typeof UNSET>(UNSET);
   /* eslint-disable react-hooks/refs -- 惰性初始化须在首个渲染期同步完成，语义有意为之 */
   if (ref.current === UNSET) {
+    // react-doctor-disable-next-line react-doctor/no-ref-current-in-render -- 惰性初始化须在首个渲染期同步完成
     ref.current = init();
   }
   /* eslint-enable react-hooks/refs */
