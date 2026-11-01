@@ -96,8 +96,12 @@ pub(crate) fn infer_bundle_dir(spec: &PublishSpec) -> String {
     };
     let mut target_dir = app_root.join("src-tauri").join("target");
     if let Some(SpecValue::String(target)) = spec.parameters.get("target") {
-        if !target.trim().is_empty() {
-            target_dir = target_dir.join(target.trim());
+        let target = target.trim();
+        // target 同时进 bundle 目录名与 --target argv：自由文本里的
+        // `..`/分隔符会把推断的收集目录引出 target/ 之外。非法三元组仍随
+        // argv 传给工具链自行报错，路径侧只按三元组形状收口。
+        if publish_adapters::tauri::is_safe_build_target(target) {
+            target_dir = target_dir.join(target);
         }
     }
     target_dir
@@ -146,6 +150,42 @@ mod tests {
 
         assert_eq!(program, "pnpm");
         assert_eq!(args[..2], ["tauri".to_string(), "build".to_string()]);
+    }
+
+    /// target 是自由文本参数但会进 bundle 目录名——`..`/分隔符形态
+    /// 必须把推断目录留在 src-tauri/target 之下。
+    #[test]
+    fn infer_bundle_dir_keeps_hostile_targets_inside_the_target_root() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let config_path = create_tauri_app(&temp_dir);
+        for hostile in ["../escape", "a/b", "x\\y", "..", "x86_64;rm"] {
+            let mut spec = PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "tauri".to_string(),
+                project_path: config_path.to_string_lossy().to_string(),
+                parameters: BTreeMap::new(),
+            };
+            spec.parameters
+                .insert("target".to_string(), SpecValue::String(hostile.to_string()));
+            let dir = infer_bundle_dir(&spec);
+            let target_root = temp_dir.path().join("src-tauri").join("target");
+            assert!(
+                Path::new(&dir).starts_with(&target_root),
+                "hostile target {hostile:?} escaped: {dir}"
+            );
+        }
+        // 合法三元组仍进入目录名。
+        let mut spec = PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "tauri".to_string(),
+            project_path: config_path.to_string_lossy().to_string(),
+            parameters: BTreeMap::new(),
+        };
+        spec.parameters.insert(
+            "target".to_string(),
+            SpecValue::String("aarch64-apple-darwin".to_string()),
+        );
+        assert!(infer_bundle_dir(&spec).contains("aarch64-apple-darwin"));
     }
 
     #[test]
