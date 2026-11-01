@@ -13,6 +13,8 @@ jobs:
   build:
     name: build-${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # universal macOS 双腿编译 + 签名/公证的最坏情形给足余量；挂死不再烧满默认 360min。
+    timeout-minutes: 60
     env:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.KEYCHAIN_PASSWORD != '' }}
       HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
