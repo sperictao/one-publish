@@ -12,7 +12,8 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use crate::errors::AppError;
-use crate::provider::registry::ProviderRegistry;
+use crate::provider::registry::provider_registry;
+use crate::provider::Provider;
 use crate::store::{
     find_repository, get_state, ConfigProfile, ExecutionRecord, PublishComposition,
     PublishConfigurationRevision, Repository, CURRENT_SETTINGS_VERSION,
@@ -199,16 +200,13 @@ fn source_error(code: &str, message: impl Into<String>) -> AppError {
     AppError::validation_with_code(message, code)
 }
 
-fn known_provider(provider_id: &str) -> Result<(), AppError> {
-    ProviderRegistry::new()
-        .get(provider_id)
-        .map(|_| ())
-        .map_err(|_| {
-            source_error(
-                "publish_source_unknown_provider",
-                format!("unknown publish provider: {provider_id}"),
-            )
-        })
+fn require_known_provider(provider_id: &str) -> Result<&'static dyn Provider, AppError> {
+    provider_registry().get(provider_id).map_err(|_| {
+        source_error(
+            "publish_source_unknown_provider",
+            format!("unknown publish provider: {provider_id}"),
+        )
+    })
 }
 
 /// 所有 PublishSource 共用的配置内容版本门禁。来源可以不同，但只要最终
@@ -222,8 +220,7 @@ fn configuration_content_blocked_reason(content: &PublishConfigurationContent) -
         ));
     }
 
-    let registry = ProviderRegistry::new();
-    let provider = match registry.get(&content.provider_id) {
+    let provider = match provider_registry().get(&content.provider_id) {
         Ok(provider) => provider,
         Err(_) => return Some(format!("provider_unavailable:{}", content.provider_id)),
     };
@@ -411,7 +408,7 @@ fn resolve_draft_source(
     content: &PublishConfigurationContent,
     base_revision: Option<&PublishBaseRevisionRef>,
 ) -> Result<ResolvedPublishSource, AppError> {
-    known_provider(&content.provider_id)?;
+    require_known_provider(&content.provider_id)?;
     if let Some(base) = base_revision {
         let profile = find_active_profile(repository, &base.configuration_id)?;
         let revision = find_revision(profile, &base.revision_id)?;
@@ -445,9 +442,7 @@ fn resolve_template_source(
     template_id: &str,
     project_binding: Option<&str>,
 ) -> Result<ResolvedPublishSource, AppError> {
-    known_provider(provider_id)?;
-    let registry = ProviderRegistry::new();
-    let provider = registry.get(provider_id).expect("provider known");
+    let provider = require_known_provider(provider_id)?;
     let template = provider.resolve_template(template_id).ok_or_else(|| {
         source_error(
             "publish_source_template_not_found",
@@ -487,13 +482,7 @@ fn resolve_project_profile_source(
     project_binding: Option<&str>,
     reference: &str,
 ) -> Result<ResolvedPublishSource, AppError> {
-    let registry = ProviderRegistry::new();
-    let provider = registry.get(provider_id).map_err(|_| {
-        source_error(
-            "publish_source_unknown_provider",
-            format!("unknown publish provider: {provider_id}"),
-        )
-    })?;
+    let provider = require_known_provider(provider_id)?;
     let Some(project_profiles) = provider.capabilities().project_profiles.clone() else {
         return Err(source_error(
             "publish_source_project_profile_unsupported",
@@ -717,9 +706,7 @@ fn resolve_empty_source(
     provider_id: &str,
     project_binding: Option<&str>,
 ) -> Result<ResolvedPublishSource, AppError> {
-    known_provider(provider_id)?;
-    let registry = ProviderRegistry::new();
-    let provider = registry.get(provider_id).expect("provider known");
+    let provider = require_known_provider(provider_id)?;
     let content = PublishConfigurationContent {
         provider_id: provider_id.to_string(),
         contract_version: PUBLISH_CONFIGURATION_CONTRACT_VERSION,
