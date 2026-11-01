@@ -364,7 +364,31 @@ fn enabled_build_targets(
                 "{ENABLED_TARGETS_SETTING} must be a non-empty array of target triples"
             ),
         })?;
+    // 三元组随后进入三个消费面：Rust 构建的 `--target` 参数、per-target 暂存
+    // 与 bundle 目录名（`src-tauri/target/<triple>` 同构路径），以及外壳
+    // workflow `targets:` 行。只放行 target triple 的真实字符集——`/`、`..`、
+    // 空白与 YAML 元字符会把三元组变成路径逃逸或工作流注入。
+    if let Some(invalid) = targets.iter().find(|target| !is_safe_build_target(target)) {
+        return Err(PublishError::InvalidAdapterSettings {
+            adapter: adapter.to_string(),
+            message: format!("{ENABLED_TARGETS_SETTING} entry {invalid:?} is not a target triple"),
+        });
+    }
     Ok(targets)
+}
+
+/// target triple 的安全形状：字母数字、`-`、`_`、`.`（如
+/// `x86_64-unknown-linux-gnu`、`universal-apple-darwin`）。任何其它字符都
+/// 不能让三元组进 argv、文件系统路径或 workflow YAML。
+fn is_safe_build_target(target: &str) -> bool {
+    !target.is_empty()
+        && target
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric())
+        && target
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 /// build target triple → 平台族亲和；macOS universal 也归 macOS 族。
@@ -1440,6 +1464,44 @@ mod plan_fragment_tests {
                 );
             }
         }
+    }
+
+    /// 三元组注入面：进入 `--target` argv、per-target 目录名与外壳 workflow
+    /// `targets:` 行——`..`、`/`、空白与 YAML/shell 元字符必须在校验时关闭。
+    #[test]
+    fn hostile_target_triples_are_rejected_at_settings_validation() {
+        let provider = TauriProjectProvider::new();
+        for hostile in [
+            "../escape",
+            "../../etc/passwd",
+            "triple with space",
+            "x86_64\n- name: pwned",
+            "x86_64\"; rm -rf /; \"",
+            "x86_64:label",
+            "-target",
+            "triple/v1",
+        ] {
+            let hostile_settings = settings(Some(serde_json::json!([hostile])));
+            assert!(
+                provider.validate_settings(&hostile_settings).is_err(),
+                "target {hostile:?} must be rejected"
+            );
+            assert!(
+                provider
+                    .plan_fragment(&snapshot(), &hostile_settings)
+                    .is_err(),
+                "target {hostile:?} must also fail at plan expansion"
+            );
+        }
+        // 真实三元组（含 universal）不受影响。
+        let valid = settings(Some(serde_json::json!([
+            "x86_64-unknown-linux-gnu",
+            "universal-apple-darwin",
+            "aarch64-pc-windows-msvc",
+        ])));
+        provider
+            .validate_settings(&valid)
+            .expect("real target triples stay valid");
     }
 
     #[test]
