@@ -121,6 +121,47 @@ fn calculate_progress_percent(downloaded_bytes: u64, total_bytes: Option<u64>) -
     })
 }
 
+/// 下载进度 emit 节流：逐网络 chunk 的回调是每 64KB 一次 IPC + 前端重渲，
+/// 大安装包在快网下可达数百次/秒。改为 0.5% 百分比粒度（每次下载至多 200
+/// 次 emit）；总大小未知时退化为 512KB 字节水位；下载完成必定 emit（否则
+/// 进度可能停在 99.x%）。
+const UPDATE_PROGRESS_PERCENT_DELTA: f64 = 0.5;
+const UPDATE_PROGRESS_UNKNOWN_SIZE_BYTES: u64 = 512 * 1024;
+
+struct ProgressThrottle {
+    last_percent: f64,
+    last_bytes: u64,
+}
+
+impl ProgressThrottle {
+    fn new() -> Self {
+        Self {
+            last_percent: 0.0,
+            last_bytes: 0,
+        }
+    }
+
+    /// 判定本次 chunk 是否值得 emit；通过则推进水位（调用方负责实际 emit）。
+    fn should_emit(&mut self, downloaded_bytes: u64, percent: Option<f64>) -> bool {
+        let completed = matches!(percent, Some(p) if p >= 100.0);
+        let advanced = match percent {
+            Some(p) => p - self.last_percent >= UPDATE_PROGRESS_PERCENT_DELTA,
+            None => {
+                downloaded_bytes.saturating_sub(self.last_bytes)
+                    >= UPDATE_PROGRESS_UNKNOWN_SIZE_BYTES
+            }
+        };
+        if !completed && !advanced {
+            return false;
+        }
+        if let Some(p) = percent {
+            self.last_percent = p;
+        }
+        self.last_bytes = downloaded_bytes;
+        true
+    }
+}
+
 fn emit_update_download_progress<R: tauri::Runtime>(
     app: &AppHandle<R>,
     payload: UpdateDownloadProgressPayload,
@@ -312,11 +353,16 @@ async fn download_update_with_retry<R: tauri::Runtime>(
         let app_handle = app.clone();
         let version = update.version.clone();
         let mut downloaded_bytes = 0_u64;
+        let mut throttle = ProgressThrottle::new();
 
         let result = update
             .download(
                 move |chunk_len, total_bytes| {
                     downloaded_bytes += chunk_len as u64;
+                    let percent = calculate_progress_percent(downloaded_bytes, total_bytes);
+                    if !throttle.should_emit(downloaded_bytes, percent) {
+                        return;
+                    }
                     emit_update_download_progress(
                         &app_handle,
                         build_progress_payload(
@@ -678,8 +724,8 @@ mod tests {
         get_pending_update, is_retryable_download_error, is_retryable_status_code,
         map_updater_error, normalize_expected_version, refresh_after_failure_with_fetch,
         resolve_update_with_fetch, retry_delay, set_pending_update, update_metadata_changed,
-        updater_error_summary, DownloadFailure, PendingUpdateState, UpdateMetadata,
-        UPDATE_DOWNLOAD_MAX_ATTEMPTS,
+        updater_error_summary, DownloadFailure, PendingUpdateState, ProgressThrottle,
+        UpdateMetadata, UPDATE_DOWNLOAD_MAX_ATTEMPTS, UPDATE_PROGRESS_UNKNOWN_SIZE_BYTES,
     };
     use crate::errors::{AppError, ErrorKind};
     use std::sync::{Arc, Mutex};
@@ -1142,6 +1188,46 @@ mod tests {
         assert_eq!(calculate_progress_percent(5, Some(10)), Some(50.0));
         // 已下载量超过服务端声明总量时钳制在 100%。
         assert_eq!(calculate_progress_percent(20, Some(10)), Some(100.0));
+    }
+
+    #[test]
+    fn progress_throttle_emits_on_percent_granularity_and_completion() {
+        let mut throttle = ProgressThrottle::new();
+        let total = Some(100_000);
+
+        // 小步推进不足 0.5% 不 emit。
+        assert!(!throttle.should_emit(100, calculate_progress_percent(100, total)));
+        assert!(!throttle.should_emit(400, calculate_progress_percent(400, total)));
+        // 跨过 0.5% 粒度才 emit。
+        assert!(throttle.should_emit(1_000, calculate_progress_percent(1_000, total)));
+        // 紧邻的同粒度步进不再 emit。
+        assert!(!throttle.should_emit(1_100, calculate_progress_percent(1_100, total)));
+        // 完成必定 emit（即使距上次推进不足 0.5%）。
+        assert!(throttle.should_emit(100_000, calculate_progress_percent(100_000, total)));
+    }
+
+    #[test]
+    fn progress_throttle_falls_back_to_byte_watermark_when_total_unknown() {
+        let mut throttle = ProgressThrottle::new();
+
+        assert!(!throttle.should_emit(1_000, None));
+        assert!(!throttle.should_emit(UPDATE_PROGRESS_UNKNOWN_SIZE_BYTES - 1, None));
+        assert!(throttle.should_emit(UPDATE_PROGRESS_UNKNOWN_SIZE_BYTES, None));
+        // 水位推进后再次需要 512KB 增量。
+        assert!(!throttle.should_emit(UPDATE_PROGRESS_UNKNOWN_SIZE_BYTES + 1, None));
+        assert!(throttle.should_emit(UPDATE_PROGRESS_UNKNOWN_SIZE_BYTES * 2, None));
+    }
+
+    #[test]
+    fn progress_throttle_resumes_percent_tracking_when_total_appears() {
+        let mut throttle = ProgressThrottle::new();
+
+        assert!(throttle.should_emit(600_000, None));
+        // 总大小中途出现：从 0% 基线起跳直接跨粒度。
+        assert!(throttle.should_emit(
+            600_000,
+            calculate_progress_percent(600_000, Some(1_000_000))
+        ));
     }
 
     #[test]
