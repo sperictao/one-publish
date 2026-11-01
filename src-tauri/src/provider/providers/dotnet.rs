@@ -267,21 +267,56 @@ pub(crate) fn parse_msbuild_publish_dir(stdout: &str) -> Option<String> {
     (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
+/// 求值上限：MSBuild 属性求值是同步阻塞调用（infer_output_dir 链路为
+/// 同步接口），挂死的 SDK（首启体验、锁竞争、代理超时）不能无界占用
+/// 执行线程——超时回收子进程并回落静态推断。
+const MSBUILD_EVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// 向工具链求值构建实际写入的输出目录。求值失败（dotnet 缺失、SDK 不支持
-/// -getProperty、项目不可求值）返回 None，调用方回落静态推断，不阻断发布。
+/// -getProperty、项目不可求值、求值超时）返回 None，调用方回落静态推断，
+/// 不阻断发布。
 pub(crate) fn evaluate_msbuild_publish_dir(spec: &PublishSpec) -> Option<String> {
     let dotnet = crate::environment::command_path("dotnet")?;
-    let output = crate::process_utils::new_std_command(dotnet)
+    // spawn() 不像 output() 自动接管管道——求值需要读 stdout，stderr 一并
+    // 接管避免子进程输出泄到应用控制台。
+    let child = crate::process_utils::new_std_command(dotnet)
         .arg("msbuild")
         .arg(&spec.project_path)
         .arg("-getProperty:PublishDir")
         .args(msbuild_property_args(spec))
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .ok()?;
+    let output = wait_child_with_timeout(child, MSBUILD_EVAL_TIMEOUT)?;
     if !output.status.success() {
         return None;
     }
     parse_msbuild_publish_dir(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// try_wait 轮询 + 超时 kill：同步链路没有 runtime 可用
+/// tokio::time::timeout，std Command 也不自带 wait_timeout。超时进程被
+/// kill+wait 回收（不残留孤儿），返回 None 让调用方走既定回落。
+fn wait_child_with_timeout(
+    mut child: std::process::Child,
+    timeout: std::time::Duration,
+) -> Option<std::process::Output> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return child.wait_with_output().ok(),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+            Err(_) => return None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -342,6 +377,33 @@ mod tests {
                 "-p:PublishProfile=FolderProfile".to_string(),
             ]
         );
+    }
+
+    /// 超时路径：挂起的子进程被 kill+wait 回收并返回 None（回落到静态推断）。
+    #[cfg(unix)]
+    #[test]
+    fn wait_child_with_timeout_kills_a_hung_process() {
+        let child = crate::process_utils::new_std_command("sleep")
+            .arg("30")
+            .spawn()
+            .expect("spawn sleep");
+        let started = std::time::Instant::now();
+        assert!(wait_child_with_timeout(child, std::time::Duration::from_millis(200)).is_none());
+        assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn wait_child_with_timeout_collects_a_fast_process() {
+        let child = crate::process_utils::new_std_command("echo")
+            .arg("out")
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn echo");
+        let output = wait_child_with_timeout(child, std::time::Duration::from_secs(5))
+            .expect("collect output");
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "out");
     }
 
     #[test]
