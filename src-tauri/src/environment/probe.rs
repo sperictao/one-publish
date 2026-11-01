@@ -69,11 +69,11 @@ pub async fn check_tool(probe: &ToolProbe, parse_version: VersionParser) -> Prov
     let path = command_path(probe.command);
     let program = path.clone().unwrap_or_else(|| probe.command.to_string());
 
-    // kill_on_drop：超时分支 drop 掉 output() future 时回收挂死的探测
-    // 子进程——tokio Child 默认不随 drop 终止，否则会残留等待 stdin 的孤儿。
+    // new_tokio_command 已内置 kill_on_drop：超时分支 drop 掉 output()
+    // future 时回收挂死的探测子进程（tokio Child 默认不随 drop 终止，
+    // 否则会残留等待 stdin 的孤儿）。
     let command = crate::process_utils::new_tokio_command(&program)
         .args(probe.version_args)
-        .kill_on_drop(true)
         .output();
 
     // Bound the probe so a hung toolchain cannot wedge the environment
