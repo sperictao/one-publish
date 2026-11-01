@@ -129,13 +129,33 @@ describe("usePublishLogStream", () => {
     act(() => {
       emitSessionStarted("s-1");
     });
-    const oversized = "x".repeat(210_000) + "\ntail-line\n";
+    // len=209,011 → tail 起点 9,011；'\n' 位于 11,000，距 tail 起点 1,989 < 4KB
+    // → 对齐到该换行之后，保留 'z' 段与末尾行。
+    const oversized =
+      "x".repeat(11_000) + "\n" + "z".repeat(198_000) + "tail-line\n";
     act(() => {
       emitLogChunk("s-1", oversized);
     });
 
     expect(result.current.outputLog.length).toBeLessThan(oversized.length);
-    expect(result.current.outputLog.startsWith("tail-line")).toBe(true);
+    expect(result.current.outputLog.startsWith("z")).toBe(true);
+    expect(result.current.outputLog.endsWith("tail-line\n")).toBe(true);
+  });
+
+  it("换行超出前瞻窗口时保留完整尾部而非对齐丢内容", () => {
+    const { result } = renderHook(() => usePublishLogStream());
+
+    act(() => {
+      emitSessionStarted("s-1");
+    });
+    // 唯一换行在尾部末端（超出前瞻）：对齐不得反向丢弃整段保留内容。
+    const oversized = "x".repeat(210_000) + "\ntail-line\n";
+    act(() => {
+      emitLogChunk("s-1", oversized);
+    });
+
+    expect(result.current.outputLog.length).toBe(200_000);
+    expect(result.current.outputLog.endsWith("tail-line\n")).toBe(true);
   });
 
   it("裁剪块内无换行时保留原始尾部", () => {
