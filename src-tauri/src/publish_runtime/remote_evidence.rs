@@ -486,6 +486,11 @@ fn expected_segments(binding: &AutomationBinding) -> Result<Vec<String>, AppErro
     Ok(segments.into_iter().collect())
 }
 
+/// 解压负载上限：digest 校验的是压缩字节而非解压尺寸，畸形/恶意 artifact
+/// 可以用高压缩比把 KB 级 zip 膨胀成 GB 级 JSON——有界解压把该向量降级为
+/// 可读错误而非 OOM。证据负载是元数据 JSON，64MB 保留充足余量。
+const MAX_UNZIPPED_JSON_BYTES: u64 = 64 * 1024 * 1024;
+
 /// 从 zip artifact 中取唯一 JSON 负载（段文件或 prepared attempt）。
 fn unzip_single_json(bytes: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
@@ -501,8 +506,15 @@ fn unzip_single_json(bytes: &[u8]) -> Result<Vec<u8>, AppError> {
             .unwrap_or(false);
         if is_json {
             let mut content = Vec::new();
-            file.read_to_end(&mut content)
+            std::io::Read::take(&mut file, MAX_UNZIPPED_JSON_BYTES + 1)
+                .read_to_end(&mut content)
                 .map_err(|error| remote_error(format!("artifact 负载读取失败: {error}")))?;
+            if content.len() as u64 > MAX_UNZIPPED_JSON_BYTES {
+                return Err(remote_error(format!(
+                    "artifact JSON 负载超过 {}MB 解压上限",
+                    MAX_UNZIPPED_JSON_BYTES / 1024 / 1024
+                )));
+            }
             return Ok(content);
         }
     }
@@ -1494,6 +1506,22 @@ mod tests {
             .is_some_and(|details| details.contains("JSON")));
 
         unzip_single_json(b"not a zip").expect_err("garbage bytes must fail");
+    }
+
+    #[test]
+    fn unzip_single_json_rejects_payload_beyond_decompression_limit() {
+        // 65MB 高压缩比负载压成 ~65KB zip——digest 校验的是压缩字节，
+        // 解压必须有独立上限，否则 zip bomb 可整体载入内存。
+        let oversized = vec![0u8; 65 * 1024 * 1024];
+        let zip = zip_bytes("segment.json", &oversized);
+        assert!(zip.len() < 1024 * 1024, "高压缩零字节 zip 应远小于 1MB");
+
+        let error = unzip_single_json(&zip).expect_err("oversized payload must fail");
+        assert_eq!(error.code.as_deref(), Some("remote_evidence_sync_failed"));
+        assert!(error
+            .details
+            .as_deref()
+            .is_some_and(|details| details.contains("解压上限")));
     }
 
     #[test]
