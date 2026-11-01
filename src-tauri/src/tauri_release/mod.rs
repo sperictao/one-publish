@@ -119,9 +119,11 @@ fn validate_relative_path(path: &str, field: &str) -> Result<(), AppError> {
 }
 
 pub(crate) fn validate_secret_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    matches!(chars.next(), Some(first) if first.is_ascii_uppercase() || first == '_')
-        && chars.all(|character| {
+    // GitHub Actions 保留 `GITHUB_` 前缀（GITHUB_TOKEN 等内置名）——
+    // 本端放行只会在写入仓库 Secret 时才被远端拒绝。
+    !name.starts_with("GITHUB_")
+        && matches!(name.chars().next(), Some(first) if first.is_ascii_uppercase() || first == '_')
+        && name.chars().all(|character| {
             character.is_ascii_uppercase() || character.is_ascii_digit() || character == '_'
         })
         && name.len() <= 128
@@ -287,6 +289,33 @@ pub fn validate_release_config(config: &TauriReleaseConfig) -> Result<(), AppErr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn secret_name_rejects_github_reserved_prefix() {
+        for name in ["GITHUB_TOKEN", "GITHUB_ACTIONS", "GITHUB_FOO"] {
+            assert!(
+                !validate_secret_name(name),
+                "{name} uses GitHub's reserved prefix"
+            );
+        }
+    }
+
+    #[test]
+    fn secret_name_accepts_upper_snake_and_rejects_malformed() {
+        for name in ["TAURI_SIGNING_KEY", "_PRIVATE", "A1", "MY_SECRET_2"] {
+            assert!(validate_secret_name(name), "{name} should be valid");
+        }
+        for name in [
+            "",
+            "lowercase",
+            "1STARTS_WITH_DIGIT",
+            "HAS-DASH",
+            "has space",
+            "mixedCase",
+        ] {
+            assert!(!validate_secret_name(name), "{name} should be invalid");
+        }
+    }
 
     #[test]
     fn secret_values_cannot_be_smuggled_as_secret_references() {
