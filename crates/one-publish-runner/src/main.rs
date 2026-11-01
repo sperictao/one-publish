@@ -1,9 +1,8 @@
-use std::fs;
 use std::process::ExitCode;
 
 use one_publish_runner::{
-    installed_runner, prepare_from_projection, verify_installed_projection, PreparedAttempt,
-    RunnerProjection, TriggerContext, TriggerInput,
+    installed_runner, load_json_bounded, prepare_from_projection, verify_installed_projection,
+    PreparedAttempt, RunnerProjection, TriggerContext, TriggerInput,
 };
 use publish_adapters::CancellationSignal;
 
@@ -55,7 +54,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             if args.next().is_some() {
                 return Err("verify accepts no additional arguments".into());
             }
-            let projection: RunnerProjection = serde_json::from_slice(&fs::read(path)?)?;
+            let projection: RunnerProjection = load_json_bounded(
+                std::path::Path::new(&path),
+                format!("read projection {path}"),
+            )?;
             verify_installed_projection(&projection)?;
         }
         "prepare-from-projection" => {
@@ -71,7 +73,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .into(),
                 );
             }
-            let projection: RunnerProjection = serde_json::from_slice(&fs::read(path)?)?;
+            let projection: RunnerProjection = load_json_bounded(
+                std::path::Path::new(&path),
+                format!("read projection {path}"),
+            )?;
             let attempt = prepare_from_projection(
                 &projection,
                 &TriggerContext {
@@ -89,7 +94,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "execute accepts an attempt id and an optional platform affinity".into(),
                 );
             }
-            let attempt: PreparedAttempt = serde_json::from_slice(&fs::read(path)?)?;
+            let attempt: PreparedAttempt =
+                load_json_bounded(std::path::Path::new(&path), format!("read attempt {path}"))?;
             let runner = installed_runner(&attempt)?.with_cancellation(cancel_on_termination());
             match platform.as_deref() {
                 None => {
