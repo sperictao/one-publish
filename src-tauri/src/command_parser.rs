@@ -352,18 +352,26 @@ fn insert_map_entry(
 fn tokenize(command: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
-    let mut in_quotes = false;
-    let chars = command.chars().peekable();
+    let mut in_double = false;
+    let mut in_single = false;
+    let mut chars = command.chars().peekable();
 
-    for c in chars {
+    while let Some(c) = chars.next() {
         match c {
-            '"' => {
-                in_quotes = !in_quotes;
+            '"' if !in_single => {
+                in_double = !in_double;
             }
-            ' ' | '\t' if !in_quotes => {
+            '\'' if !in_double => {
+                in_single = !in_single;
+            }
+            // 双引号内 \" 与 \\ 是转义序列；其余位置的反斜杠保持字面量——
+            // Windows 路径（C:\x\y）里的反斜杠不能被吞掉。
+            '\\' if in_double && matches!(chars.peek(), Some('"') | Some('\\')) => {
+                current.push(chars.next().expect("peeked character"));
+            }
+            c if c.is_whitespace() && !in_double && !in_single => {
                 if !current.is_empty() {
-                    tokens.push(current.clone());
-                    current.clear();
+                    tokens.push(std::mem::take(&mut current));
                 }
             }
             _ => {
@@ -414,6 +422,38 @@ mod tests {
                 "feature1,feature2".to_string(),
             ]
         );
+    }
+
+    /// 单引号引用（PowerShell/bash 粘贴高频形态）、双引号内转义、
+    /// Windows 路径反斜杠字面量与多行粘贴分隔的边界覆盖。
+    #[test]
+    fn tokenize_handles_single_quotes_escapes_and_windows_paths() {
+        // 单引号保字面量（内部双引号不切换引态）。
+        assert_eq!(
+            tokenize("dotnet publish -o 'C:\\My Builds\\out'"),
+            vec!["dotnet", "publish", "-o", "C:\\My Builds\\out"]
+        );
+        // 双引号内 \" 与 \\ 是转义。
+        assert_eq!(
+            tokenize("tool --name \"a \\\"b\\\" c\""),
+            vec!["tool", "--name", "a \"b\" c"]
+        );
+        assert_eq!(
+            tokenize("tool --dir \"C:\\\\x\""),
+            vec!["tool", "--dir", "C:\\x"]
+        );
+        // 引号外反斜杠是字面量（Windows 路径不被吞）。
+        assert_eq!(
+            tokenize("dotnet publish -o C:\\builds\\x64"),
+            vec!["dotnet", "publish", "-o", "C:\\builds\\x64"]
+        );
+        // 多行粘贴与非常规空白同样是分隔符。
+        assert_eq!(
+            tokenize("cargo build\r\n  --release\t-n"),
+            vec!["cargo", "build", "--release", "-n"]
+        );
+        // 未闭合引号优雅收尾（与原行为一致：引号内容并入当前 token）。
+        assert_eq!(tokenize("tool 'open"), vec!["tool", "open"]);
     }
 
     #[test]
