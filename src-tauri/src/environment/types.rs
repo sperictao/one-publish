@@ -541,18 +541,22 @@ pub fn parse_semver(version: &str) -> Option<(u32, u32, u32)> {
         .trim();
 
     let parts: Vec<&str> = clean_version.split('.').collect();
-    if parts.len() >= 2 {
-        let major = parts[0].parse::<u32>().ok()?;
-        let minor = parts[1].parse::<u32>().ok()?;
-        let patch = if parts.len() >= 3 {
-            parts[2].parse::<u32>().ok()?
-        } else {
-            0
-        };
-        Some((major, minor, patch))
-    } else {
-        None
+    if parts.is_empty() {
+        return None;
     }
+    // major 必须存在且为数字；minor/patch 缺省为 0——Java 探测只回
+    // major（"8"/"21"）、MIN_JAVA_VERSION 也是单段 "11"，单段输入必须可
+    // 比较，否则整条 outdated 判定对 major-only 版本失活。
+    let major = parts[0].parse::<u32>().ok()?;
+    let minor = match parts.get(1) {
+        Some(part) => part.parse::<u32>().ok()?,
+        None => 0,
+    };
+    let patch = match parts.get(2) {
+        Some(part) => part.parse::<u32>().ok()?,
+        None => 0,
+    };
+    Some((major, minor, patch))
 }
 
 /// Compare two semantic versions
@@ -610,7 +614,12 @@ mod tests {
         assert_eq!(parse_semver("1.75.0"), Some((1, 75, 0)));
         assert_eq!(parse_semver("v1.75.0"), Some((1, 75, 0)));
         assert_eq!(parse_semver("1.75"), Some((1, 75, 0)));
+        // Java 探测只回 major（"8"/"21"），MIN_JAVA_VERSION 同为单段——
+        // 单段必须解析，否则 outdated 判定失活。
+        assert_eq!(parse_semver("8"), Some((8, 0, 0)));
+        assert_eq!(parse_semver("21"), Some((21, 0, 0)));
         assert_eq!(parse_semver("invalid"), None);
+        assert_eq!(parse_semver(""), None);
     }
 
     #[test]
@@ -619,6 +628,9 @@ mod tests {
         assert_eq!(compare_versions("1.75.0", "1.75.0"), 0);
         assert_eq!(compare_versions("1.76.0", "1.75.0"), 1);
         assert_eq!(compare_versions("1.75.0", "1.74.99"), 1);
+        // Java major-only 形态：8 < 11 判 outdated、21 >= 11 不告警。
+        assert_eq!(compare_versions("8", "11"), -1);
+        assert_eq!(compare_versions("21", "11"), 1);
     }
 
     #[test]
