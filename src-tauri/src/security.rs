@@ -51,6 +51,7 @@ fn is_path_like_key(key: &str) -> bool {
         || normalized == "filepath"
         || normalized == "docspath"
         || normalized == "templatepath"
+        || normalized == "publishprofile"
 }
 
 fn is_freeform_text_key(key: &str) -> bool {
@@ -70,6 +71,14 @@ fn is_freeform_text_key(key: &str) -> bool {
             | "signature"
             | "currentvalue"
             | "expectedvalue"
+            | "content"
+            | "summary"
+            | "body"
+            | "title"
+            | "details"
+            | "reason"
+            | "note"
+            | "hint"
     )
 }
 
@@ -113,6 +122,25 @@ fn is_path_switch(token: &str) -> bool {
             | "--path"
             | "--snapshot"
             | "--snapshot-path"
+            | "--manifest-path"
+            | "--artifacts-path"
+            | "--packages"
+            | "--project-dir"
+            | "--gradle-user-home"
+            | "--build-file"
+            | "--settings-file"
+            | "--init-script"
+            | "--include-build"
+            | "--config"
+            | "--out-dir"
+            | "-p"
+            | "-g"
+            | "-b"
+            | "-I"
+            | "-C"
+            | "-pkgdir"
+            | "-modfile"
+            | "-overlay"
     )
 }
 
@@ -421,6 +449,35 @@ mod tests {
         for key in ["retryCount", "verbosity", "configuration"] {
             assert!(!is_path_like_key(key), "{key} should stay readable");
         }
+    }
+
+    #[test]
+    fn freeform_text_masks_provider_cli_path_flags() {
+        // 各 provider CLI 的路径旗标（值形态过 looks_like_absolute_path 双门）
+        let text = concat!(
+            "cargo build --manifest-path /Users/demo/app/Cargo.toml ",
+            "&& dotnet build --artifacts-path /tmp/artifacts ",
+            "&& gradle build -p /Users/demo/gradle-app ",
+            "&& go build -pkgdir /tmp/gopkg",
+        );
+        let sanitized = sanitize_freeform_text(text);
+        for original in [
+            "/Users/demo/app/Cargo.toml",
+            "/tmp/artifacts",
+            "/Users/demo/gradle-app",
+            "/tmp/gopkg",
+        ] {
+            assert!(!sanitized.contains(original), "{original} leaked");
+        }
+        assert_eq!(sanitize_freeform_text(&sanitized), sanitized);
+    }
+
+    #[test]
+    fn freeform_text_masks_publish_profile_assignment_path() {
+        // -p:PublishProfile= 赋值形的项目配置路径
+        let text = "dotnet publish -p:PublishProfile=/Users/demo/FolderProfile.pubxml";
+        let sanitized = sanitize_freeform_text(text);
+        assert!(!sanitized.contains("/Users/demo/FolderProfile.pubxml"));
     }
 
     #[test]
