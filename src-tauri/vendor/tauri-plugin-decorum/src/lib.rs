@@ -261,11 +261,24 @@ where
         }
         false => {
             let win2 = win.clone();
-
+            // 本地 patch：闭包内 unwrap 会在主线程 panic 且吞掉错误——
+            // 经 Mutex 把 main_action 结果带出并向上传播。
+            let outcome = std::sync::Arc::new(std::sync::Mutex::new(None));
+            let outcome2 = std::sync::Arc::clone(&outcome);
             match win.run_on_main_thread(move || {
-                main_action(&win2).unwrap();
+                let r = main_action(&win2).map(|_| ());
+                if let Ok(mut guard) = outcome2.lock() {
+                    *guard = Some(r);
+                }
             }) {
-                Ok(_) => Ok(win),
+                Ok(_) => match outcome.lock() {
+                    Ok(mut guard) => match guard.take() {
+                        Some(Ok(())) => Ok(win),
+                        Some(Err(e)) => Err(e),
+                        None => Ok(win),
+                    },
+                    Err(_) => Ok(win),
+                },
                 Err(e) => Err(e),
             }
         }
