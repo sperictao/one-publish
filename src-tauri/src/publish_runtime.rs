@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
@@ -35,6 +34,7 @@ use crate::commands::{
     PublishOutputValidationStatus, RemoteLocationKind, RenderedPublishCommand, SealedBuildCommand,
 };
 use crate::errors::AppError;
+use crate::process_utils::new_std_command;
 use crate::provider::{registry::provider_registry, ProviderSourceInputKind};
 use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use crate::tauri_release::ReleaseGate;
@@ -3698,13 +3698,33 @@ fn git_text(repository: &Path, args: &[&str]) -> Result<String, AppError> {
         .map_err(|error| source_snapshot_error(format!("git output is not valid UTF-8: {error}")))
 }
 
-fn git_optional_text(repository: &Path, args: &[&str]) -> Result<Option<String>, AppError> {
-    let output = Command::new("git")
+/// 源码快照的本地 git 元数据读取（rev-parse/rev-list/ls-files/config）全部
+/// 只读，但仓库文件系统停顿（网络挂载、锁竞争）会让 git 无限阻塞；统一
+/// 30s 界住，超时回收子进程并显式失败而不是把发布卡在快照采集阶段。
+const SOURCE_SNAPSHOT_GIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn git_output(repository: &Path, args: &[&str]) -> Result<std::process::Output, AppError> {
+    let child = new_std_command("git")
         .arg("-C")
         .arg(repository)
         .args(args)
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|error| source_snapshot_error(format!("failed to execute git: {error}")))?;
+    crate::process_utils::wait_child_with_timeout(child, SOURCE_SNAPSHOT_GIT_TIMEOUT).ok_or_else(
+        || {
+            source_snapshot_error(format!(
+                "git {} timed out after {}s",
+                args.join(" "),
+                SOURCE_SNAPSHOT_GIT_TIMEOUT.as_secs()
+            ))
+        },
+    )
+}
+
+fn git_optional_text(repository: &Path, args: &[&str]) -> Result<Option<String>, AppError> {
+    let output = git_output(repository, args)?;
     if output.status.success() {
         return String::from_utf8(output.stdout)
             .map(|value| {
@@ -3731,12 +3751,7 @@ fn git_optional_text(repository: &Path, args: &[&str]) -> Result<Option<String>,
 }
 
 fn git_bytes(repository: &Path, args: &[&str]) -> Result<Vec<u8>, AppError> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repository)
-        .args(args)
-        .output()
-        .map_err(|error| source_snapshot_error(format!("failed to execute git: {error}")))?;
+    let output = git_output(repository, args)?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(source_snapshot_error(format!(
