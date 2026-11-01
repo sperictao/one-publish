@@ -625,8 +625,8 @@ impl DeliveryDestination for LocalDirectoryDestination {
             return Ok(DeliveryProbe::Absent);
         }
         let marker = directory.join(DELIVERY_MANIFEST_MARKER);
-        let persisted_digest = match fs::read_to_string(&marker) {
-            Ok(digest) => digest,
+        let marker_bytes = match crate::read_file_bounded(&marker) {
+            Ok(bytes) => bytes,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Ok(DeliveryProbe::Conflicting {
                     external_reference: directory.to_string_lossy().to_string(),
@@ -639,6 +639,11 @@ impl DeliveryDestination for LocalDirectoryDestination {
                 });
             }
         };
+        let persisted_digest =
+            String::from_utf8(marker_bytes).map_err(|error| PublishError::Io {
+                operation: format!("read local delivery marker {}", marker.display()),
+                message: error.to_string(),
+            })?;
         if persisted_digest == identity.manifest_digest {
             Ok(DeliveryProbe::Matching {
                 external_reference: directory.to_string_lossy().to_string(),
@@ -858,11 +863,11 @@ fn persist_set_record(
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, PublishError> {
-    let content = fs::read_to_string(path).map_err(|error| PublishError::Io {
+    let content = crate::read_file_bounded(path).map_err(|error| PublishError::Io {
         operation: format!("read {}", path.display()),
         message: error.to_string(),
     })?;
-    serde_json::from_str(&content).map_err(|error| {
+    serde_json::from_slice(&content).map_err(|error| {
         PublishError::Execution(format!(
             "stored artifact store state {} is not readable: {error}",
             path.display()

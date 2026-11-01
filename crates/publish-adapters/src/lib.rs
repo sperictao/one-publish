@@ -68,6 +68,28 @@ pub use tauri::{
     VersionMirrorKind, TAURI_INSPECT_ACTION, TAURI_PROVIDER_ID,
 };
 
+/// Adapter 侧元数据文件（仓库配置、持久化记录、交付 marker）上限：这些
+/// 文件按设计是 KB 级 JSON/TOML；仓库可控与持久化内容都可能病态放大，
+/// 无界 read_to_string 会整体载入。产物字节负载不走此界——交付工件本身
+/// 就合法可达 GB。
+const MAX_METADATA_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
+/// io::Result 原语：错误保留原始 ErrorKind（NotFound 等分支调用方自行
+/// 判定），超限映射为 Other 且消息含上界。
+pub(crate) fn read_file_bounded(path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let file = std::fs::File::open(path)?;
+    let mut limited = file.take(MAX_METADATA_FILE_BYTES + 1);
+    let mut bytes = Vec::new();
+    limited.read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_METADATA_FILE_BYTES {
+        return Err(std::io::Error::other(format!(
+            "file exceeds the {MAX_METADATA_FILE_BYTES} byte limit"
+        )));
+    }
+    Ok(bytes)
+}
+
 pub const AUTOMATION_PROJECTION_CAPABILITY: &str = "automation-projection";
 pub const STRUCTURED_PLAN_EXECUTION_CAPABILITY: &str = "structured-plan-execution";
 pub const ARTIFACT_CANDIDATE_CAPABILITY: &str = "artifact-candidate";
@@ -1246,5 +1268,37 @@ mod delivery_namespace_tests {
             builtin_delivery_namespace("unknown-destination", &serde_json::json!({}), "/repo/a"),
             None
         );
+    }
+}
+
+#[cfg(test)]
+mod bounded_read_tests {
+    use std::io::Write;
+
+    #[test]
+    fn oversized_metadata_file_is_rejected() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("record.json");
+        // 稀疏文件：set_len 瞬时造出超限文件，读出即零填充超过上界。
+        let file = std::fs::File::create(&path).expect("create sparse file");
+        file.set_len(super::MAX_METADATA_FILE_BYTES + 1)
+            .expect("grow sparse file");
+
+        let error = super::read_file_bounded(&path)
+            .expect_err("an oversized record must not load unbounded");
+        assert!(error.to_string().contains("byte limit"));
+    }
+
+    #[test]
+    fn in_limit_metadata_file_reads_verbatim() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("marker.txt");
+        std::fs::File::create(&path)
+            .expect("create marker")
+            .write_all(b"a".repeat(64).as_slice())
+            .expect("write marker");
+
+        let bytes = super::read_file_bounded(&path).expect("in-limit file reads");
+        assert_eq!(bytes, vec![b'a'; 64]);
     }
 }
