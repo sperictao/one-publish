@@ -188,7 +188,6 @@ pub fn run() {
             store::commands::remove_recent_publish_config,
             store::commands::reorder_recent_publish_configs,
             store::commands::reorder_profiles,
-            store::commands::replace_recent_publish_config_key,
             store::commands::get_execution_history,
             store::commands::add_execution_record,
             store::commands::set_execution_record_snapshot,

@@ -11,17 +11,7 @@ const STORAGE_KEY = "one-publish:favoriteConfigs";
 interface TestStore extends FavoritesSlice {
   selectedRepoId: string | null;
   pushed: Array<{ key: string; repoId: string | null }>;
-  replaced: Array<{
-    previousKey: string;
-    nextKey: string;
-    repoId: string | null;
-  }>;
   pushRecentPublishConfig: (key: string, repoId?: string | null) => void;
-  replaceRecentPublishConfigKey: (
-    previousKey: string,
-    nextKey: string,
-    repoId?: string | null
-  ) => void;
   setSelectedRepoId: (id: string | null) => void;
 }
 
@@ -32,18 +22,9 @@ function createTestStore(): ReturnType<typeof createStore> {
       return {
         selectedRepoId: "repo-1",
         pushed: [],
-        replaced: [],
         pushRecentPublishConfig: (key, repoId) => {
           set((state) => ({
             pushed: [...state.pushed, { key, repoId: repoId ?? null }],
-          }));
-        },
-        replaceRecentPublishConfigKey: (previousKey, nextKey, repoId) => {
-          set((state) => ({
-            replaced: [
-              ...state.replaced,
-              { previousKey, nextKey, repoId: repoId ?? null },
-            ],
           }));
         },
         setSelectedRepoId: (id) => set({ selectedRepoId: id }),
@@ -131,65 +112,5 @@ describe("toggleFavoriteConfig", () => {
     expect(store.getState().pushed).toEqual([
       { key: "preset:beta", repoId: "repo-9" },
     ]);
-  });
-});
-
-describe("replaceScopedConfigKey", () => {
-  it("renames a favorite key inside the scope and persists", () => {
-    const store = createTestStore();
-    store.getState().toggleFavoriteConfig("old-key");
-    store.getState().toggleFavoriteConfig("other");
-
-    store.getState().replaceScopedConfigKey("old-key", "new-key");
-
-    expect(store.getState().favoriteConfigKeysByRepo["repo-1"]).toEqual([
-      "other",
-      "new-key",
-    ]);
-    expect(
-      JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")["repo-1"]
-    ).toEqual(["other", "new-key"]);
-    expect(store.getState().replaced).toEqual([
-      { previousKey: "old-key", nextKey: "new-key", repoId: "repo-1" },
-    ]);
-  });
-
-  it("deduplicates when the rename collides with an existing key", () => {
-    const store = createTestStore();
-    store.getState().toggleFavoriteConfig("dup");
-    store.getState().toggleFavoriteConfig("old-key");
-
-    store.getState().replaceScopedConfigKey("old-key", "dup");
-
-    expect(store.getState().favoriteConfigKeysByRepo["repo-1"]).toEqual([
-      "dup",
-    ]);
-  });
-
-  it("still delegates to recents but keeps favorites when the key is absent", () => {
-    const store = createTestStore();
-    store.getState().toggleFavoriteConfig("other");
-
-    store.getState().replaceScopedConfigKey("missing", "new-key");
-
-    expect(store.getState().replaced).toEqual([
-      { previousKey: "missing", nextKey: "new-key", repoId: "repo-1" },
-    ]);
-    expect(store.getState().favoriteConfigKeysByRepo["repo-1"]).toEqual([
-      "other",
-    ]);
-  });
-
-  it("is a no-op for empty keys or missing scope", () => {
-    const store = createTestStore();
-    store.getState().toggleFavoriteConfig("a");
-
-    store.getState().replaceScopedConfigKey("", "new-key");
-    store.getState().replaceScopedConfigKey("a", "");
-    store.getState().setSelectedRepoId(null);
-    store.getState().replaceScopedConfigKey("a", "b");
-
-    expect(store.getState().favoriteConfigKeysByRepo["repo-1"]).toEqual(["a"]);
-    expect(store.getState().replaced.length).toBe(0);
   });
 });

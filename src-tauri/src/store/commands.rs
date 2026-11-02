@@ -1,7 +1,4 @@
-use super::recent::{
-    push_recent_publish_config_state, remove_recent_publish_config_state,
-    replace_recent_publish_config_key_state,
-};
+use super::recent::{push_recent_publish_config_state, remove_recent_publish_config_state};
 use super::runtime::{
     append_execution_history, apply_selected_repo_id_update, find_repository, find_repository_mut,
     get_bootstrap_state, get_execution_history_snapshot, get_state, persist_state_and_refresh_tray,
@@ -839,31 +836,6 @@ pub async fn remove_recent_publish_config(
         &mut state.recent_config_keys_by_repo,
         &repo_id,
         &config_key,
-    ) {
-        return Ok(get_bootstrap_state());
-    }
-
-    persist_state_and_refresh_tray(&app, state).await?;
-    Ok(get_bootstrap_state())
-}
-
-#[tauri::command]
-pub async fn replace_recent_publish_config_key(
-    app: tauri::AppHandle,
-    repo_id: String,
-    previous_key: String,
-    next_key: String,
-) -> Result<AppState, AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new(
-        "store::commands::replace_recent_publish_config_key",
-    );
-    let mut state = get_state();
-
-    if !replace_recent_publish_config_key_state(
-        &mut state.recent_config_keys_by_repo,
-        &repo_id,
-        &previous_key,
-        &next_key,
     ) {
         return Ok(get_bootstrap_state());
     }

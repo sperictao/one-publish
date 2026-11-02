@@ -143,18 +143,6 @@ export async function removeRecentPublishConfig(params: {
   return normalizeAppState(state);
 }
 
-export async function replaceRecentPublishConfigKey(params: {
-  repoId: string;
-  previousKey: string;
-  nextKey: string;
-}): Promise<AppState> {
-  const state = await invoke<TauriAppState>(
-    "replace_recent_publish_config_key",
-    params
-  );
-  return normalizeAppState(state);
-}
-
 export async function reorderRecentPublishConfigs(params: {
   repoId: string;
   configKeys: string[];
