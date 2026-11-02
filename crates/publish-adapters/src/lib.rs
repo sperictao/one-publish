@@ -74,6 +74,11 @@ pub use tauri::{
 /// 就合法可达 GB。
 const MAX_METADATA_FILE_BYTES: u64 = 16 * 1024 * 1024;
 
+/// 子进程单管道（stdout/stderr）保留输出的上限：构建/交付工具（Gradle、
+/// npm、sftp、发布门禁程序）输出可病态增长，无界缓冲会以 OOM 告终。
+/// 与 src-tauri `MAX_CHILD_OUTPUT_BYTES` 同界。
+pub(crate) const MAX_CHILD_OUTPUT_BYTES: u64 = 32 * 1024 * 1024;
+
 /// io::Result 原语：错误保留原始 ErrorKind（NotFound 等分支调用方自行
 /// 判定），超限映射为 Other 且消息含上界。
 pub(crate) fn read_file_bounded(path: &std::path::Path) -> std::io::Result<Vec<u8>> {
