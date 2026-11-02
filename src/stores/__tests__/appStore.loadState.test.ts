@@ -56,7 +56,7 @@ describe("appStore.loadState", () => {
     await useAppStore.getState().loadState();
 
     expect(useAppStore.getState().error).toBe(
-      "repository lookup failed | repo-1"
+      "repository lookup failed | repo-1 | [validation]"
     );
   });
 

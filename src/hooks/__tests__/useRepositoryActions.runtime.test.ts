@@ -462,7 +462,7 @@ describe("handleAddRepoRuntime", () => {
     await runAddRepo();
 
     const [, errorOptions] = mocks.toastError.mock.calls[0];
-    expect(errorOptions.description).toBe("failed to persist state");
+    expect(errorOptions.description).toBe("failed to persist state | [io]");
   });
 
   it("前端预检拦截重复目录（尾部分隔符写法不同），不调用后端", async () => {
@@ -831,7 +831,7 @@ describe("invoke 失败按界面语言本地化 toast 描述", () => {
     expect(mocks.toastError).toHaveBeenCalledWith(
       "Failed to remove repository",
       {
-        description: "未知存储错误 | EIO",
+        description: "未知存储错误 | EIO | [store]",
       }
     );
   });
