@@ -545,6 +545,11 @@ pub(crate) fn write_private_binary_file(path: &Path, bytes: &[u8]) -> io::Result
 /// 32MB 保留充足余量同时阻断病态 GB 级文件的整体载入。
 pub(crate) const MAX_REPO_FILE_BYTES: u64 = 32 * 1024 * 1024;
 
+/// 子进程单管道（stdout/stderr）保留输出的上限：spawned 程序均为受信任
+/// 本地工具，但病态输出（循环写、巨型仓库元数据）直到进程超时都可能持续
+/// 增长，无界缓冲会以 OOM 告终；32MB 远超任何合法输出。
+pub(crate) const MAX_CHILD_OUTPUT_BYTES: u64 = 32 * 1024 * 1024;
+
 /// 有界字节读取：持久化/仓库路径指向的文件可能异常巨大，无界 `fs::read`
 /// 会把整个文件载入内存直到 OOM。`take` 至多读取 `max_bytes + 1` 字节
 /// （竞态安全：文件在读取期间增长也不越过上限），超限返回 InvalidData。
