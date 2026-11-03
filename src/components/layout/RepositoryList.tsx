@@ -52,6 +52,7 @@ function hasSameStringOrder(
 function CollapseIcon(): ReactNode {
   return (
     <svg
+      aria-hidden="true"
       width="14"
       height="14"
       viewBox="0 0 16 16"
