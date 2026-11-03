@@ -12,6 +12,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 import {
   lastKnownSequenceFor,
+  lastKnownSequenceForAttempt,
   publishRuntimeScopeKey,
   resetPublishRuntimeHighWaterForTests,
   startPublishRuntimeEventTracking,
@@ -107,6 +108,22 @@ describe("publishRuntimeHighWater", () => {
     expect(lastKnownSequenceFor("/repo/a", "rev-1")).toBe(3);
     emit(envelope({ sequence: 8, attemptId: "att-new" }));
     expect(lastKnownSequenceFor("/repo/a", "rev-1")).toBe(8);
+  });
+
+  it("declares per-attempt only when the stored attempt matches", () => {
+    startPublishRuntimeEventTracking();
+    emit(envelope({ sequence: 42, attemptId: "att-old" }));
+    emit(envelope({ sequence: 3, attemptId: "att-new" }));
+    // scope 水位仍返回最新条目；attempt 匹配时按 attempt 声明
+    expect(lastKnownSequenceFor("/repo/a", "rev-1")).toBe(3);
+    expect(lastKnownSequenceForAttempt("/repo/a", "rev-1", "att-new")).toBe(3);
+    // 旧 Attempt 的水位不得被借用到新 Attempt 的同步臂上
+    expect(
+      lastKnownSequenceForAttempt("/repo/a", "rev-1", "att-old")
+    ).toBeUndefined();
+    expect(
+      lastKnownSequenceForAttempt("/repo/a", "rev-1", "att-unknown")
+    ).toBeUndefined();
   });
 
   it("ignores stale events from a superseded attempt", () => {

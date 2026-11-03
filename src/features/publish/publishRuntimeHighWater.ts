@@ -89,6 +89,23 @@ export function lastKnownSequenceFor(
   )?.maxSeq;
 }
 
+/**
+ * attemptId 已知的同步臂专用：仅当观测水位属于同一 Attempt 才回传。
+ * 序号是 per-attempt 语义——把旧 Attempt 的水位声明到新 Attempt
+ * 会被 Journal 当作尾部缺失报出（虚报 missing ranges）。
+ */
+export function lastKnownSequenceForAttempt(
+  repositoryPath: string,
+  configurationRevisionId: string,
+  attemptId: string
+): number | undefined {
+  hydrate();
+  const entry = scopes.get(
+    publishRuntimeScopeKey(repositoryPath, configurationRevisionId)
+  );
+  return entry?.attemptId === attemptId ? entry.maxSeq : undefined;
+}
+
 /** 幂等启动事件订阅；非 Tauri 环境（测试/纯 Web）为空操作。 */
 export function startPublishRuntimeEventTracking(): void {
   if (listenerStarted || !isTauri()) {
