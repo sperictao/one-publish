@@ -13,6 +13,7 @@ import { reorderItemsByDrop } from "@/lib/listOrdering";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/ui/section-label";
+import { CollapseIcon } from "@/components/layout/publishConfigPanel/CollapseIcon";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Search,
@@ -46,45 +47,6 @@ function hasSameStringOrder(
   return (
     left.length === right.length &&
     left.every((value, index) => value === right[index])
-  );
-}
-
-function CollapseIcon(): ReactNode {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect
-        x="1.5"
-        y="1.5"
-        width="13"
-        height="13"
-        rx="2.5"
-        stroke="currentColor"
-        strokeWidth="1"
-        fill="none"
-      />
-      <line
-        x1="5.5"
-        y1="1.5"
-        x2="5.5"
-        y2="14.5"
-        stroke="currentColor"
-        strokeWidth="1"
-      />
-      <path
-        className="transition-transform duration-150 ease-geist group-hover:-translate-x-0.5"
-        d="M11.5 5.5L9 8L11.5 10.5"
-        stroke="currentColor"
-        strokeWidth="1"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 
