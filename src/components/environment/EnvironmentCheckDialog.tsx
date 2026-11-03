@@ -119,6 +119,12 @@ export function EnvironmentCheckContent({
   const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(() =>
     normalizeVisibleProviderIds(defaultProviderIds)
   );
+  // 检查请求归属：发起时快照 provider 集合，返回时比对最新值——
+  // 检查期间变更选择（经开关或 props）后到达的结果按过期丢弃。
+  const selectedProviderIdsRef = useRef(selectedProviderIds);
+  useEffect(() => {
+    selectedProviderIdsRef.current = selectedProviderIds;
+  }, [selectedProviderIds]);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<EnvironmentCheckResult | null>(
     initialCheck?.result || null
@@ -187,13 +193,20 @@ export function EnvironmentCheckContent({
   ]);
 
   const handleCheck = async () => {
+    const requestedProviderIds = selectedProviderIds;
     setChecking(true);
     setError(null);
     try {
       const res = await runEnvironmentCheck(selectedProviderIds);
       // 对话框已关闭的检查不再落地结果，也不回调父级——
       // 避免把用户已放弃的检查快照推给上层。
-      if (!activeRef.current) return;
+      // 同理，选择已变更时到达的旧选择结果按过期请求丢弃。
+      if (
+        !activeRef.current ||
+        selectedProviderIdsRef.current.join("\0") !==
+          requestedProviderIds.join("\0")
+      )
+        return;
       const snapshot = createEnvironmentCheckSnapshot(res, selectedProviderIds);
       setResult(snapshot.result);
       onChecked?.(snapshot);
@@ -376,6 +389,7 @@ export function EnvironmentCheckContent({
                   type="button"
                   key={p.id}
                   aria-pressed={checked}
+                  disabled={checking || runningFix}
                   onClick={() => toggleProvider(p.id, !checked)}
                   className={cn(
                     "flex items-center justify-between rounded-sm border p-3 text-left transition-colors duration-150 ease-geist cursor-pointer select-none",
