@@ -980,4 +980,52 @@ test.describe("Publish Flow — Edge Cases", () => {
       page.locator("[data-testid='publish-status-panel']")
     ).toBeVisible({ timeout: 10000 });
   });
+
+  test("mount-recovery sync declares observed lastKnownSequence", async ({
+    page,
+  }) => {
+    // #360：生产端在 Journal 落盘前广播 publish-runtime-event；前端记录
+    // scope 高水位后，挂载期恢复同步以 lastKnownSequence 回传。
+    // simulateTauri 解锁 isTauri() 门控的事件订阅路径。
+    await gotoAppWithPublishConfig(page, { simulateTauri: true });
+
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          __MOCK_EMIT_EVENT__: (event: string, payload: unknown) => void;
+        }
+      ).__MOCK_EMIT_EVENT__("publish-runtime-event", {
+        repositoryPath: "/workspace/alpha-service",
+        configurationRevisionId: "profile-folder-revision-1",
+        event: { sequence: 9, attemptId: "attempt-obs-1" },
+      });
+    });
+
+    await page
+      .locator(
+        "[data-list-item-id='userprofile:profile-folder'] button[aria-pressed]"
+      )
+      .click();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              (entry as { cmd?: string }).cmd ===
+                "synchronize_publish_runtime" &&
+              ((
+                entry as {
+                  args?: { request?: { lastKnownSequence?: number } };
+                }
+              ).args?.request?.lastKnownSequence ?? 0) === 9
+          )
+        )
+      )
+      .toBe(true);
+  });
 });
