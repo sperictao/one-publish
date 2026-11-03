@@ -138,6 +138,10 @@ export function startPublishRuntimeEventTracking(): void {
       touched: Date.now(),
     });
     persist();
+  }).catch(() => {
+    // 订阅失败（如 IPC 暂断）不应把 tracker 永久置死：
+    // 复位标记让下次启动调用重试，同时吞掉未处理拒绝。
+    listenerStarted = false;
   });
 }
 

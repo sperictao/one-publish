@@ -10,6 +10,8 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
+import { listen } from "@tauri-apps/api/event";
+
 import {
   lastKnownSequenceFor,
   lastKnownSequenceForAttempt,
@@ -144,6 +146,18 @@ describe("publishRuntimeHighWater", () => {
       configurationRevisionId: "rev-1",
     });
     expect(lastKnownSequenceFor("/repo/a", "rev-1")).toBeUndefined();
+  });
+
+  it("retries registration when listen rejects", async () => {
+    vi.mocked(listen).mockRejectedValueOnce(new Error("ipc down"));
+    startPublishRuntimeEventTracking();
+    // 等拒绝链跑完 .catch 并复位 listenerStarted。
+    await Promise.resolve();
+    await Promise.resolve();
+    startPublishRuntimeEventTracking();
+    expect(listeners.size).toBe(1);
+    emit(envelope({ sequence: 4 }));
+    expect(lastKnownSequenceFor("/repo/a", "rev-1")).toBe(4);
   });
 
   it("scope key joins path and revision", () => {
