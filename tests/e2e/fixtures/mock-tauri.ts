@@ -1375,20 +1375,6 @@ export async function installMockTauri(
               return clone({ ...appState, executionHistory: [] });
             }
 
-            case "replace_recent_publish_config_key": {
-              // 与 store/commands.rs 对齐：previousKey 原位替换为 nextKey。
-              const repoId = args?.repoId as string;
-              const previousKey = args?.previousKey as string;
-              const nextKey = args?.nextKey as string;
-              const keys = appState.recentConfigKeysByRepo?.[repoId] ?? [];
-              if (appState.recentConfigKeysByRepo) {
-                appState.recentConfigKeysByRepo[repoId] = keys.map(
-                  (key: string) => (key === previousKey ? nextKey : key)
-                );
-              }
-              return clone({ ...appState, executionHistory: [] });
-            }
-
             case "reorder_recent_publish_configs": {
               // 与 store/commands.rs 对齐：最近键列表整体替换为传入顺序。
               const repoId = args?.repoId as string;

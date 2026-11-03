@@ -129,7 +129,6 @@ describe("useProfiles", () => {
           updatePublishEditState: vi.fn(),
           selectedRepo: null,
           setProviderParameters: vi.fn(),
-          replaceScopedConfigKey: vi.fn(),
         }),
       {
         initialProps: "repo-a",
@@ -179,7 +178,6 @@ describe("useProfiles", () => {
           updatePublishEditState: vi.fn(),
           selectedRepo: null,
           setProviderParameters: vi.fn(),
-          replaceScopedConfigKey: vi.fn(),
         }),
       {
         initialProps: "repo-a",
@@ -232,7 +230,6 @@ describe("useProfiles", () => {
           updatePublishEditState: vi.fn(),
           selectedRepo: null,
           setProviderParameters: vi.fn(),
-          replaceScopedConfigKey: vi.fn(),
         }),
       {
         initialProps: "repo-a",
@@ -302,7 +299,6 @@ describe("useProfiles", () => {
           updatePublishEditState: vi.fn(),
           selectedRepo: null,
           setProviderParameters: vi.fn(),
-          replaceScopedConfigKey: vi.fn(),
         }),
       {
         initialProps: "repo-a",
@@ -376,7 +372,6 @@ describe("useProfiles", () => {
           updatePublishEditState: vi.fn(),
           selectedRepo: createSelectedRepo("alpha"),
           setProviderParameters: vi.fn(),
-          replaceScopedConfigKey: vi.fn(),
         }),
       {
         initialProps: {
@@ -442,7 +437,6 @@ describe("useProfiles", () => {
           updatePublishEditState: vi.fn(),
           selectedRepo: null,
           setProviderParameters: vi.fn(),
-          replaceScopedConfigKey: vi.fn(),
         }),
       {
         initialProps: {
@@ -487,7 +481,6 @@ describe("useProfiles", () => {
         updatePublishEditState: vi.fn(),
         selectedRepo: null,
         setProviderParameters: vi.fn(),
-        replaceScopedConfigKey: vi.fn(),
       })
     );
 
@@ -532,7 +525,6 @@ describe("useProfiles", () => {
     mocks.updateProfile.mockResolvedValue({
       repositories: [{ id: "repo-1", publishConfig: { profiles: [renamed] } }],
     });
-    const replaceScopedConfigKey = vi.fn();
 
     const { result } = renderHook(() =>
       useProfiles({
@@ -546,7 +538,6 @@ describe("useProfiles", () => {
         updatePublishEditState: vi.fn(),
         selectedRepo: createSelectedRepo("profile-42"),
         setProviderParameters: vi.fn(),
-        replaceScopedConfigKey,
       })
     );
 
@@ -567,8 +558,6 @@ describe("useProfiles", () => {
         name: "Renamed",
       })
     );
-    // 统一协议：重命名不回写选择（selection 已是稳定配置 ID）。
-    expect(replaceScopedConfigKey).not.toHaveBeenCalled();
     expect(result.current.activeProfileName).toBe("Renamed");
   });
 
@@ -596,7 +585,6 @@ describe("useProfiles", () => {
         updatePublishEditState,
         selectedRepo: null,
         setProviderParameters,
-        replaceScopedConfigKey: vi.fn(),
       })
     );
     await waitFor(() =>
@@ -636,7 +624,6 @@ describe("useProfiles", () => {
         updatePublishEditState: vi.fn(),
         selectedRepo: null,
         setProviderParameters: vi.fn(),
-        replaceScopedConfigKey: vi.fn(),
       })
     );
 
@@ -693,7 +680,6 @@ describe("useProfiles", () => {
         updatePublishEditState,
         selectedRepo: { ...createSelectedRepo(null), providerId: "cargo" },
         setProviderParameters,
-        replaceScopedConfigKey: vi.fn(),
       })
     );
     await waitFor(() => expect(result.current.profiles).toEqual([goProfile]));
@@ -735,7 +721,6 @@ describe("useProfiles", () => {
         updatePublishEditState,
         selectedRepo: { ...createSelectedRepo(null), providerId: null },
         setProviderParameters: vi.fn(),
-        replaceScopedConfigKey: vi.fn(),
       })
     );
     await waitFor(() => expect(result.current.profiles).toEqual([goProfile]));
@@ -767,7 +752,6 @@ describe("useProfiles", () => {
         updatePublishEditState: vi.fn(),
         selectedRepo: null,
         setProviderParameters: vi.fn(),
-        replaceScopedConfigKey: vi.fn(),
       })
     );
 

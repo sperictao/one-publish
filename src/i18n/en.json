@@ -390,7 +390,6 @@
     "savePublishEditStateFailed": "Failed to save publish configuration",
     "recordRecentPublishConfigFailed": "Failed to record recently used publish configuration",
     "removeRecentPublishConfigFailed": "Failed to remove recently used publish configuration",
-    "replaceRecentPublishConfigFailed": "Failed to update recently used publish configuration",
     "saveRecentPublishConfigOrderFailed": "Failed to save recently used order",
     "statusSuccess": "Success",
     "statusCancelled": "Cancelled",

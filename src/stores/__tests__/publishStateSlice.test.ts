@@ -5,7 +5,6 @@ const apiMocks = vi.hoisted(() => ({
   updatePublishEditState: vi.fn(),
   pushRecentPublishConfig: vi.fn(),
   removeRecentPublishConfig: vi.fn(),
-  replaceRecentPublishConfigKey: vi.fn(),
   reorderRecentPublishConfigs: vi.fn(),
   getAppState: vi.fn(),
 }));
@@ -107,13 +106,11 @@ describe("recent config mutations", () => {
 
     store.getState().pushRecentPublishConfig("k");
     store.getState().removeRecentPublishConfig("k");
-    store.getState().replaceRecentPublishConfigKey("a", "b");
     store.getState().reorderRecentPublishConfigs(["a"]);
     await flushQueue();
 
     expect(apiMocks.pushRecentPublishConfig).not.toHaveBeenCalled();
     expect(apiMocks.removeRecentPublishConfig).not.toHaveBeenCalled();
-    expect(apiMocks.replaceRecentPublishConfigKey).not.toHaveBeenCalled();
     expect(apiMocks.reorderRecentPublishConfigs).not.toHaveBeenCalled();
   });
 
@@ -200,37 +197,6 @@ describe("recent config mutations", () => {
     expect(store.getState().recentConfigKeysByRepo["repo-1"]).toEqual([
       "second",
     ]);
-  });
-
-  it("replaces a recent config key through the queue", async () => {
-    apiMocks.replaceRecentPublishConfigKey.mockResolvedValue({
-      recentRepoIds: ["repo-1"],
-      recentConfigKeysByRepo: { "repo-1": ["preset:b"] },
-    });
-    const store = createTestStore();
-
-    store.getState().replaceRecentPublishConfigKey("preset:a", "preset:b");
-
-    await vi.waitFor(() =>
-      expect(store.getState().recentConfigKeysByRepo["repo-1"]).toEqual([
-        "preset:b",
-      ])
-    );
-    expect(apiMocks.replaceRecentPublishConfigKey).toHaveBeenCalledWith({
-      repoId: "repo-1",
-      previousKey: "preset:a",
-      nextKey: "preset:b",
-    });
-  });
-
-  it("no-ops replace when either key is blank", async () => {
-    const store = createTestStore();
-
-    store.getState().replaceRecentPublishConfigKey(" ", "b");
-    store.getState().replaceRecentPublishConfigKey("a", " ");
-    await flushQueue();
-
-    expect(apiMocks.replaceRecentPublishConfigKey).not.toHaveBeenCalled();
   });
 });
 

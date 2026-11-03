@@ -86,42 +86,6 @@ pub(crate) fn remove_recent_publish_config_state(
     removed || should_remove_repo
 }
 
-pub(crate) fn replace_recent_publish_config_key_state(
-    recent_config_keys_by_repo: &mut BTreeMap<String, Vec<String>>,
-    repo_id: &str,
-    previous_key: &str,
-    next_key: &str,
-) -> bool {
-    let repo_id = repo_id.trim();
-    let previous_key = previous_key.trim();
-    let next_key = next_key.trim();
-    if repo_id.is_empty() || previous_key.is_empty() || next_key.is_empty() {
-        return false;
-    }
-
-    let Some(scoped) = recent_config_keys_by_repo.get_mut(repo_id) else {
-        return false;
-    };
-
-    if !scoped.iter().any(|item| item == previous_key) {
-        return false;
-    }
-
-    *scoped = normalize_recent_config_keys(
-        scoped
-            .iter()
-            .map(|item| {
-                if item == previous_key {
-                    next_key.to_string()
-                } else {
-                    item.clone()
-                }
-            })
-            .collect(),
-    );
-    true
-}
-
 pub(crate) fn sanitize_recent_publish_state(state: &mut AppState) {
     let valid_repo_ids = state
         .repositories

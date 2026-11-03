@@ -63,11 +63,6 @@ interface UseProfilesParams {
   setProviderParameters: Dispatch<
     SetStateAction<Record<string, Record<string, ParameterValue>>>
   >;
-  replaceScopedConfigKey: (
-    previousKey: string,
-    nextKey: string,
-    repoId?: string | null
-  ) => void;
 }
 
 export function useProfiles({

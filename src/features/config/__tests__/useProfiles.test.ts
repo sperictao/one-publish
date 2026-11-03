@@ -119,7 +119,6 @@ function params(overrides: Record<string, unknown> = {}) {
     updatePublishEditState: vi.fn(),
     selectedRepo: null,
     setProviderParameters: vi.fn(),
-    replaceScopedConfigKey: vi.fn(),
     ...overrides,
   } as Parameters<typeof useProfiles>[0];
 }
