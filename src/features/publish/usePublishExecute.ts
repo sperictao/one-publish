@@ -6,6 +6,7 @@ import type {
   TranslationMap,
 } from "@/features/publish/publishTransaction";
 import { usePublishStore } from "@/stores/publishStore";
+import { lastKnownSequenceFor } from "@/features/publish/publishRuntimeHighWater";
 import { useI18n } from "@/hooks/useI18n";
 import { createPublishExecutionRecord } from "@/features/history/publishExecutionRecord";
 import { exportExecutionSnapshot } from "@/features/history/executionSnapshot";
@@ -218,6 +219,10 @@ export function usePublishExecute({
       repositoryPath: selectedRepoPath,
       configurationRevisionId: currentConfigurationRevisionId,
       events: [],
+      lastKnownSequence: lastKnownSequenceFor(
+        selectedRepoPath,
+        currentConfigurationRevisionId
+      ),
     })
       .then((report) => {
         logMissingSyncRanges(report);
@@ -500,6 +505,10 @@ export function usePublishExecute({
               configurationRevisionId: ready.configurationRevisionId,
               attemptId: extractInvokeErrorDetails(err) || undefined,
               events: [],
+              lastKnownSequence: lastKnownSequenceFor(
+                selectedRepoPath,
+                ready.configurationRevisionId
+              ),
             });
             logMissingSyncRanges(synchronized);
             if (
@@ -761,6 +770,10 @@ export function usePublishExecute({
             configurationRevisionId: currentConfigurationRevisionId,
             attemptId,
             events: [],
+            lastKnownSequence: lastKnownSequenceFor(
+              selectedRepoPath,
+              currentConfigurationRevisionId
+            ),
           });
           logMissingSyncRanges(synchronized);
           if (synchronized.result) {
