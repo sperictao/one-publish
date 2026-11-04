@@ -44,7 +44,14 @@ function inferWorkingDirectory(projectPath: string): string {
     return "/";
   }
 
-  return normalized.slice(0, idx);
+  const parent = normalized.slice(0, idx);
+  if (/^[a-zA-Z]:$/.test(parent)) {
+    // 盘符根下的单文件（如 "C:/App.csproj"）父目录应是盘符根 "C:/"。
+    // 不带斜杠的 "C:" 在 Windows 上表示「C 盘的当前目录」，会指向错误位置。
+    return `${parent}/`;
+  }
+
+  return parent;
 }
 
 function buildFallbackCommand(spec: HandoffSpec): string {

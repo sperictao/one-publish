@@ -154,6 +154,41 @@ describe("handoffSnippet", () => {
     expect(snippet).not.toContain('cd "."');
   });
 
+  it("Windows 盘符根单文件项目路径使用盘符根作为工作目录", () => {
+    const driveSpec = { ...spec, project_path: "C:/App.csproj" };
+
+    expect(buildShellHandoffSnippet({ spec: driveSpec })).toContain('cd "C:/"');
+    expect(
+      buildGitHubActionsSnippet({ spec: driveSpec }).split("\n")
+    ).toContain("  working-directory: C:/");
+    expect(buildGitLabCISnippet({ spec: driveSpec })).toContain('- cd "C:/"');
+  });
+
+  it("Windows 盘符根单文件不会退回盘符相对路径 C:", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "C:\\App.csproj" },
+    });
+
+    expect(snippet).toContain('cd "C:/"');
+    expect(snippet).not.toContain('cd "C:"');
+  });
+
+  it("小写盘符根单文件保留原盘符大小写", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "d:/App.csproj" },
+    });
+
+    expect(snippet).toContain('cd "d:/"');
+  });
+
+  it("盘符下的子目录单文件仍解析到完整父目录", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "C:/repo/src/App.csproj" },
+    });
+
+    expect(snippet).toContain('cd "C:/repo/src"');
+  });
+
   it("空项目路径同样回退到当前目录", () => {
     const snippet = buildShellHandoffSnippet({
       spec: { ...spec, project_path: "" },
