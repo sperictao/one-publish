@@ -8,9 +8,11 @@
  */
 export type LogLineLevel = "error" | "warning" | "plain";
 
-// `: error CS1002:` / `: warning MSB3277:` —— 编译器/构建诊断码
-const DIAGNOSTIC_ERROR = /:\s*error\s+[A-Za-z]{1,5}\d+/;
-const DIAGNOSTIC_WARNING = /:\s*warning\s+[A-Za-z]{1,5}\d+/;
+// `: error CS1002:` / `: warning MSB3277:` —— 编译器/构建诊断码。
+// 诊断码字母前缀长度不设上限：NETSDK1138、SYSLIB1001 等 6 字母前缀同样合法，
+// 限定 {1,5} 会把这些常见 .NET SDK 诊断误判为普通输出行。
+const DIAGNOSTIC_ERROR = /:\s*error\s+[A-Za-z]+\d+/;
+const DIAGNOSTIC_WARNING = /:\s*warning\s+[A-Za-z]+\d+/;
 // 行首 error: / warning:（大小写不敏感），覆盖无诊断码的一般输出
 const PREFIX_ERROR = /^\s*error\s*:/i;
 const PREFIX_WARNING = /^\s*warning\s*:/i;

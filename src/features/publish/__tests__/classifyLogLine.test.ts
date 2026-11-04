@@ -15,6 +15,29 @@ describe("classifyLogLine", () => {
     ).toBe("warning");
   });
 
+  it("识别字母前缀超过 5 位的 .NET 诊断码", () => {
+    // NETSDK / SYSLIB 均为 6 字母前缀，旧正则的 {1,5} 会把它们漏判为 plain
+    expect(
+      classifyLogLine(
+        "/repo/App.csproj : warning NETSDK1138: The target framework 'net6.0' is out of support"
+      )
+    ).toBe("warning");
+    expect(
+      classifyLogLine(
+        "Program.cs(1,1): error SYSLIB1001: 'WebRequest' is obsolete"
+      )
+    ).toBe("error");
+  });
+
+  it("诊断码前缀不设长度上限，但无数字码的行仍为 plain", () => {
+    expect(
+      classifyLogLine("proj.csproj : error VERYLONGPREFIX1234: custom analyzer")
+    ).toBe("error");
+    expect(classifyLogLine(": warning NETSDK: missing numeric code")).toBe(
+      "plain"
+    );
+  });
+
   it("识别行首 error: 前缀", () => {
     expect(classifyLogLine("error: build failed")).toBe("error");
     expect(classifyLogLine("  ERROR: something")).toBe("error");
