@@ -3,6 +3,19 @@ import type { ExecutionRecord } from "@/lib/store/types";
 import type { SpecParameters } from "@/types/parameters";
 
 const DEFAULT_SPEC_VERSION = 1;
+// 后端 PublishSpec.version 是 u32（src-tauri/src/spec.rs）。record.spec 是
+// 历史记录里的不可信持久化投影，非法数值必须回退到默认版本，否则会产出
+// 契约外的快照（且 NaN/Infinity 经 JSON 序列化会变成 null）。
+const MAX_SPEC_VERSION = 0xffff_ffff;
+
+function isSpecVersion(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= MAX_SPEC_VERSION
+  );
+}
 
 /**
  * 从执行记录的只读 spec 投影恢复参数快照（交接片段/诊断导出用）。
@@ -23,10 +36,9 @@ export function extractSpecFromRecord(
     return null;
   }
 
-  const version =
-    typeof payload.version === "number"
-      ? payload.version
-      : DEFAULT_SPEC_VERSION;
+  const version = isSpecVersion(payload.version)
+    ? payload.version
+    : DEFAULT_SPEC_VERSION;
   const parametersRaw = payload.parameters;
   const parameters =
     parametersRaw &&

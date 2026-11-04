@@ -71,6 +71,44 @@ describe("extractSpecFromRecord", () => {
     });
   });
 
+  it("falls back to the default version for out-of-contract values", () => {
+    const invalidVersions: Array<number | string | null> = [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      -1,
+      0,
+      1.5,
+      2 ** 32,
+      "3",
+      null,
+    ];
+
+    for (const version of invalidVersions) {
+      expect(
+        extractSpecFromRecord(
+          recordWithSpec({
+            provider_id: "dotnet",
+            project_path: "/repo/app",
+            version,
+          })
+        )?.version
+      ).toBe(1);
+    }
+  });
+
+  it("preserves the largest u32 spec version", () => {
+    const restored = extractSpecFromRecord(
+      recordWithSpec({
+        provider_id: "dotnet",
+        project_path: "/repo/app",
+        version: 0xffff_ffff,
+      })
+    );
+
+    expect(restored?.version).toBe(0xffff_ffff);
+  });
+
   it("ignores non-object parameter payloads", () => {
     const restored = extractSpecFromRecord(
       recordWithSpec({
