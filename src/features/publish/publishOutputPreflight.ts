@@ -106,6 +106,9 @@ function getProtectedLocationLabel(
   return appT.macOsProtectedFilesAndFolders || "文件与文件夹";
 }
 
+// 占位符替换统一使用函数形式的替换值：字符串替换值会把 `$&` / `$$` / `$'` /
+// `` $` `` 当作替换模式解释，而输出目录来自用户输入，可能包含这些字符。
+// 函数形式保证路径与标签按字面量写入提示文案。
 export function buildProtectedOutputAccessDescription(
   result: PublishOutputPreflightResult,
   appT: TranslationMap
@@ -119,10 +122,11 @@ export function buildProtectedOutputAccessDescription(
     "当前输出目录位于 macOS 受保护位置「{{location}}」下。OnePublish 已尝试向系统申请写入权限，但仍无法访问：{{path}}。请在“系统设置 > 隐私与安全性 > 文件与文件夹”中允许 OnePublish 访问「{{location}}」后重试；如果没有出现授权弹窗，请改用非受保护目录。";
 
   return template
-    .replace(/\{\{location\}\}/g, location)
+    .replace(/\{\{location\}\}/g, () => location)
     .replace(
       /\{\{path\}\}/g,
-      result.access.probeDirectory ||
+      () =>
+        result.access.probeDirectory ||
         result.outputDir ||
         result.access.protectedRoot ||
         "-"
@@ -151,25 +155,25 @@ export function buildPublishOutputValidationDescription(
     return (
       appT.publishWindowsStyleOutputPathIncompatibleDesc ||
       `当前发布目录看起来是 Windows 风格路径：${path}。请改为当前系统可识别的路径，或使用相对路径（如 ./publish）。`
-    ).replace(/\{\{path\}\}/g, path);
+    ).replace(/\{\{path\}\}/g, () => path);
   }
 
   if (result.validation.issue === "posix_absolute_path_on_windows") {
     return (
       appT.publishPosixStyleOutputPathIncompatibleDesc ||
       `当前发布目录看起来是 Unix 风格绝对路径：${path}。请改为当前系统可识别的 Windows 路径，或使用相对路径。`
-    ).replace(/\{\{path\}\}/g, path);
+    ).replace(/\{\{path\}\}/g, () => path);
   }
 
   if (result.validation.issue === "windows_drive_root_missing") {
     return (
       appT.publishWindowsDriveRootMissingDesc ||
       `当前发布目录指向不存在的 Windows 盘符或共享根：${path}。请改为当前系统可访问的磁盘或目录后重试。`
-    ).replace(/\{\{path\}\}/g, path);
+    ).replace(/\{\{path\}\}/g, () => path);
   }
 
   return (
     appT.publishOutputPathIncompatibleDesc ||
     `当前发布目录路径与当前系统不兼容：${path}。请改为当前系统可识别的路径，或使用相对路径。`
-  ).replace(/\{\{path\}\}/g, path);
+  ).replace(/\{\{path\}\}/g, () => path);
 }

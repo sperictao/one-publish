@@ -125,6 +125,23 @@ describe("buildProtectedOutputAccessDescription", () => {
     expect(description).not.toContain("{{path}}");
     expect(description).not.toContain("{{location}}");
   });
+
+  it("renders $ replacement patterns in paths and labels literally", () => {
+    const path = "/Users/me/$&/$$/$'/$`/out";
+    const location = "Docs-$&-folder";
+    const result = preflightResult();
+    result.access.probeDirectory = path;
+
+    const description = buildProtectedOutputAccessDescription(result, {
+      publishProtectedDirectoryAccessDeniedDesc:
+        "{{location}} denied: {{path}} (end)",
+      macOsProtectedDocuments: location,
+    });
+
+    expect(description).toBe(`${location} denied: ${path} (end)`);
+    expect(description).not.toContain("{{path}}");
+    expect(description).not.toContain("{{location}}");
+  });
 });
 
 describe("buildPublishOutputValidationTitle", () => {
@@ -207,6 +224,23 @@ describe("buildPublishOutputValidationDescription", () => {
     expect(buildPublishOutputValidationDescription(result, {})).toContain(
       "路径与当前系统不兼容"
     );
+  });
+
+  it("renders $ replacement patterns in the configured output dir literally", () => {
+    const path = "C:\\publish\\$&\\$$";
+    const result = preflightResult({
+      configuredOutputDir: path,
+      validation: {
+        status: "incompatible",
+        issue: "windows_style_path_on_posix",
+      },
+    });
+
+    expect(
+      buildPublishOutputValidationDescription(result, {
+        publishWindowsStyleOutputPathIncompatibleDesc: "Incompatible: {{path}}",
+      })
+    ).toBe(`Incompatible: ${path}`);
   });
 });
 
