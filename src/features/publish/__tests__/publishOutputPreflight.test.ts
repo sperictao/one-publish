@@ -108,6 +108,23 @@ describe("buildProtectedOutputAccessDescription", () => {
       "Access denied at Documents: /Users/me/Documents/out"
     );
   });
+
+  it("replaces every repeated placeholder in a translated template", () => {
+    const description = buildProtectedOutputAccessDescription(
+      preflightResult(),
+      {
+        publishProtectedDirectoryAccessDeniedDesc:
+          "{{location}} denied for {{path}}; switch away from {{location}} and {{path}} to continue",
+        macOsProtectedDocuments: "Documents",
+      }
+    );
+
+    expect(description).toBe(
+      "Documents denied for /Users/me/Documents/out; switch away from Documents and /Users/me/Documents/out to continue"
+    );
+    expect(description).not.toContain("{{path}}");
+    expect(description).not.toContain("{{location}}");
+  });
 });
 
 describe("buildPublishOutputValidationTitle", () => {

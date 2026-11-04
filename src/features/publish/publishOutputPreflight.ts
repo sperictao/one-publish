@@ -121,7 +121,7 @@ export function buildProtectedOutputAccessDescription(
   return template
     .replace(/\{\{location\}\}/g, location)
     .replace(
-      "{{path}}",
+      /\{\{path\}\}/g,
       result.access.probeDirectory ||
         result.outputDir ||
         result.access.protectedRoot ||
