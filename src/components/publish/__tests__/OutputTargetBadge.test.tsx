@@ -44,6 +44,48 @@ describe("OutputTargetBadge", () => {
     expect(screen.getByText(/SFTP/)).toBeInTheDocument();
   });
 
+  it("prefers the backend local verdict over the optimistic scheme hint", async () => {
+    invokeMock.mockResolvedValue({
+      kind: "local",
+      raw: "sftp:///only-path",
+      path: "sftp:///only-path",
+      mountKind: null,
+      fsType: null,
+      scheme: null,
+      host: null,
+      port: null,
+      user: null,
+      query: null,
+    } satisfies OutputTargetDescriptor);
+
+    render(<OutputTargetBadge raw="sftp:///only-path" />);
+    await waitFor(() => {
+      expect(screen.getByText("本地")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/SFTP/)).toBeNull();
+  });
+
+  it("keeps the SFTP badge when the backend confirms a remote target", async () => {
+    invokeMock.mockResolvedValue({
+      kind: "remote",
+      raw: "sftp://host/path",
+      path: "/path",
+      mountKind: null,
+      fsType: null,
+      scheme: "sftp",
+      host: "host",
+      port: null,
+      user: null,
+      query: null,
+    } satisfies OutputTargetDescriptor);
+
+    render(<OutputTargetBadge raw="sftp://host/path" />);
+    await waitFor(() => {
+      expect(screen.getByText(/SFTP/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText("本地")).toBeNull();
+  });
+
   it("returns null for empty raw", () => {
     const { container } = render(<OutputTargetBadge raw="   " />);
     expect(container.firstChild).toBeNull();

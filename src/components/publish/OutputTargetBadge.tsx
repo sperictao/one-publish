@@ -79,6 +79,15 @@ function deriveBadge(
     };
   }
   if (hint.kind === "scheme") {
+    if (remote?.kind === "local") {
+      // 后端权威解析已把该输入判为本地路径（例如缺 host 的 sftp:///only-path
+      // 会被 try_parse_remote 拒绝），此时不能再显示远程协议提示。
+      return {
+        variant: "neutral",
+        label: t.outputTargetBadgeLocal || "本地",
+        icon: <FolderClosed className="size-3" aria-hidden />,
+      };
+    }
     const scheme = (hint.scheme || "remote").toUpperCase();
     return {
       variant: "danger",
