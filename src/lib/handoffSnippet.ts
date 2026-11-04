@@ -34,8 +34,14 @@ function inferWorkingDirectory(projectPath: string): string {
   }
 
   const idx = normalized.lastIndexOf("/");
-  if (idx <= 0) {
+  if (idx < 0) {
+    // 裸文件名（如 "App.csproj"）没有目录信息，只能回退到当前目录。
     return ".";
+  }
+  if (idx === 0) {
+    // 根目录单文件（如 "/App.csproj"）的父目录是文件系统根 "/"，
+    // 而不是片段被执行时的当前目录。
+    return "/";
   }
 
   return normalized.slice(0, idx);

@@ -135,6 +135,25 @@ describe("handoffSnippet", () => {
     expect(snippet).toContain('cd "."');
   });
 
+  it("根目录单文件项目路径使用文件系统根作为工作目录", () => {
+    const rootSpec = { ...spec, project_path: "/App.csproj" };
+
+    expect(buildShellHandoffSnippet({ spec: rootSpec })).toContain('cd "/"');
+    expect(buildGitHubActionsSnippet({ spec: rootSpec }).split("\n")).toContain(
+      "  working-directory: /"
+    );
+    expect(buildGitLabCISnippet({ spec: rootSpec })).toContain('- cd "/"');
+  });
+
+  it("Windows 反斜杠根目录单文件同样解析为文件系统根", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "\\App.csproj" },
+    });
+
+    expect(snippet).toContain('cd "/"');
+    expect(snippet).not.toContain('cd "."');
+  });
+
   it("空项目路径同样回退到当前目录", () => {
     const snippet = buildShellHandoffSnippet({
       spec: { ...spec, project_path: "" },
