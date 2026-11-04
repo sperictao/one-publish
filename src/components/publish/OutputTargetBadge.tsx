@@ -39,6 +39,17 @@ function deriveBadge(
   const t = translations || {};
 
   if (remote) {
+    if (remote.kind === "local") {
+      // 后端权威解析已把该输入判为本地路径，任何乐观 hint 都不能覆盖它：
+      // 缺 share 的 //nas01 会被 try_parse_unc 拒绝，缺 host 的
+      // sftp:///only-path 会被 try_parse_remote 拒绝，两者都应显示为本地。
+      // IPC 尚未返回或调用失败时 descriptor 为 null，仍保留乐观提示。
+      return {
+        variant: "neutral",
+        label: t.outputTargetBadgeLocal || "本地",
+        icon: <FolderClosed className="size-3" aria-hidden />,
+      };
+    }
     if (remote.kind === "mounted_remote") {
       const fsType = remote.fsType ? ` (${remote.fsType})` : "";
       if (remote.mountKind === "unc") {
@@ -79,15 +90,6 @@ function deriveBadge(
     };
   }
   if (hint.kind === "scheme") {
-    if (remote?.kind === "local") {
-      // 后端权威解析已把该输入判为本地路径（例如缺 host 的 sftp:///only-path
-      // 会被 try_parse_remote 拒绝），此时不能再显示远程协议提示。
-      return {
-        variant: "neutral",
-        label: t.outputTargetBadgeLocal || "本地",
-        icon: <FolderClosed className="size-3" aria-hidden />,
-      };
-    }
     const scheme = (hint.scheme || "remote").toUpperCase();
     return {
       variant: "danger",

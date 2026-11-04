@@ -65,6 +65,55 @@ describe("OutputTargetBadge", () => {
     expect(screen.queryByText(/SFTP/)).toBeNull();
   });
 
+  it.each(["//nas01", "\\\\nas01"])(
+    "prefers the backend local verdict over the optimistic UNC hint for %s",
+    async (raw) => {
+      // 缺 share 的不完整 UNC 会被后端 try_parse_unc 拒绝并回退为 Local，
+      // 但前端乐观 hint 仍判为 unc；后端权威结果到达后应显示本地。
+      invokeMock.mockResolvedValue({
+        kind: "local",
+        raw,
+        path: raw,
+        mountKind: null,
+        fsType: null,
+        scheme: null,
+        host: null,
+        port: null,
+        user: null,
+        query: null,
+      } satisfies OutputTargetDescriptor);
+
+      render(<OutputTargetBadge raw={raw} />);
+      await waitFor(() => {
+        expect(screen.getByText("本地")).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/UNC 共享/)).toBeNull();
+    }
+  );
+
+  it("keeps the UNC badge when the backend confirms a mounted UNC share", async () => {
+    invokeMock.mockResolvedValue({
+      kind: "mounted_remote",
+      raw: "//nas01/share/app",
+      path: "//nas01/share/app",
+      mountKind: "unc",
+      fsType: null,
+      scheme: null,
+      host: "nas01",
+      port: null,
+      user: null,
+      query: null,
+    } satisfies OutputTargetDescriptor);
+
+    render(<OutputTargetBadge raw="//nas01/share/app" />);
+    // host detail 只有后端权威 descriptor 到达后才出现，用它确认 IPC 已解析。
+    await waitFor(() => {
+      expect(screen.getByText("nas01")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/UNC 共享/)).toBeInTheDocument();
+    expect(screen.queryByText("本地")).toBeNull();
+  });
+
   it("keeps the SFTP badge when the backend confirms a remote target", async () => {
     invokeMock.mockResolvedValue({
       kind: "remote",
