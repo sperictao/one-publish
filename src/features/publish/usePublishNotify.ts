@@ -18,6 +18,21 @@ import type {
   PublishFailedEvent,
 } from "@/features/publish/publishEvents";
 
+/**
+ * 成功通知里的输出目录由使用者配置，可能含 `$&` / `$$` / `$'` / `` $` ``
+ * 等被 String.replace 当作替换模式的字符，也可能含 `{{...}}` 字面量。
+ * 单次全局扫描 + 函数回调：插入值按字面量写入、重复占位符全部展开、
+ * 未知占位符保持原样，且插入值不会被二次解析。
+ */
+function formatOutputDirectoryDescription(
+  template: string,
+  outputDir: string
+): string {
+  return template.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) =>
+    key === "dir" ? outputDir : match
+  );
+}
+
 export interface UsePublishNotifyParams {
   appT: TranslationMap;
   publishT: TranslationMap;
@@ -146,8 +161,8 @@ export function usePublishNotify({
           "success",
           publishT.success || "发布成功!",
           event.outputDir
-            ? (publishT.output || "输出目录: {{dir}}").replace(
-                "{{dir}}",
+            ? formatOutputDirectoryDescription(
+                publishT.output || "输出目录: {{dir}}",
                 event.outputDir
               )
             : appT.commandExecuted || "命令执行成功",

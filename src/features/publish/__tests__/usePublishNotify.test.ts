@@ -67,9 +67,20 @@ function outputDirError(code: string, message: string) {
   return { kind: "export", message, details: OUTPUT_DIR, code };
 }
 
-function renderPublishNotify() {
+function renderPublishNotify(
+  overrides: {
+    appT?: Record<string, string | undefined>;
+    publishT?: Record<string, string | undefined>;
+  } = {}
+) {
+  const resolvedAppT = overrides.appT ?? appT;
+  const resolvedPublishT = overrides.publishT ?? publishT;
   return renderHook(() =>
-    usePublishNotify({ appT, publishT, savePublishRecord })
+    usePublishNotify({
+      appT: resolvedAppT,
+      publishT: resolvedPublishT,
+      savePublishRecord,
+    })
   );
 }
 
@@ -111,6 +122,54 @@ describe("usePublishNotify 打开输出目录失败", () => {
     await waitFor(() =>
       expect(mocks.toast.error).toHaveBeenCalledWith("打开输出目录失败", {
         description: `The output directory doesn't exist. | ${OUTPUT_DIR}`,
+      })
+    );
+  });
+});
+
+describe("usePublishNotify 发布成功通知的目录文案", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.translations = zh;
+    mocks.openOutputDirectory.mockResolvedValue(undefined);
+  });
+
+  it("把含 $ 替换模式的输出目录按字面量写入成功提示", async () => {
+    const outputDir = "/out/$&-$$-$'-$`";
+
+    renderPublishNotify();
+    emit("publish:completed", { ...completedEvent(), outputDir });
+
+    await waitFor(() =>
+      expect(mocks.toast.success).toHaveBeenCalledWith("发布成功!", {
+        description: `输出目录: ${outputDir}`,
+      })
+    );
+  });
+
+  it("展开重复的 {{dir}}、保留未知占位符且不二次展开目录中的字面量", async () => {
+    const outputDir = "/out/{{dir}}";
+
+    renderPublishNotify({
+      publishT: { output: "{{dir}} | {{dir}} | {{unknown}}" },
+    });
+    emit("publish:completed", { ...completedEvent(), outputDir });
+
+    await waitFor(() =>
+      expect(mocks.toast.success).toHaveBeenCalledWith("发布成功!", {
+        description: "/out/{{dir}} | /out/{{dir}} | {{unknown}}",
+      })
+    );
+  });
+
+  it("普通输出目录与内置译文保持原有文案", async () => {
+    renderPublishNotify({ publishT: { output: "输出目录: {{dir}}" } });
+
+    emit("publish:completed", completedEvent());
+
+    await waitFor(() =>
+      expect(mocks.toast.success).toHaveBeenCalledWith("发布成功!", {
+        description: `输出目录: ${OUTPUT_DIR}`,
       })
     );
   });
