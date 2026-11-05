@@ -218,6 +218,9 @@ beforeAll(() => {
         searchConfig: "搜索配置",
         refreshingProjectProfiles: "正在刷新项目发布配置...",
         refreshingCustomProfiles: "正在刷新自定义配置...",
+        // 自定义译文同时含重复占位符与未知占位符，覆盖复制成功提示的展开规则。
+        copyConfigSuccessDescription:
+          "已生成 {{name}}，请在 {{name}} 中检查（{{unknown}}）",
       },
       // 后端错误码文案用真实 zh 条目，顺带校验 `errors.<code>` 已登记。
       errors: zhLocale.errors,
@@ -1631,7 +1634,7 @@ describe("PublishConfigPanel", () => {
   });
 });
 
-describe("PublishConfigPanel — project profile invoke failures", () => {
+describe("PublishConfigPanel — project profile copy feedback", () => {
   // read_project_publish_profile 以 AppError 对象 reject，后端 message 为英文。
   const missingProfile = {
     kind: "repository",
@@ -1640,7 +1643,9 @@ describe("PublishConfigPanel — project profile invoke failures", () => {
     code: "profile_not_found",
   };
 
-  function renderPanel() {
+  function renderPanel(
+    overrides: Partial<Parameters<typeof PublishConfigPanel>[0]> = {}
+  ) {
     return render(
       <PublishConfigPanel
         selection={null}
@@ -1668,6 +1673,7 @@ describe("PublishConfigPanel — project profile invoke failures", () => {
         onReorderRecentConfigs={() => {}}
         onReorderProjectProfiles={() => {}}
         onReorderProfiles={() => {}}
+        {...overrides}
       />
     );
   }
@@ -1711,6 +1717,44 @@ describe("PublishConfigPanel — project profile invoke failures", () => {
       expect(toastMock.error).toHaveBeenCalledWith("复制为自定义配置失败", {
         description:
           "未找到配置文件 | /repo/Properties/PublishProfiles/FolderProfile.pubxml",
+      })
+    );
+  });
+
+  it("复制为自定义配置成功时，配置名按字面量展开且替换所有占位符", async () => {
+    const rawName = "release$&-$$-$'-$`";
+    resolveDotnetProjectProfileMock.mockResolvedValue({
+      profileName: "FolderProfile",
+      parameters: {},
+    });
+    const { container } = renderPanel({
+      onCopyProjectProfileToCustom: async () => rawName,
+    });
+
+    await chooseProjectProfileAction(container, "复制为自定义配置");
+
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith("已复制为自定义配置", {
+        description: `已生成 ${rawName}，请在 ${rawName} 中检查（{{unknown}}）`,
+      })
+    );
+  });
+
+  it("复制为自定义配置成功时，配置名中的占位符字样不会被二次展开", async () => {
+    const rawName = "cfg{{name}}";
+    resolveDotnetProjectProfileMock.mockResolvedValue({
+      profileName: "FolderProfile",
+      parameters: {},
+    });
+    const { container } = renderPanel({
+      onCopyProjectProfileToCustom: async () => rawName,
+    });
+
+    await chooseProjectProfileAction(container, "复制为自定义配置");
+
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith("已复制为自定义配置", {
+        description: `已生成 ${rawName}，请在 ${rawName} 中检查（{{unknown}}）`,
       })
     );
   });
