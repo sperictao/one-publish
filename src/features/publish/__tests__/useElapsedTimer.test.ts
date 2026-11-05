@@ -18,6 +18,17 @@ describe("formatElapsed", () => {
     expect(formatElapsed(-100)).toBe("00:00");
     expect(formatElapsed(999)).toBe("00:00");
   });
+
+  it("非有限输入不产生 NaN / Infinity 文案", () => {
+    expect(formatElapsed(Number.NaN)).toBe("00:00");
+    expect(formatElapsed(Number.POSITIVE_INFINITY)).toBe("00:00");
+    expect(formatElapsed(Number.NEGATIVE_INFINITY)).toBe("00:00");
+  });
+
+  it("有限大值与小数毫秒仍按整秒向下取整", () => {
+    expect(formatElapsed(3_600_000)).toBe("60:00");
+    expect(formatElapsed(61_999)).toBe("01:01");
+  });
 });
 
 describe("useElapsedTimer", () => {
