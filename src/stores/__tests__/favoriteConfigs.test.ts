@@ -231,3 +231,74 @@ describe("migrateNameBasedProfileFavorites 守卫臂", () => {
     });
   });
 });
+
+describe("migrateNameBasedProfileFavorites 配置名归一化", () => {
+  it("migrates a legacy favorite when the persisted profile name has surrounding whitespace", () => {
+    const repositories = [
+      {
+        id: "r1",
+        publishConfig: {
+          profiles: [{ id: "p1", name: "  Release  " }],
+        },
+      },
+    ];
+    const current = { r1: ["userprofile:Release", "preset:beta"] };
+
+    expect(migrateNameBasedProfileFavorites(current, repositories)).toEqual({
+      r1: ["userprofile:p1", "preset:beta"],
+    });
+  });
+
+  it("migrates a legacy favorite whose saved name also carries whitespace", () => {
+    const repositories = [
+      {
+        id: "r1",
+        publishConfig: {
+          profiles: [{ id: "p1", name: "  Release  " }],
+        },
+      },
+    ];
+    const current = { r1: ["userprofile:  Release  "] };
+
+    expect(migrateNameBasedProfileFavorites(current, repositories)).toEqual({
+      r1: ["userprofile:p1"],
+    });
+  });
+
+  it("keeps each profile's own ID when names differ only by surrounding whitespace", () => {
+    const repositories = [
+      {
+        id: "r1",
+        publishConfig: {
+          profiles: [
+            { id: "p1", name: "  Release  " },
+            { id: "p2", name: "debug" },
+          ],
+        },
+      },
+    ];
+    const current = {
+      r1: ["userprofile:Release", "userprofile:debug", "preset:beta"],
+    };
+
+    expect(migrateNameBasedProfileFavorites(current, repositories)).toEqual({
+      r1: ["userprofile:p1", "userprofile:p2", "preset:beta"],
+    });
+  });
+
+  it("does not create a mapping for a profile whose name trims to empty", () => {
+    const repositories = [
+      {
+        id: "r1",
+        publishConfig: {
+          profiles: [{ id: "p1", name: "   " }],
+        },
+      },
+    ];
+    const current = { r1: ["userprofile:Release"] };
+
+    expect(migrateNameBasedProfileFavorites(current, repositories)).toBe(
+      current
+    );
+  });
+});

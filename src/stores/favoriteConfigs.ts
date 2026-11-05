@@ -96,7 +96,10 @@ export function migrateNameBasedProfileFavorites(
         continue;
       }
       profileIds.add(profileId);
-      profileIdByName.set(profile.name, profileId);
+      const profileName = profile.name.trim();
+      if (profileName) {
+        profileIdByName.set(profileName, profileId);
+      }
     }
 
     const migrated = scoped.map((configKey) => {
