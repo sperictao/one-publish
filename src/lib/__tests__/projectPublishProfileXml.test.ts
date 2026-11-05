@@ -122,6 +122,73 @@ describe("parseProjectPublishProfileXml", () => {
     });
   });
 
+  describe("文本节点拼接", () => {
+    it("XML 注释拆开文本时不凭空插入空格", () => {
+      const parsed = parseProjectPublishProfileXml(`
+        <Project>
+          <PropertyGroup>
+            <Configuration>Rel<!-- note -->ease</Configuration>
+          </PropertyGroup>
+        </Project>
+      `);
+
+      expect(parsed.sections[0]?.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: "Configuration", value: "Release" }),
+        ])
+      );
+      expect(
+        extractDotnetPublishParametersFromProjectProfile(parsed).configuration
+      ).toBe("Release");
+    });
+
+    it("CDATA 拆开文本时不凭空插入空格且保留原字符", () => {
+      const parsed = parseProjectPublishProfileXml(`
+        <Project>
+          <PropertyGroup>
+            <PublishDir>bin/<![CDATA[Release]]>/net8.0/publish/</PublishDir>
+            <PublishUrl><![CDATA[C:\\out&dir\\]]></PublishUrl>
+          </PropertyGroup>
+        </Project>
+      `);
+
+      expect(parsed.sections[0]?.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            key: "PublishDir",
+            value: "bin/Release/net8.0/publish/",
+          }),
+          expect.objectContaining({
+            key: "PublishUrl",
+            value: "C:\\out&dir\\",
+          }),
+        ])
+      );
+      expect(
+        extractDotnetPublishParametersFromProjectProfile(parsed).output
+      ).toBe("bin/Release/net8.0/publish/");
+    });
+
+    it("普通空白仍然归一化为单个空格", () => {
+      const parsed = parseProjectPublishProfileXml(`
+        <Project>
+          <PropertyGroup>
+            <Configuration>  Debug <!-- note -->  Build  </Configuration>
+          </PropertyGroup>
+        </Project>
+      `);
+
+      expect(parsed.sections[0]?.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            key: "Configuration",
+            value: "Debug Build",
+          }),
+        ])
+      );
+    });
+  });
+
   describe("解析守卫", () => {
     it("空白 XML 直接拒绝", () => {
       expect(() => parseProjectPublishProfileXml("   ")).toThrow(

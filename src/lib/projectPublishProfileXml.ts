@@ -39,13 +39,15 @@ function getElementAttributes(element: Element): Record<string, string> {
 }
 
 function getOwnTextContent(element: Element): string {
+  // XML 注释和 CDATA 边界本身不贡献空白，拆分出的相邻文本节点应直接拼接
+  // （与 element.textContent 语义一致），否则会凭空插入空格破坏属性值。
   return Array.from(element.childNodes)
     .flatMap((node) =>
       node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE
         ? [node.textContent ?? ""]
         : []
     )
-    .join(" ")
+    .join("")
     .replace(/\s+/g, " ")
     .trim();
 }
