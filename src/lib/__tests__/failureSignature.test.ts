@@ -42,6 +42,53 @@ describe("failureSignature", () => {
     expect(signature).toBe("panic: unexpected eof in payload");
   });
 
+  it("旧记录从 outputExcerpt 推导签名，而非把命令行当错误日志", () => {
+    const signature = resolveFailureSignature({
+      error: null,
+      failureSignature: null,
+      commandLine: "$ dotnet publish demo.csproj",
+      outputExcerpt: "[info] start build\nerror CS0246: missing namespace",
+    });
+
+    expect(signature).toContain("missing namespace");
+    expect(signature).toContain("error");
+    expect(signature).not.toContain("start build");
+    expect(signature).not.toContain("dotnet publish");
+  });
+
+  it("无输出摘要且命令行不含错误关键词时保持原有 null 结果", () => {
+    const signature = resolveFailureSignature({
+      error: null,
+      failureSignature: null,
+      commandLine: "$ dotnet publish demo.csproj",
+      outputExcerpt: null,
+    });
+
+    expect(signature).toBeNull();
+  });
+
+  it("已持久化的 failureSignature 优先于 outputExcerpt", () => {
+    const signature = resolveFailureSignature({
+      failureSignature: "cargo::toolchain missing",
+      error: null,
+      commandLine: "$ cargo build",
+      outputExcerpt: "error CS0246: missing namespace",
+    });
+
+    expect(signature).toBe("cargo::toolchain missing");
+  });
+
+  it("error 字段仍优先于 outputExcerpt", () => {
+    const signature = resolveFailureSignature({
+      error: "panic: unexpected EOF",
+      failureSignature: null,
+      commandLine: "$ cargo build",
+      outputExcerpt: "error CS0246: missing namespace",
+    });
+
+    expect(signature).toBe("panic: unexpected eof");
+  });
+
   it("支持回放已持久化的 failureSignature", () => {
     const signature = resolveFailureSignature({
       failureSignature: "cargo::toolchain missing",

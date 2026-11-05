@@ -2,6 +2,7 @@ export interface FailureSignatureRecord {
   error?: string | null;
   commandLine?: string | null;
   failureSignature?: string | null;
+  outputExcerpt?: string | null;
 }
 
 const SIGNATURE_MAX_LENGTH = 160;
@@ -74,8 +75,15 @@ export function resolveFailureSignature(
     return record.failureSignature.trim();
   }
 
+  // 旧记录可能没有持久化 failureSignature。此时应从已保存的日志摘要里找错误行，
+  // 命令行只是显示用的 "$ ..."，不是错误日志，单独传进去永远匹配不到 error/panic 关键字。
+  // 没有摘要的更早期记录仍回退到命令行，保持原行为。
+  const output = record.outputExcerpt?.trim()
+    ? record.outputExcerpt
+    : (record.commandLine ?? "");
+
   return deriveFailureSignature({
     error: record.error,
-    output: record.commandLine || "",
+    output,
   });
 }

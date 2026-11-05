@@ -119,6 +119,36 @@ describe("failureGroups", () => {
     expect(representative.id).toBe("older-with-cmd");
   });
 
+  it("为缺少持久化签名的旧失败记录从输出摘要推导签名并聚合", () => {
+    const records: ExecutionRecord[] = [
+      createRecord({
+        id: "legacy-1",
+        finishedAt: "2026-02-08T10:00:00.000Z",
+        error: null,
+        failureSignature: null,
+        commandLine: "$ dotnet publish demo.csproj",
+        outputExcerpt: "error: build failed for project demo",
+      }),
+      createRecord({
+        id: "legacy-2",
+        finishedAt: "2026-02-08T11:00:00.000Z",
+        error: null,
+        failureSignature: null,
+        commandLine: "$ dotnet publish demo.csproj",
+        outputExcerpt: "error: build failed for project demo",
+      }),
+    ];
+
+    const groups = groupExecutionFailures(records);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.count).toBe(2);
+    expect(groups[0]?.records.map((record) => record.id)).toEqual([
+      "legacy-2",
+      "legacy-1",
+    ]);
+  });
+
   it("同计数分组按最新记录时间倒序", () => {
     const records: ExecutionRecord[] = [
       createRecord({
