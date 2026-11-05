@@ -115,4 +115,51 @@ describe("resolveEnvironmentProviderOptions", () => {
       { id: "cargo", label: "Cargo", description: "Cargo" },
     ]);
   });
+
+  it("skips blank environment copy and falls back to trimmed presentation", () => {
+    const options = resolveEnvironmentProviderOptions([
+      provider({
+        id: "dotnet",
+        displayName: ".NET SDK",
+        label: "  .NET CLI  ",
+        environmentLabel: "   ",
+        environmentDescription: " \t ",
+      }),
+    ]);
+
+    expect(options).toEqual([
+      { id: "dotnet", label: ".NET CLI", description: ".NET SDK" },
+    ]);
+  });
+
+  it("trims surrounding whitespace from environment copy", () => {
+    const options = resolveEnvironmentProviderOptions([
+      provider({
+        id: "go",
+        displayName: "  Go Toolchain  ",
+        environmentLabel: "  Go  ",
+        environmentDescription: "  checks go  ",
+      }),
+    ]);
+
+    expect(options).toEqual([
+      { id: "go", label: "Go", description: "checks go" },
+    ]);
+  });
+
+  it("never renders blank options when every copy candidate is blank", () => {
+    const options = resolveEnvironmentProviderOptions([
+      provider({
+        id: "  ",
+        displayName: "  ",
+        label: " ",
+        environmentLabel: "\t",
+        environmentDescription: "\n",
+      }),
+    ]);
+
+    expect(options).toEqual([
+      { id: "  ", label: "Provider", description: "Provider" },
+    ]);
+  });
 });

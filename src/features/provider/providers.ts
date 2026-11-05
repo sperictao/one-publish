@@ -22,6 +22,21 @@ export interface EnvironmentProviderOption {
   description: string;
 }
 
+// Provider catalog 文案经 IPC 传入，可能缺失或只含空白；只做 `||` 判断会让
+// 纯空白字符串被当成有效文案（渲染为看不见的选项）。统一按 trim 后择优选择，
+// 让所有 Provider 展示路径共用同一套回退语义。
+function firstNonBlank(
+  ...candidates: Array<string | null | undefined>
+): string | null {
+  for (const candidate of candidates) {
+    const trimmed = candidate?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
 export function resolveProviderIdCandidate(
   providerId: string | null | undefined,
   providers: ProviderManifest[],
@@ -38,11 +53,12 @@ export function resolveProviderLabel(
   fallbackProviderId?: string
 ): string {
   return (
-    provider?.label?.trim() ||
-    provider?.displayName?.trim() ||
-    provider?.id?.trim() ||
-    fallbackProviderId?.trim() ||
-    "Provider"
+    firstNonBlank(
+      provider?.label,
+      provider?.displayName,
+      provider?.id,
+      fallbackProviderId
+    ) ?? "Provider"
   );
 }
 
@@ -76,11 +92,17 @@ export function resolveEnvironmentProviderOptions(
   return providers.map((provider) => ({
     id: provider.id,
     label:
-      provider.environmentLabel ||
-      provider.label ||
-      provider.displayName ||
-      provider.id,
+      firstNonBlank(
+        provider.environmentLabel,
+        provider.label,
+        provider.displayName,
+        provider.id
+      ) ?? "Provider",
     description:
-      provider.environmentDescription || provider.displayName || provider.id,
+      firstNonBlank(
+        provider.environmentDescription,
+        provider.displayName,
+        provider.id
+      ) ?? "Provider",
   }));
 }
