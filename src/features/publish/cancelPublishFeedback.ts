@@ -14,16 +14,20 @@ export function getCancelPublishFeedback(
   errorCode: string | null,
   errorMessage: string
 ): { title: string; description: string } {
+  const title = appT.cancelPublishFailed || "取消发布失败";
+  const fallbackDescription =
+    appT.cancelPublishFailedDesc || "取消发送失败，请检查进程状态后重试。";
+
   if (errorCode !== null && CANCEL_INFRA_FAILURE_CODES.has(errorCode)) {
-    return {
-      title: appT.cancelPublishFailed || "取消发布失败",
-      description:
-        appT.cancelPublishFailedDesc || "取消发送失败，请检查进程状态后重试。",
-    };
+    return { title, description: fallbackDescription };
   }
 
+  // 语义型错误保留后端原文，但 IPC 边界可能只给出空/空白消息；
+  // 直接透传会让失败 toast 只剩标题，此时回退到通用的取消失败说明。
+  // 非空白消息逐字保留（含首尾空格），不改变既有本地化行为。
   return {
-    title: appT.cancelPublishFailed || "取消发布失败",
-    description: errorMessage,
+    title,
+    description:
+      errorMessage.trim().length > 0 ? errorMessage : fallbackDescription,
   };
 }

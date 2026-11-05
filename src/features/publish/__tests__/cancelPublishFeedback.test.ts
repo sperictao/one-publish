@@ -46,4 +46,43 @@ describe("getCancelPublishFeedback", () => {
       description: "Could not send the cancel request.",
     });
   });
+
+  it("falls back to readable copy when the backend message is blank", () => {
+    for (const message of ["", "   ", "\r\n"]) {
+      const feedback = getCancelPublishFeedback(
+        {},
+        "publish_runtime_cancellation_selector_invalid",
+        message
+      );
+
+      expect(feedback.description).toContain("取消发送失败");
+      expect(feedback.description.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("uses translated fallback copy for blank backend messages", () => {
+    const feedback = getCancelPublishFeedback(
+      {
+        cancelPublishFailed: "Cancel failed",
+        cancelPublishFailedDesc: "Could not send the cancel request.",
+      },
+      null,
+      ""
+    );
+
+    expect(feedback).toEqual({
+      title: "Cancel failed",
+      description: "Could not send the cancel request.",
+    });
+  });
+
+  it("keeps non-blank backend messages unchanged", () => {
+    const feedback = getCancelPublishFeedback(
+      {},
+      "publish_runtime_cancellation_selector_invalid",
+      "  selector details  "
+    );
+
+    expect(feedback.description).toBe("  selector details  ");
+  });
 });
