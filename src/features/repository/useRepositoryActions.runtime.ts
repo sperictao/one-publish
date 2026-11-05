@@ -78,13 +78,20 @@ function createRepositoryId(): string {
     .slice(2, 10)}`;
 }
 
+/**
+ * 展开译文里的 {{key}} 占位符。
+ *
+ * 单次全局扫描 + 函数形式替换：① 同一占位符重复出现时全部展开（旧实现只替换首处）；
+ * ② 替换值按字面量写入，仓库名 / Provider 名里的 `$&`、`$$`、`$'`、`` $` `` 不会被
+ * String.replace 当作替换模式解释（否则会把模板前后文注入提示文案）。未提供的 key
+ * 保持原样，且插入的替换值不会被再次当作模板解析，避免用户输入触发二次展开。
+ */
 function fillTemplate(
   template: string,
   values: Record<string, string>
 ): string {
-  return Object.entries(values).reduce(
-    (result, [key, value]) => result.replace(`{{${key}}}`, value),
-    template
+  return template.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) =>
+    Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match
   );
 }
 

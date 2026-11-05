@@ -478,6 +478,25 @@ describe("handleAddRepoRuntime", () => {
     });
   });
 
+  it("重复目录文案展开每一处 {{name}} 且仓库名里的 $ 按字面量渲染", async () => {
+    const repoName = "cash$&-$'-$$";
+    const outcome = await runAddRepo({
+      appT: {
+        ...appT,
+        repositoryAlreadyExistsNamed:
+          "已存在「{{name}}」，勿重复添加「{{name}}」",
+      },
+      repositories: [existingRepo({ name: repoName })],
+    });
+
+    expect(outcome).toEqual({ status: "failed" });
+    expect(mocks.addRepository).not.toHaveBeenCalled();
+    expect(mocks.toastError).toHaveBeenCalledWith("添加仓库失败", {
+      id: expect.any(String),
+      description: `已存在「${repoName}」，勿重复添加「${repoName}」`,
+    });
+  });
+
   it("同一目录用尾部分隔符重复添加时后端错误被归一化拦截", async () => {
     mocks.openDialog.mockResolvedValue("/tmp/demo-repo/");
     mocks.addRepository.mockRejectedValue({ code: "repository_exists" });
@@ -1045,6 +1064,31 @@ describe("handleDetectRepoProviderRuntime", () => {
     expect(result).toBe("dotnet");
     expect(mocks.toastSuccess).toHaveBeenCalledWith("Provider detected", {
       description: expect.stringContaining("dotnet"),
+    });
+  });
+
+  it("备选 Provider 文案展开每一处 {{providers}} 且 $ 按字面量渲染", async () => {
+    const alternative = "gradle$& (build.gradle)";
+    mocks.detectRepositoryProvider.mockResolvedValue({
+      providerId: "dotnet",
+      candidates: [
+        { providerId: "dotnet", matchedMarkers: ["*.csproj"] },
+        { providerId: "gradle$&", matchedMarkers: ["build.gradle"] },
+      ],
+    });
+
+    const result = await handleDetectRepoProviderRuntime({
+      appT: {
+        ...en.app,
+        alsoDetectedProviders: "also {{providers}} / {{providers}}",
+      },
+      translations: en,
+      path: "/tmp/repo",
+    });
+
+    expect(result).toBe("dotnet");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Provider detected", {
+      description: `dotnet (also ${alternative} / ${alternative})`,
     });
   });
 
