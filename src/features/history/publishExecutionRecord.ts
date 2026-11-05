@@ -20,7 +20,9 @@ function extractCommandLine(
     return null;
   }
 
-  for (const line of outputLog.split("\n")) {
+  // 与 buildOutputExcerpt 一致地按 CRLF/LF 切行：Windows 日志用 "\n" 切分
+  // 会把行尾 \r 留在 commandLine 里，污染持久化的历史记录与诊断导出。
+  for (const line of outputLog.split(/\r?\n/)) {
     if (line.startsWith("$ ")) {
       return line;
     }

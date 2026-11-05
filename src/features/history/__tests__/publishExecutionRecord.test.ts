@@ -163,6 +163,79 @@ describe("createPublishExecutionRecord", () => {
     ).toBeNull();
   });
 
+  it("Windows CRLF 日志提取 $ 行时不会把行尾 \\r 带进 commandLine", () => {
+    const crlfLog = [
+      "restoring…",
+      "$ dotnet publish /repo/App.csproj -c Release",
+      "build ok",
+    ].join("\r\n");
+    const record = createPublishExecutionRecord({
+      spec: {
+        version: 1 as const,
+        provider_id: "dotnet",
+        project_path: "/repo/App.csproj",
+        parameters: {},
+      },
+      repoId: "repo-1",
+      startedAt: "2026-03-28T10:00:00.000Z",
+      finishedAt: "2026-03-28T10:00:03.000Z",
+      result: {
+        provider_id: "dotnet",
+        success: true,
+        cancelled: false,
+        error: null,
+        command: createCommand("   "),
+        output_log: crlfLog,
+        output_dir: "/repo/out",
+        file_count: 2,
+        warnings: null,
+      },
+      outputLog: crlfLog,
+    });
+
+    // display_command 为空白 → 回退到日志扫描；CRLF 时行尾 \r 不应残留，
+    // 否则持久化的 commandLine 会污染交接片段与诊断导出。
+    expect(record.commandLine).toBe(
+      "$ dotnet publish /repo/App.csproj -c Release"
+    );
+  });
+
+  it("CRLF 失败日志的输出摘录同样不残留 \\r，且与 commandLine 归一方式一致", () => {
+    const crlfLog = [
+      "$ dotnet publish /repo/App.csproj",
+      "[stderr] Build failed: boom",
+    ].join("\r\n");
+    const record = createPublishExecutionRecord({
+      spec: {
+        version: 1 as const,
+        provider_id: "dotnet",
+        project_path: "/repo/App.csproj",
+        parameters: {},
+      },
+      repoId: "repo-1",
+      startedAt: "2026-03-28T10:00:00.000Z",
+      finishedAt: "2026-03-28T10:00:03.000Z",
+      result: {
+        provider_id: "dotnet",
+        success: false,
+        cancelled: false,
+        error: null,
+        command: createCommand("   "),
+        output_log: crlfLog,
+        output_dir: "",
+        file_count: 0,
+        warnings: null,
+      },
+      outputLog: crlfLog,
+    });
+
+    expect(record.commandLine).toBe("$ dotnet publish /repo/App.csproj");
+    expect(record.outputExcerpt).toBe(
+      "$ dotnet publish /repo/App.csproj\n[stderr] Build failed: boom"
+    );
+    expect(record.failureSignature).toBe("[stderr] build failed: boom");
+  });
+
   it("空输出日志不产生失败摘录", () => {
     const record = createPublishExecutionRecord({
       spec: null,
