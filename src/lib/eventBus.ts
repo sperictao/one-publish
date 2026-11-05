@@ -42,10 +42,17 @@ export function on<T = unknown>(
     handlers = new Set();
     listeners.set(event, handlers);
   }
-  handlers.add(handler as EventHandler);
+  const subscribedHandlers = handlers;
+  subscribedHandlers.add(handler as EventHandler);
   return () => {
-    handlers?.delete(handler as EventHandler);
-    if (handlers?.size === 0) {
+    subscribedHandlers.delete(handler as EventHandler);
+    // 仅当捕获的集合仍是该事件当前注册的集合时才移除 map 条目。
+    // 过期闭包（StrictMode / effect cleanup 重复调用）不得删除后来
+    // 新建的同名事件订阅集合，否则新订阅者会被静默移除。
+    if (
+      subscribedHandlers.size === 0 &&
+      listeners.get(event) === subscribedHandlers
+    ) {
       listeners.delete(event);
     }
   };

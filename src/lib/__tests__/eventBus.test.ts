@@ -78,4 +78,36 @@ describe("eventBus", () => {
   it("无订阅者的事件直接返回", () => {
     expect(() => emit("test:no-listeners", { value: 1 })).not.toThrow();
   });
+
+  it("过期的退订闭包不会移除后来新建的同名事件订阅", () => {
+    const laterHandler = vi.fn();
+    const offFirst = on("test:stale-unsubscribe", vi.fn());
+    offFirst();
+
+    // 首个订阅集合清空后，同名事件的下一次订阅会新建一个集合。
+    const offLater = on("test:stale-unsubscribe", laterHandler);
+    // 模拟 React StrictMode / effect cleanup 重复调用上一代退订闭包。
+    offFirst();
+
+    emit("test:stale-unsubscribe", { value: 4 });
+    expect(laterHandler).toHaveBeenCalledOnce();
+    expect(laterHandler).toHaveBeenCalledWith({ value: 4 });
+
+    offLater();
+  });
+
+  it("过期退订闭包不会影响同一代里仍然存活的其他订阅者", () => {
+    const survivor = vi.fn();
+    const offRemoved = on("test:stale-unsubscribe-sibling", vi.fn());
+    const offSurvivor = on("test:stale-unsubscribe-sibling", survivor);
+
+    offRemoved();
+    offRemoved();
+
+    emit("test:stale-unsubscribe-sibling", { value: 5 });
+    expect(survivor).toHaveBeenCalledOnce();
+    expect(survivor).toHaveBeenCalledWith({ value: 5 });
+
+    offSurvivor();
+  });
 });
