@@ -478,6 +478,23 @@ describe("handleAddRepoRuntime", () => {
     });
   });
 
+  it("前端预检把 Windows 正反斜杠写法混用的同一目录判为重复，不调用后端", async () => {
+    mocks.openDialog.mockResolvedValue("C:/Work/Demo-Repo/");
+
+    const outcome = await runAddRepo({
+      repositories: [
+        existingRepo({ path: "C:\\Work\\Demo-Repo", name: "demo-repo" }),
+      ],
+    });
+
+    expect(outcome).toEqual({ status: "failed" });
+    expect(mocks.addRepository).not.toHaveBeenCalled();
+    expect(mocks.toastError).toHaveBeenCalledWith("添加仓库失败", {
+      id: expect.any(String),
+      description: "该目录已添加为仓库「demo-repo」",
+    });
+  });
+
   it("重复目录文案展开每一处 {{name}} 且仓库名里的 $ 按字面量渲染", async () => {
     const repoName = "cash$&-$'-$$";
     const outcome = await runAddRepo({

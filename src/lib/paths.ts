@@ -51,6 +51,18 @@ function isWindowsLikePath(path: string): boolean {
   );
 }
 
+/**
+ * 只对「确定是 Windows 路径」的写法统一分隔符（盘符路径或反斜杠 UNC）。
+ * 比 isWindowsLikePath 更严格：后者把任何含反斜杠的路径都视作 Windows 风格，
+ * 而 POSIX 路径里的 `\` 其实是合法文件名字符，不能当作分隔符归一化；
+ * 同理 `//` 开头的 POSIX 路径也不会被误判成 UNC。
+ */
+function normalizeWindowsSeparators(path: string): string {
+  const isDefiniteWindowsPath =
+    WINDOWS_DRIVE_RE.test(path) || path.startsWith("\\\\");
+  return isDefiniteWindowsPath ? path.replace(/\\/g, "/") : path;
+}
+
 export function stripTrailingPathSeparators(path: string): string {
   if (!path || isRootPath(path)) {
     return path;
@@ -78,9 +90,17 @@ export function isSameRepositoryPath(left: string, right: string): boolean {
     normalizedRight,
   ]);
 
+  // Windows 目录选择器返回 `C:\repo`，而导入/持久化的配置常写成 `C:/repo`；
+  // UNC 同理（`\\nas01\share` 与 `//nas01/share`）。两种写法在 Windows 上
+  // 指向同一目录，逐字符比较会让「前端预检重复目录」失效，把同一仓库添加两次。
+  // 各侧按自身写法归一化：只有确定的 Windows 路径才把 `\` 当分隔符，
+  // POSIX 路径（含 `//` 开头）保持原样，不同目录仍不相等。
   return (
-    normalizeSegment(normalizedLeft, caseSensitive) ===
-    normalizeSegment(normalizedRight, caseSensitive)
+    normalizeSegment(
+      normalizeWindowsSeparators(normalizedLeft),
+      caseSensitive
+    ) ===
+    normalizeSegment(normalizeWindowsSeparators(normalizedRight), caseSensitive)
   );
 }
 

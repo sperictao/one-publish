@@ -95,6 +95,22 @@ describe("paths", () => {
     ).toBe(false);
   });
 
+  it("同一 Windows 目录混用正反斜杠写法时仍判定为同一仓库", () => {
+    expect(isSameRepositoryPath("C:\\Work\\Repo", "C:/Work/Repo")).toBe(true);
+    expect(isSameRepositoryPath("C:/Work/Repo/", "c:\\work\\repo")).toBe(true);
+    expect(
+      isSameRepositoryPath("\\\\nas01\\share\\repo", "//nas01/share/repo")
+    ).toBe(true);
+  });
+
+  it("统一分隔符不会把不同目录或 POSIX 反斜杠文件名判为同一仓库", () => {
+    expect(isSameRepositoryPath("C:\\Work\\RepoA", "C:/Work/RepoB")).toBe(
+      false
+    );
+    expect(isSameRepositoryPath("/tmp/a\\b", "/tmp/a/b")).toBe(false);
+    expect(isSameRepositoryPath("//tmp/a\\b", "//tmp/a/b")).toBe(false);
+  });
+
   it("空路径永不相等，不同目录不相等", () => {
     expect(isSameRepositoryPath("", "")).toBe(false);
     expect(isSameRepositoryPath("/a/b", "/a/c")).toBe(false);
