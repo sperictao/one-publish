@@ -64,6 +64,51 @@ describe("applyProfile", () => {
     expect(p.updatePublishEditState).not.toHaveBeenCalled();
   });
 
+  it("renders every mismatch description placeholder literally and globally", () => {
+    const name = "cash$&-$$-$'";
+    const template =
+      "{{name}} / {{name}} targets {{provider}}, repo {{repositoryProvider}}";
+    const p = params({
+      repositoryProviderId: "cargo",
+      profileT: { providerMismatchLoadDescription: template },
+    });
+    const { result } = renderHook(() => useProfileCrud(p));
+
+    const applied = result.current.applyProfile({
+      id: "p1",
+      name,
+      providerId: "dotnet",
+    });
+
+    expect(applied).toBe(false);
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "无法加载配置",
+      expect.objectContaining({
+        description: `${name} / ${name} targets dotnet, repo cargo`,
+      })
+    );
+  });
+
+  it("does not re-expand placeholders injected through the profile name", () => {
+    const p = params({ repositoryProviderId: "cargo" });
+    const { result } = renderHook(() => useProfileCrud(p));
+
+    const applied = result.current.applyProfile({
+      id: "p1",
+      name: "cfg{{provider}}{{repositoryProvider}}",
+      providerId: "dotnet",
+    });
+
+    expect(applied).toBe(false);
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "无法加载配置",
+      expect.objectContaining({
+        description:
+          "配置“cfg{{provider}}{{repositoryProvider}}”属于 dotnet，当前仓库的 Provider 是 cargo。",
+      })
+    );
+  });
+
   it("applies a compatible profile: selection, parameters, name, toast", () => {
     const p = params({
       providerSchemas: {

@@ -24,6 +24,24 @@ interface StoreMutationResult {
   }>;
 }
 
+/**
+ * 单次全局扫描展开译文里的 {{key}} 占位符。
+ *
+ * 函数形式替换保证：① 重复占位符全部展开（链式 .replace 只替换首处）；
+ * ② 配置名 / Provider id 里的 `$&`、`$$`、`$'`、`` $` `` 按字面量写入，不被
+ * String.replace 解释为替换模式（否则会把模板前后文注入提示文案）；
+ * ③ 插入值不会被后续替换二次解析，避免用户可编辑配置名里的 `{{...}}`
+ * 被当成占位符再次展开。未提供的 key 保持原样。
+ */
+function fillProfileMismatchTemplate(
+  template: string,
+  values: Record<string, string>
+): string {
+  return template.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) =>
+    Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match
+  );
+}
+
 /** Provider 加载配置时，仅保留 schema 认识的参数键；无 schema 时直通。 */
 function filterParametersBySchema(
   parameters: ConfigParameters,
@@ -134,13 +152,15 @@ export function useProfileCrud({
         )
       ) {
         toast.error(profileT.providerMismatchLoadTitle || "无法加载配置", {
-          description: (
+          description: fillProfileMismatchTemplate(
             profileT.providerMismatchLoadDescription ||
-            "配置“{{name}}”属于 {{provider}}，当前仓库的 Provider 是 {{repositoryProvider}}。"
-          )
-            .replace("{{name}}", profile.name)
-            .replace("{{provider}}", profileProviderId)
-            .replace("{{repositoryProvider}}", repositoryProviderId ?? ""),
+              "配置“{{name}}”属于 {{provider}}，当前仓库的 Provider 是 {{repositoryProvider}}。",
+            {
+              name: profile.name,
+              provider: profileProviderId,
+              repositoryProvider: repositoryProviderId ?? "",
+            }
+          ),
         });
         return false;
       }
