@@ -90,7 +90,17 @@ export const createRepositorySlice: StateCreator<
         .map((id) => repositoryMap.get(id))
         .filter((r): r is Repository => Boolean(r));
 
-      if (nextRepositories.length !== repositories.length) return;
+      // The backend (ensure_exact_order_match) only accepts an exact
+      // permutation of the current ids. A length check alone lets duplicate
+      // ids through: ["a", "a", "b"] for [a, b, c] still maps to three
+      // entries, duplicating one repository and dropping another, then
+      // persisting an order the backend rejects (repository_order_mismatch).
+      if (
+        nextRepositories.length !== repositories.length ||
+        new Set(repoIds).size !== repoIds.length
+      ) {
+        return;
+      }
 
       set({ repositories: nextRepositories } as Record<string, unknown>);
 

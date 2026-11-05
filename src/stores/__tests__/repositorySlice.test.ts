@@ -138,6 +138,51 @@ describe("reorderRepositories", () => {
     expect(apiMocks.reorderRepositories).not.toHaveBeenCalled();
   });
 
+  it("rejects duplicate ids that keep the same length", async () => {
+    const store = createTestStore();
+    const repositories = [repo("a"), repo("b"), repo("c")];
+    store.setState({ repositories });
+
+    store.getState().reorderRepositories(["a", "a", "b"]);
+    await flushQueue();
+
+    // A duplicate id satisfies the length check but is not a permutation:
+    // accepting it would duplicate one repository and silently drop another.
+    expect(store.getState().repositories).toBe(repositories);
+    expect(apiMocks.reorderRepositories).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate ids regardless of their position", async () => {
+    const store = createTestStore();
+    store.setState({ repositories: [repo("a"), repo("b"), repo("c")] });
+
+    store.getState().reorderRepositories(["c", "c", "a"]);
+    await flushQueue();
+
+    expect(store.getState().repositories.map((r) => r.id)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+    expect(apiMocks.reorderRepositories).not.toHaveBeenCalled();
+  });
+
+  it("still accepts a valid permutation with the same length", async () => {
+    apiMocks.reorderRepositories.mockResolvedValue({});
+    const store = createTestStore();
+    store.setState({ repositories: [repo("a"), repo("b"), repo("c")] });
+
+    store.getState().reorderRepositories(["b", "c", "a"]);
+    await flushQueue();
+
+    expect(store.getState().repositories.map((r) => r.id)).toEqual([
+      "b",
+      "c",
+      "a",
+    ]);
+    expect(apiMocks.reorderRepositories).toHaveBeenCalledWith(["b", "c", "a"]);
+  });
+
   it("no-ops on an empty repository list", async () => {
     const store = createTestStore();
 
