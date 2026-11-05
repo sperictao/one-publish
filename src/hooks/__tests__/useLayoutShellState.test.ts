@@ -113,6 +113,58 @@ describe("useLayoutShellState", () => {
     expect(setLeftPanelWidth).toHaveBeenLastCalledWith(310);
   });
 
+  describe("已持久化的自定义宽度", () => {
+    it("越界宽度在渲染前被钳制到 [150, 400]，而不是直接写成 px", () => {
+      const { result } = renderHook(
+        (props: HookProps) => useLayoutShellState(props),
+        {
+          initialProps: createProps({
+            leftPanelWidth: 5000,
+            middlePanelWidth: -30,
+          }),
+        }
+      );
+
+      expect(result.current.effectiveLeftPanelWidth).toBe(400);
+      expect(result.current.effectiveMiddlePanelWidth).toBe(150);
+    });
+
+    it("非有限宽度回退到最小宽度，避免 NaNpx / Infinitypx", () => {
+      const invalidWidths = [
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+        Number.NEGATIVE_INFINITY,
+      ];
+
+      for (const invalidWidth of invalidWidths) {
+        const { result, unmount } = renderHook(
+          (props: HookProps) => useLayoutShellState(props),
+          { initialProps: createProps({ leftPanelWidth: invalidWidth }) }
+        );
+
+        expect(result.current.effectiveLeftPanelWidth).toBe(150);
+        unmount();
+      }
+    });
+
+    it("下一次拖拽以钳制后的宽度为基准，不发生跳变", () => {
+      const setLeftPanelWidth = vi.fn();
+      const { result } = renderHook(
+        (props: HookProps) => useLayoutShellState(props),
+        {
+          initialProps: createProps({
+            leftPanelWidth: 5000,
+            setLeftPanelWidth,
+          }),
+        }
+      );
+
+      act(() => result.current.handleLeftPanelResize(-10));
+
+      expect(setLeftPanelWidth).toHaveBeenLastCalledWith(390);
+    });
+  });
+
   describe("resize 监听", () => {
     it("卸载时移除 resize 监听", () => {
       const removeSpy = vi.spyOn(window, "removeEventListener");

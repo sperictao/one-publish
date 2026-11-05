@@ -9,8 +9,15 @@ import {
 const MIN_PANEL_WIDTH = 150;
 const MAX_PANEL_WIDTH = 400;
 
+// 持久化宽度来自后端 AppState（i32，写入时不做范围校验），旧状态文件或手工编辑
+// 可能留下越界或非有限值。渲染期与拖拽写入共用同一钳制规则：非法值回退到最小
+// 宽度，避免把 5000 / NaN / Infinity 直接拼成 px 宽度；同时让下一次拖拽以
+// 钳制后的宽度为基准，而不是从损坏值跳到区间端点。
 const clampPanelWidth = (width: number) =>
-  Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, width));
+  Math.max(
+    MIN_PANEL_WIDTH,
+    Math.min(MAX_PANEL_WIDTH, Number.isFinite(width) ? width : MIN_PANEL_WIDTH)
+  );
 
 export function useLayoutShellState(params: {
   panelWidthsCustomized: boolean;
@@ -34,11 +41,11 @@ export function useLayoutShellState(params: {
   }, [params.panelWidthsCustomized]);
 
   const effectiveLeftPanelWidth = params.panelWidthsCustomized
-    ? params.leftPanelWidth
+    ? clampPanelWidth(params.leftPanelWidth)
     : clampPanelWidth(Math.round(windowWidth * 0.2));
 
   const effectiveMiddlePanelWidth = params.panelWidthsCustomized
-    ? params.middlePanelWidth
+    ? clampPanelWidth(params.middlePanelWidth)
     : clampPanelWidth(Math.round(windowWidth * 0.2));
 
   // 拖拽实时宽度：ResizeHandle 的 document 级 mousemove 监听在整个拖拽序列中
