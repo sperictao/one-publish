@@ -30,6 +30,51 @@ describe("PublishLogView", () => {
     expect(spans[2].className).toContain("text-amber-400");
   });
 
+  it("逐行渲染 CRLF 日志且每行不残留回车符", () => {
+    const text = [
+      "Restoring packages...",
+      "Program.cs(1,1): error CS1002: ; expected",
+      "proj.csproj : warning MSB3277: conflict",
+    ].join("\r\n");
+    const { container } = render(
+      <PublishLogView text={text} getSnapshot={() => text} active={false} />
+    );
+
+    const spans = container.querySelectorAll("pre > span");
+    expect(spans).toHaveLength(3);
+    expect([...spans].map((span) => span.textContent)).toEqual([
+      "Restoring packages...",
+      "Program.cs(1,1): error CS1002: ; expected",
+      "proj.csproj : warning MSB3277: conflict",
+    ]);
+    expect(spans[1].className).toContain("text-red-500");
+    expect(spans[2].className).toContain("text-amber-400");
+  });
+
+  it("CRLF 空行仍渲染占位符，不把回车符当行内容", () => {
+    const text = ["first", "", "last"].join("\r\n");
+    const { container } = render(
+      <PublishLogView text={text} getSnapshot={() => text} active={false} />
+    );
+
+    const spans = container.querySelectorAll("pre > span");
+    expect(spans).toHaveLength(3);
+    expect(spans[1].textContent).toBe("\u00a0");
+  });
+
+  it("混合 LF 与 CRLF 行尾时都按逻辑行切分", () => {
+    const text = "first\r\nsecond\nthird\r\n";
+    const { container } = render(
+      <PublishLogView text={text} getSnapshot={() => text} active={false} />
+    );
+
+    expect(
+      [...container.querySelectorAll("pre > span")].map(
+        (span) => span.textContent
+      )
+    ).toEqual(["first", "second", "third", "\u00a0"]);
+  });
+
   it("复制按钮取用完整快照而非可见文本", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });

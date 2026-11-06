@@ -101,7 +101,10 @@ export function PublishLogView({
     }
   }, [getSnapshot, copiedLabel]);
 
-  const lines = text.split("\n");
+  // Windows 子进程输出为 CRLF：按 /\r?\n/ 切分，避免每行尾部残留 \r 被
+  // pre-wrap 渲染成多余换行，也让空行正常落到下方的空格占位分支。
+  // 与 publishExecutionRecord.ts 对同一 outputLog 的切分保持一致。
+  const lines = text.split(/\r?\n/);
 
   return (
     <div className={cn("relative min-h-0 min-w-0 flex-1", className)}>
