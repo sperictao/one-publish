@@ -22,7 +22,11 @@ function normalizeCommandLine(commandLine?: string | null): string | null {
 
 function inferWorkingDirectory(projectPath: string): string {
   const normalized = projectPath.replace(/\\/g, "/");
-  if (!normalized) {
+  // project_path 可能来自历史记录里不可信的持久化 spec 投影（见 extractSpecFromRecord）。
+  // 空路径已回退到当前目录，纯空白路径同样没有可用目录信息；否则三个片段会生成
+  // `cd "   "` / `working-directory:    ` 这类不可执行的交接命令。与
+  // normalizeCommandLine 一致地按 trim 判定空白，非纯空白路径仍逐字保留。
+  if (!normalized.trim()) {
     return ".";
   }
 

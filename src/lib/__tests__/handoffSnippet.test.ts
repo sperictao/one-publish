@@ -198,6 +198,45 @@ describe("handoffSnippet", () => {
     expect(snippet).toContain('cd "."');
   });
 
+  it("纯空白项目路径的 shell 片段回退到当前目录", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "   " },
+      commandLine: "$ dotnet publish -c Release",
+    });
+
+    expect(snippet).toContain('cd "."');
+    expect(snippet).not.toContain('cd "   "');
+  });
+
+  it("纯空白项目路径的 GitHub Actions 片段回退到当前目录", () => {
+    const snippet = buildGitHubActionsSnippet({
+      spec: { ...spec, project_path: "\t\n " },
+      commandLine: "$ dotnet publish -c Release",
+    });
+
+    expect(snippet.split("\n")).toContain("  working-directory: .");
+    expect(snippet).not.toContain("working-directory: \t");
+  });
+
+  it("纯空白项目路径的 GitLab CI 片段回退到当前目录", () => {
+    const snippet = buildGitLabCISnippet({
+      spec: { ...spec, project_path: "  \t  " },
+      commandLine: "$ dotnet publish -c Release",
+    });
+
+    expect(snippet).toContain('    - cd "."');
+    expect(snippet).not.toContain('    - cd "  ');
+  });
+
+  it("含空格但非纯空白的项目路径工作目录保持不变", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "/tmp/my project/src/" },
+      commandLine: "$ dotnet publish -c Release",
+    });
+
+    expect(snippet).toContain('cd "/tmp/my project/src/"');
+  });
+
   it("尾斜杠目录路径原样作为工作目录", () => {
     const snippet = buildShellHandoffSnippet({
       spec: { ...spec, project_path: "/tmp/demo/src/" },
