@@ -40,9 +40,16 @@ export interface PreferenceSlice {
   setEnvironmentProviderIds: (providerIds: string[]) => void;
 }
 
-// ── Module-level debounce timer ──
+// ── Module-level debounce state ──
 const DEBOUNCE_DELAY = 500;
 let preferenceDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+/**
+ * Every preference field changed inside the current debounce window. The
+ * backend `update_preferences` applies only the fields present in its payload,
+ * so persisting just the last `setPreferences` params would silently drop the
+ * earlier edits from disk (they stay applied in memory until the next launch).
+ */
+let pendingPreferenceMutation: PreferenceStateMutation | null = null;
 
 export const createPreferenceSlice: StateCreator<
   AppStore,
@@ -69,9 +76,18 @@ export const createPreferenceSlice: StateCreator<
     setPreferences: (params) => {
       set((prev) => applyPreferenceStateMutation(prev, params));
 
+      // Later writes to the same field win; distinct fields are all preserved.
+      pendingPreferenceMutation = {
+        ...(pendingPreferenceMutation ?? {}),
+        ...params,
+      };
+
       if (preferenceDebounceTimer) clearTimeout(preferenceDebounceTimer);
       preferenceDebounceTimer = setTimeout(() => {
-        void apiUpdatePreferences(params).catch((err) => {
+        preferenceDebounceTimer = null;
+        const mutation = pendingPreferenceMutation ?? {};
+        pendingPreferenceMutation = null;
+        void apiUpdatePreferences(mutation).catch((err) => {
           void handlePersistenceFailure(t("app.savePreferencesFailed"), err);
         });
       }, DEBOUNCE_DELAY);

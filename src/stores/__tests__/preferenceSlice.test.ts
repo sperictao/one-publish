@@ -62,22 +62,58 @@ describe("setPreferences", () => {
     expect(apiMocks.updatePreferences).toHaveBeenCalledWith({ theme: "dark" });
   });
 
-  it("coalesces rapid mutations into a single persist with the last params", () => {
+  it("persists every field changed within one debounce window in a single patch", () => {
     apiMocks.updatePreferences.mockResolvedValue({});
     const store = createTestStore();
 
     store.getState().setPreferences({ theme: "dark" });
     vi.advanceTimersByTime(200);
     store.getState().setPreferences({ language: "en" });
+    vi.advanceTimersByTime(200);
+    store.getState().setPreferences({ defaultOutputDir: "/out" });
     vi.advanceTimersByTime(500);
 
     expect(apiMocks.updatePreferences).toHaveBeenCalledTimes(1);
     expect(apiMocks.updatePreferences).toHaveBeenCalledWith({
+      theme: "dark",
       language: "en",
+      defaultOutputDir: "/out",
     });
-    // Both mutations still applied locally.
+    // All mutations still applied locally.
     expect(store.getState().theme).toBe("dark");
     expect(store.getState().language).toBe("en");
+    expect(store.getState().defaultOutputDir).toBe("/out");
+  });
+
+  it("keeps the latest value when the same field changes twice in one window", () => {
+    apiMocks.updatePreferences.mockResolvedValue({});
+    const store = createTestStore();
+
+    store.getState().setPreferences({ theme: "dark" });
+    vi.advanceTimersByTime(200);
+    store.getState().setPreferences({ theme: "light" });
+    vi.advanceTimersByTime(500);
+
+    expect(apiMocks.updatePreferences).toHaveBeenCalledTimes(1);
+    expect(apiMocks.updatePreferences).toHaveBeenCalledWith({ theme: "light" });
+  });
+
+  it("starts a fresh window after flushing the pending patch", () => {
+    apiMocks.updatePreferences.mockResolvedValue({});
+    const store = createTestStore();
+
+    store.getState().setPreferences({ theme: "dark" });
+    vi.advanceTimersByTime(500);
+    store.getState().setPreferences({ language: "en" });
+    vi.advanceTimersByTime(500);
+
+    expect(apiMocks.updatePreferences).toHaveBeenCalledTimes(2);
+    expect(apiMocks.updatePreferences).toHaveBeenNthCalledWith(1, {
+      theme: "dark",
+    });
+    expect(apiMocks.updatePreferences).toHaveBeenNthCalledWith(2, {
+      language: "en",
+    });
   });
 
   it("persists failures through the shared failure handler", async () => {
@@ -112,9 +148,13 @@ describe("preference setters", () => {
     expect(store.getState().executionHistoryLimit).toBe(50);
 
     vi.advanceTimersByTime(500);
-    // Debounce collapsed to the last mutation.
+    // Debounce collapses the writes into one patch but keeps every field.
     expect(apiMocks.updatePreferences).toHaveBeenCalledTimes(1);
     expect(apiMocks.updatePreferences).toHaveBeenCalledWith({
+      language: "en",
+      minimizeToTrayOnClose: false,
+      defaultOutputDir: "/out",
+      theme: "light",
       executionHistoryLimit: 50,
     });
   });
@@ -129,5 +169,9 @@ describe("preference setters", () => {
       "cargo",
       "dotnet",
     ]);
+
+    // Flush the pending patch so the module-level debounce state does not leak
+    // into the next test in this file.
+    vi.advanceTimersByTime(500);
   });
 });
