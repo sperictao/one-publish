@@ -49,7 +49,20 @@ function buildOutputExcerpt(outputLog: string): string | null {
     return excerpt;
   }
 
-  return excerpt.slice(excerpt.length - OUTPUT_EXCERPT_MAX_CHARS);
+  let start = excerpt.length - OUTPUT_EXCERPT_MAX_CHARS;
+  // String#slice 以 UTF-16 码元计数，截断点可能落在一对代理项中间（如 emoji），
+  // 使摘录以孤立的低位代理项开头。JSON.stringify 会把它写成 "\udXXX" 转义，
+  // 经 IPC 交给 Rust serde_json 时不是合法 Unicode 标量值，UI 与诊断导出也会
+  // 显示成替换字符。若起点是低位代理项则后移一个码元，保证摘录始终是合法
+  // UTF-16；完整位于摘录内的代理对不受影响，长度仍不超过上限。
+  if (
+    excerpt.charCodeAt(start) >= 0xdc00 &&
+    excerpt.charCodeAt(start) <= 0xdfff
+  ) {
+    start += 1;
+  }
+
+  return excerpt.slice(start);
 }
 
 function toStoredSpecValue(spec: ProviderPublishSpec): JsonValue {

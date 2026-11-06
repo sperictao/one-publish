@@ -12,6 +12,47 @@ function createCommand(displayCommand = "dotnet publish /repo/App.csproj") {
   };
 }
 
+/** 扫描 UTF-16 码元，判断字符串里是否存在未配对的代理项。 */
+function hasLoneSurrogate(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        index += 1;
+        continue;
+      }
+      return true;
+    }
+    if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function createFailedRecord(outputLog: string) {
+  return createPublishExecutionRecord({
+    spec: null,
+    providerId: "dotnet",
+    repoId: "repo-1",
+    startedAt: "2026-03-28T10:00:00.000Z",
+    finishedAt: "2026-03-28T10:00:03.000Z",
+    result: {
+      provider_id: "dotnet",
+      success: false,
+      cancelled: false,
+      error: "build failed",
+      command: createCommand("dotnet publish"),
+      output_log: outputLog,
+      output_dir: "",
+      file_count: 0,
+      warnings: null,
+    },
+    outputLog,
+  });
+}
+
 describe("createPublishExecutionRecord", () => {
   it("固定手动发布使用的配置身份与修订，未提供时保持 legacy null", () => {
     const baseParams = {
@@ -292,6 +333,47 @@ describe("createPublishExecutionRecord", () => {
     expect(excerpt).toContain("line-49");
     expect(excerpt.split("\n").length).toBeLessThanOrEqual(40);
     expect(excerpt.length).toBeLessThanOrEqual(16_000);
+  });
+
+  it("字符上限边界落在 emoji 代理对中间时，不产生孤立代理项", () => {
+    // 单行日志 16001 个 UTF-16 码元；截尾起点恰好是 🚀 的低位代理项。
+    const emoji = "\u{1F680}";
+    const tailText = "x".repeat(15_996) + "END";
+    const outputLog = emoji + tailText;
+
+    const excerpt = createFailedRecord(outputLog).outputExcerpt ?? "";
+
+    expect(outputLog.length).toBe(16_001);
+    // 摘录必须是合法 UTF-16：不能以孤立低位代理项开头。
+    expect(hasLoneSurrogate(excerpt)).toBe(false);
+    expect(
+      excerpt.charCodeAt(0) >= 0xdc00 && excerpt.charCodeAt(0) <= 0xdfff
+    ).toBe(false);
+    expect(excerpt.length).toBeLessThanOrEqual(16_000);
+    expect(excerpt.endsWith("END")).toBe(true);
+    // 序列化后不应出现 \udXXX 形式的孤立代理项转义。
+    expect(JSON.stringify(excerpt)).not.toMatch(/\\ud[89a-f]/i);
+  });
+
+  it("截尾起点是完整码点（BMP）时，仍严格保留 16000 个码元", () => {
+    const outputLog = "a".repeat(16_050);
+    const excerpt = createFailedRecord(outputLog).outputExcerpt ?? "";
+
+    expect(excerpt).toBe("a".repeat(16_000));
+    expect(excerpt.length).toBe(16_000);
+    expect(hasLoneSurrogate(excerpt)).toBe(false);
+  });
+
+  it("完整位于摘录内部的 emoji 不被误删", () => {
+    const emoji = "\u{1F680}";
+    const outputLog = "a".repeat(51) + "b".repeat(15_948) + emoji + "END";
+
+    const excerpt = createFailedRecord(outputLog).outputExcerpt ?? "";
+
+    expect(excerpt).toContain(emoji);
+    expect(excerpt.endsWith("END")).toBe(true);
+    expect(excerpt.length).toBe(16_000);
+    expect(hasLoneSurrogate(excerpt)).toBe(false);
   });
 
   it("spec 缺失时回落 providerId、projectPath 留空且 spec 序列化为 null", () => {
