@@ -36,9 +36,10 @@ function normalizeProviderIds(providerIds?: string[]) {
 
 export function normalizeEnvironmentProviderIds(providerIds?: string[]) {
   const normalizedProviderIds = normalizeProviderIds(providerIds);
-  return normalizedProviderIds.length > 0
-    ? normalizedProviderIds
-    : DEFAULT_ENVIRONMENT_PROVIDER_IDS;
+  // 空偏好必须返回新数组，与非空分支一致：归一结果会进入 app state、检查快照和
+  // React state 并被长期持有，直接返回模块级可变常量会让任一消费者的原地修改
+  // 污染全局默认值以及所有共享该引用的快照。
+  return normalizedProviderIds.length > 0 ? normalizedProviderIds : [];
 }
 
 function filterEnvironmentResultByProviderIds(

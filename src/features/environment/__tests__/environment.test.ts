@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.hoisted(() => vi.fn());
 
@@ -9,8 +9,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 import {
   applyFix,
   createEnvironmentCheckSnapshot,
+  DEFAULT_ENVIRONMENT_PROVIDER_IDS,
   getEnvironmentCheckSnapshotResult,
   matchesEnvironmentCheckSnapshot,
+  normalizeEnvironmentProviderIds,
   runEnvironmentCheck,
   scopeEnvironmentCheckSnapshot,
 } from "@/features/environment/environment";
@@ -84,6 +86,48 @@ describe("createEnvironmentCheckSnapshot", () => {
 
     expect(snapshot.providerIds).toEqual(["rust"]);
     expect(snapshot.result).toBe(full);
+  });
+});
+
+describe("normalizeEnvironmentProviderIds", () => {
+  afterEach(() => {
+    // 旧实现把模块级常量本体作为空偏好结果返回；清理变异写入，避免污染同文件后续用例。
+    DEFAULT_ENVIRONMENT_PROVIDER_IDS.length = 0;
+  });
+
+  it("returns a fresh array for empty preferences instead of aliasing the shared default", () => {
+    const fromEmptyList = normalizeEnvironmentProviderIds([]);
+    const fromBlankList = normalizeEnvironmentProviderIds([" ", ""]);
+    const fromUndefined = normalizeEnvironmentProviderIds();
+
+    expect(fromEmptyList).toEqual([]);
+    expect(fromBlankList).toEqual([]);
+    expect(fromUndefined).toEqual([]);
+    expect(fromEmptyList).not.toBe(DEFAULT_ENVIRONMENT_PROVIDER_IDS);
+    expect(fromEmptyList).not.toBe(fromBlankList);
+    expect(fromBlankList).not.toBe(fromUndefined);
+  });
+
+  it("does not let a caller's in-place edit corrupt the global default", () => {
+    const normalized = normalizeEnvironmentProviderIds([]);
+    normalized.push("dotnet");
+
+    expect(DEFAULT_ENVIRONMENT_PROVIDER_IDS).toEqual([]);
+    expect(normalizeEnvironmentProviderIds()).toEqual([]);
+  });
+
+  it("keeps empty-scope snapshots independent of the shared default", () => {
+    const snapshot = createEnvironmentCheckSnapshot(result());
+    snapshot.providerIds.push("cargo");
+
+    expect(DEFAULT_ENVIRONMENT_PROVIDER_IDS).toEqual([]);
+    expect(createEnvironmentCheckSnapshot(result()).providerIds).toEqual([]);
+  });
+
+  it("still trims, deduplicates and sorts non-empty preferences", () => {
+    expect(
+      normalizeEnvironmentProviderIds([" dotnet ", "cargo", "dotnet", " "])
+    ).toEqual(["cargo", "dotnet"]);
   });
 });
 
