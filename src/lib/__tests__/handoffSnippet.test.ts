@@ -254,4 +254,38 @@ describe("handoffSnippet", () => {
 
     expect(snippet.split("\n").pop()).toContain("dotnet publish");
   });
+
+  it("纯空白项目路径的 fallback 命令使用当前目录而非空白参数", () => {
+    const blankSpec = { ...spec, project_path: "   " };
+
+    const shell = buildShellHandoffSnippet({ spec: blankSpec });
+    const gha = buildGitHubActionsSnippet({ spec: blankSpec });
+    const gitlab = buildGitLabCISnippet({ spec: blankSpec });
+
+    for (const snippet of [shell, gha, gitlab]) {
+      expect(snippet).not.toContain('dotnet publish "   "');
+      expect(snippet).toContain('dotnet publish "."');
+    }
+    expect(shell).toContain('cd "."');
+  });
+
+  it("纯空白项目路径的 shell 注释回退到当前目录", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "\t\n " },
+    });
+
+    expect(snippet.split("\n")).toContain("# project: .");
+    expect(snippet).not.toContain("# project: \t");
+  });
+
+  it("含空格但非纯空白的项目路径在 fallback 命令与注释中逐字保留", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: { ...spec, project_path: "/tmp/my project/src/app.csproj" },
+    });
+
+    expect(snippet).toContain("# project: /tmp/my project/src/app.csproj");
+    expect(snippet).toContain(
+      'dotnet publish "/tmp/my project/src/app.csproj"'
+    );
+  });
 });

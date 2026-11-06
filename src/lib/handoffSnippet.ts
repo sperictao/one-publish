@@ -20,6 +20,14 @@ function normalizeCommandLine(commandLine?: string | null): string | null {
   return normalized || null;
 }
 
+// project_path 可能是历史记录里不可信的持久化 spec 投影（见 extractSpecFromRecord）。
+// 纯空白路径没有可用的项目位置，与 inferWorkingDirectory 一致地回退到当前目录 "."，
+// 否则 fallback 命令会生成 `dotnet publish "   "`（不可执行），shell 注释也只剩空白。
+// 非纯空白路径逐字保留（含首尾空格、反斜杠），正常交接片段行为不变。
+function resolveProjectPath(projectPath: string): string {
+  return projectPath.trim() ? projectPath : ".";
+}
+
 function inferWorkingDirectory(projectPath: string): string {
   const normalized = projectPath.replace(/\\/g, "/");
   // project_path 可能来自历史记录里不可信的持久化 spec 投影（见 extractSpecFromRecord）。
@@ -60,7 +68,7 @@ function inferWorkingDirectory(projectPath: string): string {
 
 function buildFallbackCommand(spec: HandoffSpec): string {
   if (spec.provider_id === "dotnet") {
-    return `dotnet publish "${spec.project_path}"`;
+    return `dotnet publish "${resolveProjectPath(spec.project_path)}"`;
   }
   if (spec.provider_id === "cargo") {
     return "cargo build --release";
@@ -92,7 +100,7 @@ export function buildShellHandoffSnippet(params: {
   return [
     "# OnePublish handoff snippet (shell)",
     `# provider: ${params.spec.provider_id}`,
-    `# project: ${params.spec.project_path}`,
+    `# project: ${resolveProjectPath(params.spec.project_path)}`,
     `# parameters: ${JSON.stringify(params.spec.parameters)}`,
     `cd "${workingDir}"`,
     command,
