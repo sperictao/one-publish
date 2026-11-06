@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MapParameter } from "../MapParameter";
 import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
+import type { ParameterValue } from "@/types/parameters";
 
 describe("MapParameter", () => {
   const definition = {
@@ -119,6 +121,73 @@ describe("MapParameter", () => {
     const updatedValue = handleChange.mock.calls[0][0];
     expect(updatedValue).toEqual({ first: "v1", renamed: "v2", third: "v3" });
     expect(Object.keys(updatedValue)).toEqual(["first", "renamed", "third"]);
+  });
+
+  it("keeps both entries when a key is renamed to an existing key", () => {
+    const handleChange = vi.fn();
+    render(
+      <MapParameter
+        definition={definition}
+        value={{ first: "v1", second: "v2" }}
+        onChange={handleChange}
+      />
+    );
+
+    const keyInput = screen.getAllByRole("textbox")[0];
+    fireEvent.change(keyInput, { target: { value: "second" } });
+
+    expect(handleChange).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("textbox")).toHaveLength(4);
+  });
+
+  it("does not collapse entries for a colliding rename in a controlled parent", () => {
+    function Harness() {
+      const [value, setValue] = useState<Record<string, ParameterValue>>({
+        alpha: "1",
+        beta: "2",
+      });
+      return (
+        <MapParameter
+          definition={definition}
+          value={value}
+          onChange={setValue}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.change(screen.getAllByRole("textbox")[2], {
+      target: { value: "alpha" },
+    });
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    expect(inputs).toHaveLength(4);
+    expect(inputs.map((input) => input.value)).toEqual([
+      "alpha",
+      "1",
+      "beta",
+      "2",
+    ]);
+  });
+
+  it("still allows a rename to a similar but non-conflicting key", () => {
+    const handleChange = vi.fn();
+    render(
+      <MapParameter
+        definition={definition}
+        value={{ first: "v1", second: "v2" }}
+        onChange={handleChange}
+      />
+    );
+
+    const keyInput = screen.getAllByRole("textbox")[0];
+    fireEvent.change(keyInput, { target: { value: "second-extra" } });
+
+    expect(handleChange).toHaveBeenCalledWith({
+      "second-extra": "v1",
+      second: "v2",
+    });
   });
 
   it("updates value when input changes", () => {

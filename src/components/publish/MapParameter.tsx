@@ -62,6 +62,11 @@ export function MapParameter({
   const updateKey = (oldKey: string, newKey: string) => {
     if (newKey === oldKey) return;
 
+    // 键是 Record 的唯一身份：目标键已被其它条目占用时，Object.fromEntries
+    // 会让后写入的条目覆盖先写入的条目，静默丢掉一条配置并改变条目数量。
+    // addEntry 已保证新增键唯一，重命名沿用同一约束——冲突时保留原状。
+    if (Object.prototype.hasOwnProperty.call(value, newKey)) return;
+
     // 保序重建：重命名留在原槽位，配合位置 key 不丢焦点。
     const newValue = Object.fromEntries(
       Object.entries(value).map(([k, v]) => [k === oldKey ? newKey : k, v])
