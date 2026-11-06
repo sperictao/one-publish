@@ -269,7 +269,10 @@ export function usePublishConfigListModel(params: {
   isProjectProfilesRefreshing: boolean;
 }) {
   const { groupFilterValue, onGroupFilterValueChange } = params;
-  const query = params.searchQuery.toLowerCase();
+  // 搜索框直接透传用户输入；首尾空格（粘贴或误输入）不应成为匹配条件，
+  // 否则 "  Release  " 会过滤掉所有配置，"   " 会被当成有筛选而隐藏最近使用与拖拽。
+  // 与 historyFilters.ts 的 keyword 归一化一致；内部空格仍需保留（如 "Release Builds"）。
+  const query = params.searchQuery.trim().toLowerCase();
   const favoriteSet = useMemo(
     () => new Set(params.favoriteConfigKeys),
     [params.favoriteConfigKeys]

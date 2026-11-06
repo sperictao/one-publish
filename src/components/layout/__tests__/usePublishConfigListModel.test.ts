@@ -139,6 +139,75 @@ describe("usePublishConfigListModel", () => {
     expect(result.current.visibleProjectProfiles).toEqual(["Release"]);
   });
 
+  it("trims surrounding whitespace from the search query", () => {
+    const match = profile("p-1", { name: "Release" });
+    const miss = profile("p-2", { name: "Debug" });
+
+    const { result } = renderHook(() =>
+      usePublishConfigListModel(
+        params({
+          profiles: [match, miss],
+          projectPublishProfiles: ["Release", "Debug"],
+          searchQuery: "  Release  ",
+        })
+      )
+    );
+
+    expect(result.current.query).toBe("release");
+    expect(
+      result.current.visibleGroupedFilteredProfiles.flatMap((group) =>
+        group.items.map((item) => item.id)
+      )
+    ).toEqual(["p-1"]);
+    expect(result.current.visibleProjectProfiles).toEqual(["Release"]);
+  });
+
+  it("treats a whitespace-only search query as no filter", () => {
+    const { result } = renderHook(() =>
+      usePublishConfigListModel(
+        params({
+          profiles: [profile("p-1"), profile("p-2")],
+          projectPublishProfiles: ["Release", "Debug"],
+          recentConfigKeys: ["userprofile:p-1"],
+          searchQuery: "   ",
+          showReorderControls: true,
+        })
+      )
+    );
+
+    expect(result.current.query).toBe("");
+    expect(result.current.showRecentItems).toBe(true);
+    expect(
+      result.current.visibleGroupedFilteredProfiles.flatMap((group) =>
+        group.items.map((item) => item.id)
+      )
+    ).toEqual(["p-1", "p-2"]);
+    expect(result.current.visibleProjectProfiles).toEqual(["Release", "Debug"]);
+    expect(result.current.projectProfileDragEnabled).toBe(true);
+    expect(result.current.customProfileDragEnabled).toBe(true);
+  });
+
+  it("keeps interior whitespace in a search query intact", () => {
+    const byGroup = profile("p-1", { profileGroup: "Release Builds" });
+    const miss = profile("p-2", { name: "Debug" });
+
+    const { result } = renderHook(() =>
+      usePublishConfigListModel(
+        params({
+          profiles: [byGroup, miss],
+          searchQuery: "release b",
+        })
+      )
+    );
+
+    expect(result.current.query).toBe("release b");
+    expect(
+      result.current.visibleGroupedFilteredProfiles.flatMap((group) =>
+        group.items.map((item) => item.id)
+      )
+    ).toEqual(["p-1"]);
+  });
+
   it("skips recent keys that are neither pubxml nor user profiles", () => {
     const { result } = renderHook(() =>
       usePublishConfigListModel(
