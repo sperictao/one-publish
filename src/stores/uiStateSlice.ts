@@ -24,9 +24,39 @@ export interface UiStateSlice {
   setMiddlePanelWidth: (width: number) => void;
 }
 
-// ── Module-level debounce timer ──
+// ── Module-level debounce state ──
 const DEBOUNCE_DELAY = 500;
 let uiDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+/**
+ * Every UI field changed inside the current debounce window. The backend
+ * `update_ui_state` applies only the fields present in its payload, so
+ * persisting just the last `setUIState` params would silently drop the earlier
+ * edits from disk (for example a repository selection made while a panel is
+ * being resized).
+ */
+let pendingUiMutation: UiStateMutation | null = null;
+
+/**
+ * `selectedRepoId` and `clearSelectedRepoId` are mutually exclusive intents and
+ * the backend gives the clear flag priority. When the newest params carry only
+ * one of them, drop the opposite key accumulated earlier in the same window;
+ * params carrying both (`selectRepository(null)`) must stay untouched.
+ */
+function mergePendingUiMutation(
+  pending: UiStateMutation,
+  params: UiStateMutation
+): UiStateMutation {
+  const merged: UiStateMutation = { ...pending, ...params };
+  const hasSelection = params.selectedRepoId !== undefined;
+  const hasClear = params.clearSelectedRepoId !== undefined;
+
+  if (hasClear && !hasSelection) {
+    delete merged.selectedRepoId;
+  } else if (hasSelection && !hasClear) {
+    delete merged.clearSelectedRepoId;
+  }
+  return merged;
+}
 
 export const createUiStateSlice: StateCreator<
   AppStore,
@@ -49,9 +79,19 @@ export const createUiStateSlice: StateCreator<
     setUIState: (params) => {
       set((prev) => applyUiStateMutation(prev, params));
 
+      // Later writes to the same field win; distinct fields are all preserved.
+      pendingUiMutation = mergePendingUiMutation(
+        pendingUiMutation ?? {},
+        params
+      );
+
       if (uiDebounceTimer) clearTimeout(uiDebounceTimer);
       uiDebounceTimer = setTimeout(() => {
-        void updateUIState(params).catch((err) => {
+        uiDebounceTimer = null;
+        const mutation = pendingUiMutation;
+        pendingUiMutation = null;
+        if (!mutation) return;
+        void updateUIState(mutation).catch((err) => {
           void handlePersistenceFailure(t("app.saveUiStateFailed"), err);
         });
       }, DEBOUNCE_DELAY);

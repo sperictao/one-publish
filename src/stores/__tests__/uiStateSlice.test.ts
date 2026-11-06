@@ -72,6 +72,78 @@ describe("setUIState", () => {
 
     store.getState().setUIState({ clearSelectedRepoId: true });
     expect(store.getState().selectedRepoId).toBeNull();
+
+    // Flush the debounce window so module-level pending state cannot leak
+    // into the next test.
+    vi.advanceTimersByTime(500);
+  });
+
+  it("persists every UI field changed within a debounce window", () => {
+    apiMocks.updateUIState.mockResolvedValue({});
+    const store = createTestStore();
+
+    store.getState().setUIState({ selectedRepoId: "repo-7" });
+    store.getState().setLeftPanelWidth(260);
+    store.getState().setMiddlePanelWidth(320);
+    vi.advanceTimersByTime(500);
+
+    expect(apiMocks.updateUIState).toHaveBeenCalledTimes(1);
+    expect(apiMocks.updateUIState).toHaveBeenCalledWith({
+      selectedRepoId: "repo-7",
+      leftPanelWidth: 260,
+      middlePanelWidth: 320,
+    });
+    expect(store.getState().selectedRepoId).toBe("repo-7");
+    expect(store.getState().leftPanelWidth).toBe(260);
+    expect(store.getState().middlePanelWidth).toBe(320);
+  });
+
+  it("keeps the explicit clear flag when the window also has a width edit", () => {
+    apiMocks.updateUIState.mockResolvedValue({});
+    const store = createTestStore();
+
+    store.getState().setUIState({
+      selectedRepoId: null,
+      clearSelectedRepoId: true,
+    });
+    store.getState().setMiddlePanelWidth(320);
+    vi.advanceTimersByTime(500);
+
+    expect(apiMocks.updateUIState).toHaveBeenCalledWith({
+      selectedRepoId: null,
+      clearSelectedRepoId: true,
+      middlePanelWidth: 320,
+    });
+  });
+
+  it("does not carry an earlier clear into a later repository selection", () => {
+    apiMocks.updateUIState.mockResolvedValue({});
+    const store = createTestStore();
+
+    store.getState().setUIState({ clearSelectedRepoId: true });
+    store.getState().setUIState({ selectedRepoId: "repo-8" });
+    vi.advanceTimersByTime(500);
+
+    expect(apiMocks.updateUIState).toHaveBeenCalledWith({
+      selectedRepoId: "repo-8",
+    });
+  });
+
+  it("starts a fresh mutation in the next debounce window", () => {
+    apiMocks.updateUIState.mockResolvedValue({});
+    const store = createTestStore();
+
+    store.getState().setLeftPanelWidth(260);
+    vi.advanceTimersByTime(500);
+    store.getState().setMiddlePanelWidth(320);
+    vi.advanceTimersByTime(500);
+
+    expect(apiMocks.updateUIState).toHaveBeenNthCalledWith(1, {
+      leftPanelWidth: 260,
+    });
+    expect(apiMocks.updateUIState).toHaveBeenNthCalledWith(2, {
+      middlePanelWidth: 320,
+    });
   });
 
   it("reports persistence failures through the toast path", async () => {
@@ -99,5 +171,8 @@ describe("panel width setters", () => {
     expect(store.getState().leftPanelWidth).toBe(260);
     expect(store.getState().middlePanelWidth).toBe(320);
     expect(store.getState().panelWidthsCustomized).toBe(true);
+
+    // Flush the debounce window so module-level pending state cannot leak.
+    vi.advanceTimersByTime(500);
   });
 });
