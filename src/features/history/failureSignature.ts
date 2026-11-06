@@ -35,7 +35,7 @@ export function extractFailureContext(output: string): string | null {
 }
 
 export function normalizeFailureSignature(raw: string): string {
-  return raw
+  const truncated = raw
     .trim()
     .toLowerCase()
     .replace(/[a-z]:[\\/][^\s"'`]+/gi, "<path>")
@@ -44,8 +44,20 @@ export function normalizeFailureSignature(raw: string): string {
     .replace(/\b\d+\b/g, "<num>")
     .replace(/["'`][^"'`]+["'`]/g, "<value>")
     .replace(/\s+/g, " ")
-    .slice(0, SIGNATURE_MAX_LENGTH)
-    .trim();
+    .slice(0, SIGNATURE_MAX_LENGTH);
+
+  // String#slice 以 UTF-16 码元计数，160 的截断点可能落在一对代理项中间（如
+  // emoji），使签名以孤立的高位代理项结尾（buildOutputExcerpt 从尾部截断，
+  // 遇到的是开头孤立低位代理项，方向相反）。JSON.stringify 会把它写成
+  // "\udXXX" 转义，经 IPC 交给 Rust serde_json 时不是合法 Unicode 标量值，
+  // UI 与诊断导出也会显示成替换字符。若末位是高位代理项则去掉该码元，保证
+  // 签名始终是合法 UTF-16；完整位于截断范围内的代理对不受影响，长度仍不超上限。
+  const lastCodeUnit = truncated.charCodeAt(truncated.length - 1);
+  if (lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff) {
+    return truncated.slice(0, -1).trim();
+  }
+
+  return truncated.trim();
 }
 
 export function deriveFailureSignature(params: {
