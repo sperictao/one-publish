@@ -183,6 +183,11 @@ function normalizeConfigProfile(
     revisionId: currentRevision.id,
     name: profile.name,
     providerId: currentRevision.providerId,
+    // 与 normalizeImportedConfigProfile 保持同一形状：toExportConfigProfile
+    // 要求这三项存在，否则从后端加载的配置无法再导出为备份。
+    contractVersion: currentRevision.contractVersion,
+    providerVersion: currentRevision.providerVersion,
+    settingsVersion: currentRevision.settingsVersion,
     parameters: normalizeConfigParameters(currentRevision.parameters),
     composition: currentRevision.composition,
     projectBinding: currentRevision.projectBinding,

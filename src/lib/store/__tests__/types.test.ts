@@ -126,6 +126,57 @@ describe("normalizeRepository", () => {
       "Profile cfg-1 is missing current revision rev-missing"
     );
   });
+
+  it("keeps adapter version data from the current revision", () => {
+    const repo = normalizeRepository(tauriRepo([{}]));
+
+    expect(repo.publishConfig.profiles[0]).toMatchObject({
+      contractVersion: 1,
+      providerVersion: "8",
+      settingsVersion: 1,
+    });
+  });
+
+  it("uses the current revision's adapter versions, not another revision's", () => {
+    const repo = tauriRepo([
+      {
+        currentRevisionId: "rev-2",
+        revisions: [
+          tauriRevision({
+            id: "rev-1",
+            contractVersion: 9,
+            providerVersion: "legacy",
+            settingsVersion: 7,
+          }),
+          tauriRevision({
+            id: "rev-2",
+            contractVersion: 2,
+            providerVersion: "9",
+            settingsVersion: 3,
+          }),
+        ],
+      },
+    ]);
+
+    expect(normalizeRepository(repo).publishConfig.profiles[0]).toMatchObject({
+      revisionId: "rev-2",
+      contractVersion: 2,
+      providerVersion: "9",
+      settingsVersion: 3,
+    });
+  });
+
+  it("lets a repository profile be exported without losing adapter versions", () => {
+    const repo = normalizeRepository(tauriRepo([{}]));
+
+    expect(toExportConfigProfile(repo.publishConfig.profiles[0])).toMatchObject(
+      {
+        contract_version: 1,
+        provider_version: "8",
+        settings_version: 1,
+      }
+    );
+  });
 });
 
 describe("normalizeImportedConfigProfile", () => {
