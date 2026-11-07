@@ -310,45 +310,49 @@ export function extractDotnetPublishParametersFromProjectProfile(
         continue;
       }
 
-      switch (key) {
-        case "Configuration":
+      // MSBuild 属性名大小写不敏感，.pubxml 又是用户可手写的 XML：识别规则与
+      // sanitizeDotnetPublishProperties 的「不支持属性」过滤共用同一套小写归一。
+      // 否则 <configuration> 会被当成未知属性塞进 properties，再被过滤器
+      // 静默剔除，配置值在导入时直接丢失。properties 仍保留原始拼写传给后端。
+      switch (key.toLowerCase()) {
+        case "configuration":
           parameters.configuration = value;
           break;
-        case "RuntimeIdentifier":
+        case "runtimeidentifier":
           parameters.runtime = value;
           break;
-        case "TargetFramework":
+        case "targetframework":
           parameters.framework = value;
           break;
-        case "PublishDir":
+        case "publishdir":
           parameters.output = value;
           break;
-        case "SelfContained": {
+        case "selfcontained": {
           const resolved = parseDotnetBooleanValue(value);
           if (resolved !== null) {
             parameters.self_contained = resolved;
           }
           break;
         }
-        case "NoBuild": {
+        case "nobuild": {
           const resolved = parseDotnetBooleanValue(value);
           if (resolved !== null) {
             parameters.no_build = resolved;
           }
           break;
         }
-        case "NoRestore": {
+        case "norestore": {
           const resolved = parseDotnetBooleanValue(value);
           if (resolved !== null) {
             parameters.no_restore = resolved;
           }
           break;
         }
-        case "Verbosity":
-        case "MSBuildVerbosity":
+        case "verbosity":
+        case "msbuildverbosity":
           parameters.verbosity = value;
           break;
-        case "NoLogo": {
+        case "nologo": {
           const resolved = parseDotnetBooleanValue(value);
           if (resolved !== null) {
             parameters.no_logo = resolved;

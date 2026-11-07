@@ -122,6 +122,87 @@ describe("parseProjectPublishProfileXml", () => {
     });
   });
 
+  // MSBuild 属性名大小写不敏感；.pubxml 可由用户手写，标签大小写不受约束。
+  // 识别（switch）与「不支持属性」过滤必须共用同一套大小写归一，否则
+  // 非 PascalCase 的已知属性会落进 properties 再被过滤器静默丢弃。
+  describe("属性名大小写归一", () => {
+    it("把小写的已知属性映射为一等参数，而不是静默丢弃", () => {
+      const parsed = parseProjectPublishProfileXml(`
+        <Project>
+          <PropertyGroup>
+            <configuration>Release</configuration>
+            <runtimeidentifier>win-x64</runtimeidentifier>
+            <targetframework>net8.0</targetframework>
+            <publishdir>bin/out/</publishdir>
+            <selfcontained>true</selfcontained>
+            <nobuild>false</nobuild>
+          </PropertyGroup>
+        </Project>
+      `);
+
+      expect(extractDotnetPublishParametersFromProjectProfile(parsed)).toEqual({
+        configuration: "Release",
+        runtime: "win-x64",
+        framework: "net8.0",
+        output: "bin/out/",
+        self_contained: true,
+        no_build: false,
+      });
+    });
+
+    it("把全大写与混合大小写的已知属性映射为一等参数", () => {
+      const parsed = parseProjectPublishProfileXml(`
+        <Project>
+          <PropertyGroup>
+            <CONFIGURATION>Debug</CONFIGURATION>
+            <MSBUILDVERBOSITY>quiet</MSBUILDVERBOSITY>
+            <noLogo>yes</noLogo>
+          </PropertyGroup>
+        </Project>
+      `);
+
+      expect(extractDotnetPublishParametersFromProjectProfile(parsed)).toEqual({
+        configuration: "Debug",
+        verbosity: "quiet",
+        no_logo: true,
+      });
+    });
+
+    it("守卫：不支持属性在任意大小写下仍被过滤", () => {
+      const parsed = parseProjectPublishProfileXml(`
+        <Project>
+          <PropertyGroup>
+            <platform>AnyCPU</platform>
+            <PLATFORM>x64</PLATFORM>
+            <publishUrl>C:\\out</publishUrl>
+          </PropertyGroup>
+        </Project>
+      `);
+
+      expect(extractDotnetPublishParametersFromProjectProfile(parsed)).toEqual(
+        {}
+      );
+    });
+
+    it("守卫：未知自定义属性保留原始大小写拼写", () => {
+      const parsed = parseProjectPublishProfileXml(`
+        <Project>
+          <PropertyGroup>
+            <myCustomFlag>yes</myCustomFlag>
+            <DefineConstants>TRACE;DEMO</DefineConstants>
+          </PropertyGroup>
+        </Project>
+      `);
+
+      expect(extractDotnetPublishParametersFromProjectProfile(parsed)).toEqual({
+        properties: {
+          myCustomFlag: "yes",
+          DefineConstants: "TRACE;DEMO",
+        },
+      });
+    });
+  });
+
   describe("文本节点拼接", () => {
     it("XML 注释拆开文本时不凭空插入空格", () => {
       const parsed = parseProjectPublishProfileXml(`
