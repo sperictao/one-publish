@@ -1,3 +1,11 @@
+---
+id: architecture
+type: architecture-design
+status: active
+title: One Publish 可扩展发布平台架构
+parent: goal-one-publish
+---
+
 # One Publish 可扩展发布平台架构
 
 状态：Accepted（2026-07-20）
