@@ -233,7 +233,7 @@ describe("CompositionEditorDialog", () => {
 
     await waitFor(() => {
       expect(toastErrorMock).toHaveBeenCalledWith(expect.any(String), {
-        description: "catalog unavailable",
+        description: "catalog unavailable | [unknown]",
       });
     });
   });

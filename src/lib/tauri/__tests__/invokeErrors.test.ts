@@ -10,6 +10,7 @@ import {
   analyzePublishExecutionFailure,
   extractInvokeErrorCode,
   extractInvokeErrorDetails,
+  extractInvokeErrorKind,
   extractInvokeErrorMessage,
   localizeInvokeError,
   type BranchRefreshFailureReason,
@@ -160,6 +161,41 @@ describe("extractInvokeErrorDetails", () => {
   });
 });
 
+describe("extractInvokeErrorKind", () => {
+  it("object 顶层 kind 返回小写化结果", () => {
+    expect(extractInvokeErrorKind({ kind: "UnsupportedProvider" })).toBe(
+      "unsupportedprovider"
+    );
+  });
+
+  it("支持 data.kind 与 details.kind 嵌套，顶层优先", () => {
+    expect(extractInvokeErrorKind({ data: { kind: "IO" } })).toBe("io");
+    expect(extractInvokeErrorKind({ details: { kind: "Store" } })).toBe(
+      "store"
+    );
+    expect(
+      extractInvokeErrorKind({ kind: "top", data: { kind: "nested" } })
+    ).toBe("top");
+  });
+
+  it("形似 JSON 的 string 会被 parse 后提取 kind", () => {
+    expect(extractInvokeErrorKind('{"kind":"render_error"}')).toBe(
+      "render_error"
+    );
+  });
+
+  it("缺失、空白或非字符串 kind 返回 null", () => {
+    expect(extractInvokeErrorKind({ kind: "" })).toBeNull();
+    expect(extractInvokeErrorKind({ kind: "   " })).toBeNull();
+    expect(extractInvokeErrorKind({ kind: 7 })).toBeNull();
+    expect(extractInvokeErrorKind({})).toBeNull();
+    expect(extractInvokeErrorKind("plain failure")).toBeNull();
+    expect(extractInvokeErrorKind("{not valid json}")).toBeNull();
+    expect(extractInvokeErrorKind(null)).toBeNull();
+    expect(extractInvokeErrorKind(undefined)).toBeNull();
+  });
+});
+
 describe("localizeInvokeError", () => {
   const CJK_PATTERN = /[\u3400-\u9fff]/;
   const translations = {
@@ -220,6 +256,52 @@ describe("localizeInvokeError", () => {
         translations
       )
     ).toBe("raw message | detail");
+  });
+
+  it("未登记错误携带 kind 时在末尾标注 [kind]", () => {
+    expect(
+      localizeInvokeError(
+        {
+          kind: "unsupported_provider",
+          message: "cannot detect provider from repository path",
+        },
+        translations
+      )
+    ).toBe(
+      "cannot detect provider from repository path | [unsupported_provider]"
+    );
+
+    expect(
+      localizeInvokeError(
+        {
+          kind: "publish",
+          code: "unregistered_code",
+          message: "raw message",
+          details: "detail",
+        },
+        translations
+      )
+    ).toBe("raw message | detail | [publish]");
+  });
+
+  it("已登记错误的本地化路径不附带 kind 标注", () => {
+    expect(
+      localizeInvokeError(
+        {
+          kind: "validation",
+          code: "automation_preview_stale",
+          message: "raw",
+        },
+        translations
+      )
+    ).toBe("Preview again and confirm.");
+  });
+
+  it("无 kind 的未登记错误不产生标注", () => {
+    expect(localizeInvokeError("plain failure", translations)).toBe(
+      "plain failure"
+    );
+    expect(localizeInvokeError({ message: "raw" }, translations)).toBe("raw");
   });
 
   it("没有 code 或翻译尚未加载时回退到原始消息", () => {
