@@ -45,6 +45,18 @@ import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 /** Credential fields store references (`<scheme>:<locator>`), never secret values; each credential source defines its reference semantics. */
 const CREDENTIAL_REFERENCE_PATTERN = /^[a-z][a-z0-9+.-]*:\S+$/i;
 
+/**
+ * 用配置名展开弹窗标题里的 {{name}} 占位符。配置名只要求仓库内唯一（后端不做字符限制），
+ * 因此用单次全局扫描 + 函数回调：① `$&` / `$$` / `$'` / `` $` `` 按字面量写入，不被
+ * String.replace 解释为替换模式而把模板前后文注入标题；② 重复占位符全部展开；
+ * ③ 插入值里的 `{{...}}` 不会被二次解析。未提供的 key 保持原样。
+ */
+function formatCompositionTitle(template: string, name: string): string {
+  return template.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) =>
+    key === "name" ? name : match
+  );
+}
+
 type FieldKind = "string" | "number" | "boolean" | "stringList";
 
 interface DestinationField {
@@ -450,8 +462,8 @@ export function CompositionEditorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <AppDialogShell
         size="workspace"
-        title={(t.title || "发布组合：{{name}}").replace(
-          "{{name}}",
+        title={formatCompositionTitle(
+          t.title || "发布组合：{{name}}",
           profile.name
         )}
         description={

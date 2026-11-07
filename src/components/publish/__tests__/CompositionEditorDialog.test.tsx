@@ -249,3 +249,48 @@ describe("CompositionEditorDialog", () => {
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
   });
 });
+
+describe("CompositionEditorDialog title", () => {
+  function renderWithTitle(titleTemplate: string, name: string) {
+    const custom = {
+      ...zh,
+      composition: { ...zh.composition, title: titleTemplate },
+    };
+    __setTranslationsCacheForTest({ zh: custom, en: custom });
+    return renderDialog({
+      profile: { ...createProfile(localComposition()), name },
+    });
+  }
+
+  it("renders a profile name containing $ replacement patterns literally", async () => {
+    const raw = "release$&-$$-$'-$`-team";
+
+    renderWithTitle("发布组合：{{name}}", raw);
+
+    expect(await screen.findByText(`发布组合：${raw}`)).toBeInTheDocument();
+  });
+
+  it("expands every {{name}} placeholder and keeps unknown ones intact", async () => {
+    renderWithTitle("组合 {{name}} / {{name}}（{{other}}）", "prod");
+
+    expect(
+      await screen.findByText("组合 prod / prod（{{other}}）")
+    ).toBeInTheDocument();
+  });
+
+  it("does not re-expand placeholder-like text inside a profile name", async () => {
+    const raw = "cfg{{name}}";
+
+    renderWithTitle("发布组合：{{name}}", raw);
+
+    expect(await screen.findByText(`发布组合：${raw}`)).toBeInTheDocument();
+  });
+
+  it("keeps the default title for an ordinary profile name", async () => {
+    renderDialog();
+
+    expect(
+      await screen.findByText("发布组合：Desktop Release")
+    ).toBeInTheDocument();
+  });
+});
