@@ -38,6 +38,35 @@ describe("classifyLogLine", () => {
     );
   });
 
+  it("诊断码的 error 关键字大小写不敏感", () => {
+    expect(classifyLogLine("Program.cs(10,5): Error CS1002: ; expected")).toBe(
+      "error"
+    );
+    expect(
+      classifyLogLine(
+        "Program.cs(1,1): ERROR NETSDK1138: The target framework is out of support"
+      )
+    ).toBe("error");
+  });
+
+  it("诊断码的 warning 关键字大小写不敏感", () => {
+    expect(
+      classifyLogLine("proj.csproj : Warning MSB3277: Found conflicts")
+    ).toBe("warning");
+    expect(
+      classifyLogLine("proj.csproj : WARNING NU1903: Package vulnerability")
+    ).toBe("warning");
+  });
+
+  it("大小写不敏感不放宽诊断码格式要求", () => {
+    // 仍需 `: <category> <字母前缀><数字码>`；无数字码 / 无冒号的行保持 plain。
+    expect(
+      classifyLogLine("proj.csproj : WARNING MSB: missing numeric code")
+    ).toBe("plain");
+    expect(classifyLogLine("0 Error(s)")).toBe("plain");
+    expect(classifyLogLine("Build succeeded.")).toBe("plain");
+  });
+
   it("识别行首 error: 前缀", () => {
     expect(classifyLogLine("error: build failed")).toBe("error");
     expect(classifyLogLine("  ERROR: something")).toBe("error");
