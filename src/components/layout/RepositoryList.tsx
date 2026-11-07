@@ -225,15 +225,17 @@ export const RepositoryList = memo(function RepositoryList({
     return labels;
   }, [providers]);
 
-  const filteredRepos = useMemo(
-    () =>
-      repositories.filter(
-        (repo) =>
-          repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          repo.path.toLowerCase().includes(searchQuery.toLowerCase())
-      ),
-    [repositories, searchQuery]
-  );
+  const filteredRepos = useMemo(() => {
+    // 与下方 repoDragEnabled 的 searchQuery.trim() 及添加仓库后的匹配保持一致：
+    // 首尾空白不是搜索意图，纯空白应视为无筛选而不是隐藏全部仓库。
+    // 只裁剪首尾，词内空格仍参与匹配。
+    const query = searchQuery.trim().toLowerCase();
+    return repositories.filter(
+      (repo) =>
+        repo.name.toLowerCase().includes(query) ||
+        repo.path.toLowerCase().includes(query)
+    );
+  }, [repositories, searchQuery]);
 
   const filteredRepoIds = useMemo(
     () => filteredRepos.map((repo) => repo.id),

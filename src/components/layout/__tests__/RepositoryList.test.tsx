@@ -531,6 +531,64 @@ describe("RepositoryList · 添加仓库入口与反馈", () => {
     expect(onAddRepo).toHaveBeenCalledTimes(1);
   });
 
+  it("搜索词首尾空白不会让所有仓库消失", () => {
+    const { container } = render(
+      <RepositoryList
+        {...baseProps}
+        repositories={[
+          createRepository("repo-a", "alpha-service"),
+          createRepository("repo-b", "beta-worker"),
+        ]}
+        onAddRepo={() => {}}
+      />
+    );
+
+    fireEvent.change(screen.getByTestId("repo-search-input"), {
+      target: { value: "  ALPHA  " },
+    });
+
+    expect(getRenderedRepoIds(container)).toEqual(["repo-a"]);
+  });
+
+  it("纯空白搜索词视为无筛选，显示全部仓库", () => {
+    const { container } = render(
+      <RepositoryList
+        {...baseProps}
+        repositories={[
+          createRepository("repo-a", "alpha-service"),
+          createRepository("repo-b", "beta-worker"),
+        ]}
+        onAddRepo={() => {}}
+      />
+    );
+
+    fireEvent.change(screen.getByTestId("repo-search-input"), {
+      target: { value: "   " },
+    });
+
+    expect(getRenderedRepoIds(container)).toEqual(["repo-a", "repo-b"]);
+    expect(screen.queryByText("没有匹配的仓库")).toBeNull();
+  });
+
+  it("只裁剪首尾空白，搜索词内部空格仍参与匹配", () => {
+    const { container } = render(
+      <RepositoryList
+        {...baseProps}
+        repositories={[
+          createRepository("repo-a", "alpha service"),
+          createRepository("repo-b", "alphaservice"),
+        ]}
+        onAddRepo={() => {}}
+      />
+    );
+
+    fireEvent.change(screen.getByTestId("repo-search-input"), {
+      target: { value: "  alpha service  " },
+    });
+
+    expect(getRenderedRepoIds(container)).toEqual(["repo-a"]);
+  });
+
   it("搜索无结果时不再提示添加仓库，而是提示没有匹配项", () => {
     render(
       <RepositoryList
