@@ -138,7 +138,6 @@ export function useAppBoot() {
     pushRecentPublishConfig: appState.pushRecentPublishConfig,
     removeRecentPublishConfig: appState.removeRecentPublishConfig,
     reorderRecentPublishConfigs: appState.reorderRecentPublishConfigs,
-    replaceRecentPublishConfigKey: appState.replaceRecentPublishConfigKey,
     defaultOutputDir: appState.defaultOutputDir,
     executionHistoryLimit: appState.executionHistoryLimit,
     // From shell domain

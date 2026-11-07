@@ -2,7 +2,7 @@ use super::migration::StoredAppState;
 use super::persistence::{load_from_path, save_to_path};
 use super::recent::{
     push_recent_publish_config_state, remove_recent_publish_config_state,
-    replace_recent_publish_config_key_state, sanitize_recent_publish_state,
+    sanitize_recent_publish_state,
 };
 use super::runtime::{
     apply_selected_repo_id_update, build_frontend_state, find_repository,
@@ -1167,33 +1167,6 @@ fn remove_recent_publish_config_state_prunes_empty_repo_bucket() {
 
     assert!(recent_repo_ids.is_empty());
     assert!(recent_config_keys_by_repo.is_empty());
-}
-
-#[test]
-fn replace_recent_publish_config_key_state_keeps_order_and_deduplicates() {
-    let mut recent_config_keys_by_repo = BTreeMap::from([(
-        "repo-1".to_string(),
-        vec![
-            "userprofile:alpha".to_string(),
-            "userprofile:beta".to_string(),
-            "userprofile:gamma".to_string(),
-        ],
-    )]);
-
-    assert!(replace_recent_publish_config_key_state(
-        &mut recent_config_keys_by_repo,
-        "repo-1",
-        "userprofile:beta",
-        "userprofile:alpha",
-    ));
-
-    assert_eq!(
-        recent_config_keys_by_repo.get("repo-1"),
-        Some(&vec![
-            "userprofile:alpha".to_string(),
-            "userprofile:gamma".to_string(),
-        ])
-    );
 }
 
 #[test]

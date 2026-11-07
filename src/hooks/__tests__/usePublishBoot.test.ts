@@ -33,7 +33,6 @@ vi.mock("@/features/config/useScopedConfigs", () => ({
     removeRecentConfig: vi.fn(),
     reorderRecentConfig: vi.fn(),
     toggleFavoriteConfig: vi.fn(),
-    replaceScopedConfigKey: vi.fn(),
   }),
 }));
 
@@ -193,7 +192,6 @@ function params(overrides: Record<string, unknown> = {}) {
     pushRecentPublishConfig: vi.fn(),
     removeRecentPublishConfig: vi.fn(),
     reorderRecentPublishConfigs: vi.fn(),
-    replaceRecentPublishConfigKey: vi.fn(),
     defaultOutputDir: "",
     executionHistoryLimit: 50,
     configT: {},

@@ -28,7 +28,6 @@ export function useScopedConfigs(params: {
     (s) => s.favoriteConfigKeysByRepo
   );
   const toggleFavoriteConfig = useAppStore((s) => s.toggleFavoriteConfig);
-  const replaceScopedConfigKey = useAppStore((s) => s.replaceScopedConfigKey);
 
   const recentConfigKeys = useMemo(() => {
     if (!selectedRepoId) return [];
@@ -47,6 +46,5 @@ export function useScopedConfigs(params: {
     removeRecentConfig,
     reorderRecentConfig,
     toggleFavoriteConfig,
-    replaceScopedConfigKey,
   };
 }

@@ -110,17 +110,6 @@ describe("invoke command boundary", () => {
       APP_STATE,
     ],
     [
-      "replace_recent_publish_config_key",
-      () =>
-        api.replaceRecentPublishConfigKey({
-          repoId: "r",
-          previousKey: "a",
-          nextKey: "b",
-        }),
-      [{ repoId: "r", previousKey: "a", nextKey: "b" }],
-      APP_STATE,
-    ],
-    [
       "reorder_recent_publish_configs",
       () => api.reorderRecentPublishConfigs({ repoId: "r", configKeys: ["k"] }),
       [{ repoId: "r", configKeys: ["k"] }],

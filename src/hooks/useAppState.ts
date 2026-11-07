@@ -41,7 +41,6 @@ export function useAppState() {
     pushRecentPublishConfig: store.pushRecentPublishConfig,
     removeRecentPublishConfig: store.removeRecentPublishConfig,
     reorderRecentPublishConfigs: store.reorderRecentPublishConfigs,
-    replaceRecentPublishConfigKey: store.replaceRecentPublishConfigKey,
 
     // UI 状态
     leftPanelWidth: store.leftPanelWidth,

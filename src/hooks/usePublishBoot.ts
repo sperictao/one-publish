@@ -53,11 +53,6 @@ interface UsePublishBootParams {
   pushRecentPublishConfig: (key: string, repoId?: string | null) => void;
   removeRecentPublishConfig: (key: string, repoId?: string | null) => void;
   reorderRecentPublishConfigs: (keys: string[], repoId?: string | null) => void;
-  replaceRecentPublishConfigKey: (
-    previousKey: string,
-    nextKey: string,
-    repoId?: string | null
-  ) => void;
   defaultOutputDir: string;
   executionHistoryLimit: number;
 
@@ -156,7 +151,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     removeRecentConfig,
     reorderRecentConfig,
     toggleFavoriteConfig,
-    replaceScopedConfigKey,
   } = useScopedConfigs({
     selectedRepoId: params.selectedRepoId,
     recentConfigByRepo: params.recentConfigKeysByRepo,
@@ -179,7 +173,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     updatePublishEditState: params.updatePublishEditState,
     selectedRepo: params.selectedRepo,
     setProviderParameters: params.setProviderParameters,
-    replaceScopedConfigKey,
   });
 
   const {
@@ -493,7 +486,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     pushRecentPublishConfig: params.pushRecentPublishConfig,
     removeRecentPublishConfig: params.removeRecentPublishConfig,
     reorderRecentPublishConfigs: params.reorderRecentPublishConfigs,
-    replaceRecentPublishConfigKey: params.replaceRecentPublishConfigKey,
 
     // Provider runtime (lifted, re-exported)
     activeProviderId: params.activeProviderId,
@@ -517,7 +509,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     removeRecentConfig,
     reorderRecentConfig,
     toggleFavoriteConfig,
-    replaceScopedConfigKey,
 
     // Provider presentation
     activeProviderLabel,
