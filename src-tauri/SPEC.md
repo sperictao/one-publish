@@ -4,7 +4,13 @@ type: module-design
 status: active
 title: 桌面控制面外壳（src-tauri）
 parent: architecture
-depends-on: [module-publish-domain, module-publish-adapters, module-publish-runner-core, module-one-publish-runner]
+depends-on:
+  [
+    module-publish-domain,
+    module-publish-adapters,
+    module-publish-runner-core,
+    module-one-publish-runner,
+  ]
 ---
 
 ## Responsibility

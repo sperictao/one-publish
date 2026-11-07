@@ -4,7 +4,8 @@ type: module-design
 status: active
 title: publish-runner-core
 parent: architecture
-depends-on: [module-publish-domain, module-publish-adapters, module-publish-planner]
+depends-on:
+  [module-publish-domain, module-publish-adapters, module-publish-planner]
 ---
 
 ## Responsibility
