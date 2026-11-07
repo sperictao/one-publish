@@ -51,4 +51,13 @@ describe("historyFilters path matching", () => {
       )
     ).toBe(true);
   });
+
+  it("持久化的项目路径带首尾空白时仍归属该仓库", () => {
+    expect(
+      isRecordInRepository(
+        createRecord("  /work/one-publish/src/App.csproj  "),
+        createRepository("/work/one-publish")
+      )
+    ).toBe(true);
+  });
 });

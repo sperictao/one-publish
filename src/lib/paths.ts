@@ -194,13 +194,23 @@ export function isPathEqualOrInside(
   candidate: string,
   parent: string
 ): boolean {
-  if (!candidate || !parent) {
+  // 与同文件 isSameRepositoryPath 的写法归一化保持一致：持久化的项目路径
+  // 可能带首尾空白（见 specFromRecord / publishExecutionRecord），不裁剪会把
+  // "  /repo  " 切成 ["  ", "repo  "]，使 isRecordInRepository 在 repoId
+  // 缺失时误判历史记录不属于当前仓库。只裁剪首尾，词内空白仍参与比较。
+  const normalizedCandidate = (candidate ?? "").trim();
+  const normalizedParent = (parent ?? "").trim();
+
+  if (!normalizedCandidate || !normalizedParent) {
     return false;
   }
 
-  const caseSensitive = preferCaseSensitivePathComparison([candidate, parent]);
-  const candidateSegments = splitPathSegments(candidate);
-  const parentSegments = splitPathSegments(parent);
+  const caseSensitive = preferCaseSensitivePathComparison([
+    normalizedCandidate,
+    normalizedParent,
+  ]);
+  const candidateSegments = splitPathSegments(normalizedCandidate);
+  const parentSegments = splitPathSegments(normalizedParent);
 
   return pathSegmentsMatch(
     candidateSegments,

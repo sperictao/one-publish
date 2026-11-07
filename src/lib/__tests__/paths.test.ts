@@ -161,6 +161,22 @@ describe("paths", () => {
     expect(isPathEqualOrInside("C:\\Repo\\Sub", "c:\\repo")).toBe(true);
   });
 
+  it("isPathEqualOrInside 与 isSameRepositoryPath 一致地忽略首尾空白", () => {
+    // 持久化的项目路径可能带首尾空白（见 specFromRecord / publishExecutionRecord），
+    // 不裁剪会把 "  /repo  " 切成 ["  ", "repo  "]，包含判定恒为 false。
+    expect(isPathEqualOrInside("  /repo/sub  ", "/repo")).toBe(true);
+    expect(isPathEqualOrInside("/repo/sub", "  /repo  ")).toBe(true);
+    expect(isPathEqualOrInside("  /repo  ", "/repo")).toBe(true);
+    // 归一后 Windows 路径仍按大小写不敏感匹配
+    expect(isPathEqualOrInside("  C:\\Repo\\Sub  ", "c:\\repo")).toBe(true);
+  });
+
+  it("裁剪首尾空白不会把不同目录误判为包含，纯空白仍被拒绝", () => {
+    expect(isPathEqualOrInside("  /other/sub  ", "/repo")).toBe(false);
+    expect(isPathEqualOrInside("   ", "/repo")).toBe(false);
+    expect(isPathEqualOrInside("/repo", "\t\n ")).toBe(false);
+  });
+
   it("remapPathPrefix 对空参数、相同前缀与非前缀路径原样返回", () => {
     expect(remapPathPrefix("", "/a", "/b")).toBe("");
     expect(remapPathPrefix("/a/x", "", "/b")).toBe("/a/x");
