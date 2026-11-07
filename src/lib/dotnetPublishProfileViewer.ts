@@ -86,25 +86,30 @@ function isDirectlyMappedPropertyGroupEntry(params: {
 }): boolean {
   const { key, value, extractedParameters } = params;
 
-  switch (key) {
-    case "Configuration":
+  // 与 extractDotnetPublishParametersFromProjectProfile 共用同一套小写归一：
+  // MSBuild 属性名大小写不敏感，.pubxml 又是用户可手写的 XML。这里的「已由
+  // 主表单表达」判定必须与提取器一致，否则大小写变体已被映射为一等参数，
+  // 却因匹配不上 PascalCase 标签而重复出现在补充区。key 仍保留原始拼写，
+  // 供下方 mappedProperties 的兜底比较使用。
+  switch (key.toLowerCase()) {
+    case "configuration":
       return extractedParameters.configuration === value;
-    case "RuntimeIdentifier":
+    case "runtimeidentifier":
       return extractedParameters.runtime === value;
-    case "TargetFramework":
+    case "targetframework":
       return extractedParameters.framework === value;
-    case "PublishDir":
+    case "publishdir":
       return extractedParameters.output === value;
-    case "SelfContained":
+    case "selfcontained":
       return matchesBooleanParameter(extractedParameters.self_contained, value);
-    case "NoBuild":
+    case "nobuild":
       return matchesBooleanParameter(extractedParameters.no_build, value);
-    case "NoRestore":
+    case "norestore":
       return matchesBooleanParameter(extractedParameters.no_restore, value);
-    case "NoLogo":
+    case "nologo":
       return matchesBooleanParameter(extractedParameters.no_logo, value);
-    case "Verbosity":
-    case "MSBuildVerbosity":
+    case "verbosity":
+    case "msbuildverbosity":
       return extractedParameters.verbosity === value;
     default:
       return false;
