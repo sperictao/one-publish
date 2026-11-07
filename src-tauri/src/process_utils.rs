@@ -50,7 +50,13 @@ pub(crate) fn wait_child_with_timeout(
         std::thread::spawn(move || {
             let mut buf = Vec::new();
             if let Some(mut pipe) = pipe {
-                let _ = pipe.read_to_end(&mut buf);
+                // 保留至多 MAX_CHILD_OUTPUT_BYTES 字节：病态子进程无限写
+                // 会把无界缓冲推到 OOM。超限后继续排空但不保留——写端不
+                // 会因管道满而堵死，子进程得以正常退出。截断后的输出让
+                // 消费方走既有的解析失败/错误分支，而非静默成功。
+                let mut retained = pipe.by_ref().take(crate::security::MAX_CHILD_OUTPUT_BYTES);
+                let _ = retained.read_to_end(&mut buf);
+                let _ = std::io::copy(&mut pipe, &mut std::io::sink());
             }
             buf
         })
@@ -135,5 +141,21 @@ mod tests {
 
         assert!(output.status.success());
         assert_eq!(output.stdout.len(), 200_000);
+    }
+
+    #[test]
+    fn oversized_output_is_capped_and_drained() {
+        // 输出超过 MAX_CHILD_OUTPUT_BYTES：只保留上限内字节，剩余照常
+        // 排空让子进程正常退出（否则写端堵死会等到超时 kill）。
+        let cap = crate::security::MAX_CHILD_OUTPUT_BYTES;
+        let oversized = cap + 1024;
+        let output = wait_child_with_timeout(
+            piped_sh(&format!("head -c {oversized} /dev/zero")),
+            Duration::from_secs(60),
+        )
+        .expect("oversized output");
+
+        assert!(output.status.success());
+        assert_eq!(output.stdout.len() as u64, cap);
     }
 }

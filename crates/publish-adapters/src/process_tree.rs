@@ -84,7 +84,13 @@ pub fn wait_piped_with_timeout(
         thread::spawn(move || {
             let mut buf = Vec::new();
             if let Some(mut pipe) = pipe {
-                let _ = pipe.read_to_end(&mut buf);
+                // 保留至多 MAX_CHILD_OUTPUT_BYTES：病态工具无限写会把
+                // 无界缓冲推到 OOM。超限后仍排空剩余输出——写端不会因
+                // 管道满而堵死，子进程得以正常退出；截断输出经消费方
+                // 既有解析/匹配路径自然失败，而非静默成功。
+                let mut retained = pipe.by_ref().take(crate::MAX_CHILD_OUTPUT_BYTES);
+                let _ = retained.read_to_end(&mut buf);
+                let _ = io::copy(&mut pipe, &mut io::sink());
             }
             buf
         })
@@ -202,5 +208,22 @@ mod wait_piped_tests {
             wait_piped_with_timeout(sh("sleep 60"), None, Duration::from_millis(200)).expect("io");
         assert!(output.is_none());
         assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn oversized_output_is_capped_and_drained() {
+        // 输出超过 MAX_CHILD_OUTPUT_BYTES：只保留上限内字节，剩余照常
+        // 排空让子进程正常退出（否则写端堵死会等到超时 kill）。
+        let cap = crate::MAX_CHILD_OUTPUT_BYTES;
+        let oversized = cap + 1024;
+        let output = wait_piped_with_timeout(
+            sh(&format!("head -c {oversized} /dev/zero")),
+            None,
+            Duration::from_secs(60),
+        )
+        .expect("io")
+        .expect("completed");
+        assert!(output.status.success());
+        assert_eq!(output.stdout.len() as u64, cap);
     }
 }
