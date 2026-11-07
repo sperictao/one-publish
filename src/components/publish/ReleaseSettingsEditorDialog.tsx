@@ -71,6 +71,18 @@ const MIRROR_KINDS: VersionMirrorKind[] = [
   "cargo_lock_package",
 ];
 
+/**
+ * 用配置名展开弹窗标题里的 {{name}} 占位符。配置名只要求仓库内唯一（后端不做字符限制），
+ * 因此用单次全局扫描 + 函数回调：① `$&` / `$$` / `$'` / `` $` `` 按字面量写入，不被
+ * String.replace 解释为替换模式而把模板前后文注入标题；② 重复占位符全部展开；
+ * ③ 插入值里的 `{{...}}` 不会被二次解析。未提供的 key 保持原样。
+ */
+function formatReleaseSettingsTitle(template: string, name: string): string {
+  return template.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) =>
+    key === "name" ? name : match
+  );
+}
+
 /** 复用参数编辑器的列表与映射控件；它们只读取 description 与 label。 */
 const LIST_DEFINITION: ParameterDefinition = { type: "array", flag: "" };
 const MAP_DEFINITION: ParameterDefinition = { type: "map", flag: "" };
@@ -273,8 +285,8 @@ export function ReleaseSettingsEditorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <AppDialogShell
         size="workspace"
-        title={(t.title || "发布设置：{{name}}").replace(
-          "{{name}}",
+        title={formatReleaseSettingsTitle(
+          t.title || "发布设置：{{name}}",
           profile.name
         )}
         description={

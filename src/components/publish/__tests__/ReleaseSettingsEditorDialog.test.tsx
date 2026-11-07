@@ -254,3 +254,51 @@ describe("ReleaseSettingsEditorDialog", () => {
     expect(screen.getByTestId("release-settings-save")).toBeDisabled();
   });
 });
+
+describe("ReleaseSettingsEditorDialog title", () => {
+  function renderWithTitle(titleTemplate: string, name: string) {
+    // 只提供局部翻译子树：配置名由 useI18n 异步 effect 注入，故用 findByText 等待。
+    const custom = {
+      ...zh,
+      releaseSettings: { ...zh.releaseSettings, title: titleTemplate },
+    };
+    __setTranslationsCacheForTest({ zh: custom, en: custom });
+    loadReleaseSettingsDraftMock.mockResolvedValue({
+      settings: suggestedSettings(),
+      stored: true,
+    });
+    return renderDialog({ ...createProfile(), name });
+  }
+
+  it("renders a profile name containing $ replacement patterns literally", async () => {
+    const raw = "release$&-$$-$'-$`-team";
+
+    renderWithTitle("发布设置：{{name}}", raw);
+
+    expect(await screen.findByText(`发布设置：${raw}`)).toBeInTheDocument();
+  });
+
+  it("expands every {{name}} placeholder and keeps unknown ones intact", async () => {
+    renderWithTitle("设置 {{name}} / {{name}}（{{other}}）", "prod");
+
+    expect(
+      await screen.findByText("设置 prod / prod（{{other}}）")
+    ).toBeInTheDocument();
+  });
+
+  it("does not re-expand placeholder-like text inside a profile name", async () => {
+    const raw = "cfg{{name}}";
+
+    renderWithTitle("发布设置：{{name}}", raw);
+
+    expect(await screen.findByText(`发布设置：${raw}`)).toBeInTheDocument();
+  });
+
+  it("keeps the default title for an ordinary profile name", async () => {
+    renderDialog();
+
+    expect(
+      await screen.findByText("发布设置：Desktop Release")
+    ).toBeInTheDocument();
+  });
+});
