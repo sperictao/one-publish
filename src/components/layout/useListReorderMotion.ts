@@ -31,7 +31,9 @@ export function useListReorderMotion(params: {
   const previousRectsRef = useRef<Record<string, DOMRect>>({});
   const animationRefs = useRef<Record<string, Animation | null>>({});
   const previousResetKeyRef = useRef<string | null>(resetKey);
-  const orderedIdsSignature = orderedIds.join("|");
+  // 用可逆编码生成 effect 依赖：id 来自用户可控的配置名 / 文件名（POSIX 允许
+  // `|`、空串），join("|") 会把它们拆错、吞掉或让两个不同数组撞出同一签名。
+  const orderedIdsSignature = JSON.stringify(orderedIds);
 
   const setItemRef = useCallback(
     (itemId: string) => (node: HTMLElement | null) => {
@@ -61,10 +63,9 @@ export function useListReorderMotion(params: {
   useLayoutEffect(() => {
     const nextRects: Record<string, DOMRect> = {};
     // 从 dep 跟踪的签名派生迭代列表：orderedIds 参数本身每次渲染都可能是新数组，
-    // 签名在内容不变时保持稳定；二者语义等价（join 是确定性编码）。
-    const effectOrderedIds = orderedIdsSignature
-      ? orderedIdsSignature.split("|")
-      : [];
+    // 签名在内容不变时保持稳定；JSON 往返无损，含 `|` 的 id、空串 id 与
+    // 不同数组都能原样还原，避免用分隔符切分时丢失或碰撞。
+    const effectOrderedIds = JSON.parse(orderedIdsSignature) as string[];
 
     for (const itemId of effectOrderedIds) {
       const node = itemRefs.current[itemId];

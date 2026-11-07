@@ -219,6 +219,77 @@ describe("useListReorderMotion", () => {
     rerender({ orderedIds: [], draggingItemId: null });
   });
 
+  describe("ordered id signature round-trip", () => {
+    it("keeps an id containing the delimiter in the effect list", () => {
+      // .pubxml 配置名来自文件名（POSIX 允许 `|`），会以 `pubxml:<name>` 作为 id。
+      const pipedId = "pubxml:Release|Win";
+      const node = makeNode(0);
+      const { result, rerender } = renderHook(
+        (props: { orderedIds: string[]; draggingItemId: string | null }) =>
+          useListReorderMotion(props),
+        {
+          initialProps: {
+            orderedIds: [pipedId],
+            draggingItemId: null,
+          } as { orderedIds: string[]; draggingItemId: string | null },
+        }
+      );
+
+      result.current.setItemRef(pipedId)(node.el);
+      // 首个 layout effect 早于 ref 挂载；翻转 dep 触发重跑以录入基线 rect。
+      rerender({ orderedIds: [pipedId], draggingItemId: "seed" });
+      node.pos.top = 40;
+      rerender({ orderedIds: [pipedId], draggingItemId: null });
+
+      expect(node.el.getBoundingClientRect).toHaveBeenCalled();
+      expect(node.el.animate).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a single empty-string id instead of treating it as an empty list", () => {
+      const node = makeNode(0);
+      const { result, rerender } = renderHook(
+        (props: { orderedIds: string[]; draggingItemId: string | null }) =>
+          useListReorderMotion(props),
+        {
+          initialProps: {
+            orderedIds: [""],
+            draggingItemId: null,
+          } as { orderedIds: string[]; draggingItemId: string | null },
+        }
+      );
+
+      result.current.setItemRef("")(node.el);
+      rerender({ orderedIds: [""], draggingItemId: "seed" });
+      node.pos.top = 40;
+      rerender({ orderedIds: [""], draggingItemId: null });
+
+      expect(node.el.animate).toHaveBeenCalledTimes(1);
+    });
+
+    it("reruns when two different id arrays share the same joined text", () => {
+      const node = makeNode(0);
+      const { result, rerender } = renderHook(
+        (props: { orderedIds: string[]; draggingItemId: string | null }) =>
+          useListReorderMotion(props),
+        {
+          initialProps: {
+            orderedIds: ["a", "b"],
+            draggingItemId: null,
+          } as { orderedIds: string[]; draggingItemId: string | null },
+        }
+      );
+
+      result.current.setItemRef("a|b")(node.el);
+      const rectSpy = node.el.getBoundingClientRect as ReturnType<typeof vi.fn>;
+      rectSpy.mockClear();
+      // 旧签名 ["a","b"].join("|") === ["a|b"].join("|")，effect 不会重跑；
+      // 可逆编码下签名变化，必须为这个 id 重新采集 rect。
+      rerender({ orderedIds: ["a|b"], draggingItemId: null });
+
+      expect(rectSpy).toHaveBeenCalled();
+    });
+  });
+
   it("skips the dragged item and nodes without animate support", () => {
     const nodeA = makeNode(0);
     const nodeB = makeNode(40);
