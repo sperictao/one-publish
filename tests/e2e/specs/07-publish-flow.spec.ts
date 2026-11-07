@@ -614,11 +614,28 @@ test.describe("Full Publish Flow — Error Paths", () => {
     // start_publish_runtime 抛结构化错误 {code:attempt_uncertain,
     // details:attemptId} → 前端用 synchronize_publish_runtime 恢复；
     // 同步结果 attempt.status=running → 运行继续呈现（不落入失败）。
-    await gotoApp(page, uncertainRecoveryOptions("attempt-uncertain-1"));
+    // simulateTauri + 事件注入同时断言该臂也回传 lastKnownSequence（#360）。
+    await gotoApp(page, {
+      ...uncertainRecoveryOptions("attempt-uncertain-1"),
+      simulateTauri: true,
+    });
 
     await expect(
       page.locator("[data-list-item-id='pubxml:FolderProfile']")
     ).toBeVisible({ timeout: 15000 });
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          __MOCK_EMIT_EVENT__: (event: string, payload: unknown) => void;
+        }
+      ).__MOCK_EMIT_EVENT__("publish-runtime-event", {
+        repositoryPath: "/workspace/alpha-service",
+        // 执行臂按本次草稿修订同步（mock 固定 mock-draft-revision），
+        // 不是存储档的 profile-folder-revision-1。
+        configurationRevisionId: "mock-draft-revision",
+        event: { sequence: 7, attemptId: "attempt-uncertain-1" },
+      });
+    });
     const publishBtn = page.locator("[data-testid='publish-execute-btn']");
     await expect(publishBtn).not.toBeDisabled();
     await publishBtn.click();
@@ -636,7 +653,12 @@ test.describe("Full Publish Flow — Error Paths", () => {
               (entry as { cmd?: string }).cmd ===
                 "synchronize_publish_runtime" &&
               ((entry as { args?: { request?: { attemptId?: string } } }).args
-                ?.request?.attemptId ?? "") === "attempt-uncertain-1"
+                ?.request?.attemptId ?? "") === "attempt-uncertain-1" &&
+              ((
+                entry as {
+                  args?: { request?: { lastKnownSequence?: number } };
+                }
+              ).args?.request?.lastKnownSequence ?? 0) === 7
           )
         )
       )
@@ -694,7 +716,10 @@ test.describe("Full Publish Flow — Error Paths", () => {
     // 选中已保存配置触发挂载期恢复同步：synchronize 返回 running
     // attempt → 「继续发布/取消发布」挂起态 → 取消走 attemptId 臂
     // （非 runtimeToken）→ 取消成功后再次 synchronize 对账。
+    // simulateTauri 解锁 publish-runtime-event 订阅，断言取消对账同步
+    // 也回传 lastKnownSequence（#360 第三处接线点）。
     await gotoAppWithPublishConfig(page, {
+      simulateTauri: true,
       synchronizeResult: {
         attempt: {
           attemptId: "attempt-cancel-1",
@@ -713,6 +738,17 @@ test.describe("Full Publish Flow — Error Paths", () => {
         },
         publishResult: null,
       },
+    });
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          __MOCK_EMIT_EVENT__: (event: string, payload: unknown) => void;
+        }
+      ).__MOCK_EMIT_EVENT__("publish-runtime-event", {
+        repositoryPath: "/workspace/alpha-service",
+        configurationRevisionId: "profile-folder-revision-1",
+        event: { sequence: 12, attemptId: "attempt-cancel-1" },
+      });
     });
     await page
       .locator(
@@ -776,7 +812,12 @@ test.describe("Full Publish Flow — Error Paths", () => {
                   };
                 }
               ).args?.request?.configurationRevisionId ?? "") ===
-                "profile-folder-revision-1"
+                "profile-folder-revision-1" &&
+              ((
+                entry as {
+                  args?: { request?: { lastKnownSequence?: number } };
+                }
+              ).args?.request?.lastKnownSequence ?? 0) === 12
           )
         )
       )
@@ -979,5 +1020,53 @@ test.describe("Publish Flow — Edge Cases", () => {
     await expect(
       page.locator("[data-testid='publish-status-panel']")
     ).toBeVisible({ timeout: 10000 });
+  });
+
+  test("mount-recovery sync declares observed lastKnownSequence", async ({
+    page,
+  }) => {
+    // #360：生产端在 Journal 落盘前广播 publish-runtime-event；前端记录
+    // scope 高水位后，挂载期恢复同步以 lastKnownSequence 回传。
+    // simulateTauri 解锁 isTauri() 门控的事件订阅路径。
+    await gotoAppWithPublishConfig(page, { simulateTauri: true });
+
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          __MOCK_EMIT_EVENT__: (event: string, payload: unknown) => void;
+        }
+      ).__MOCK_EMIT_EVENT__("publish-runtime-event", {
+        repositoryPath: "/workspace/alpha-service",
+        configurationRevisionId: "profile-folder-revision-1",
+        event: { sequence: 9, attemptId: "attempt-obs-1" },
+      });
+    });
+
+    await page
+      .locator(
+        "[data-list-item-id='userprofile:profile-folder'] button[aria-pressed]"
+      )
+      .click();
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __MOCK_INVOKE_ARGS__: Record<string, unknown>[];
+            }
+          ).__MOCK_INVOKE_ARGS__.some(
+            (entry) =>
+              (entry as { cmd?: string }).cmd ===
+                "synchronize_publish_runtime" &&
+              ((
+                entry as {
+                  args?: { request?: { lastKnownSequence?: number } };
+                }
+              ).args?.request?.lastKnownSequence ?? 0) === 9
+          )
+        )
+      )
+      .toBe(true);
   });
 });

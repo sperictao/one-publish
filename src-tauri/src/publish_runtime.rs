@@ -396,6 +396,7 @@ pub fn cancel_publish_runtime(request: CancelPublishRuntimeRequest) -> Result<bo
             repository,
             lease_coordinator(),
             true,
+            None,
         )?;
         return Ok(true);
     }
@@ -692,6 +693,23 @@ impl From<PublishEvent> for RuntimePublishEvent {
             payload: event.payload,
         }
     }
+}
+
+/// 前端运行时事件观测通道：Journal 持久化端口在事件落盘前广播完整
+/// 事件，前端据此维护独立于 Journal 事实的高水位；落盘后再广播无法
+/// 提供该语义。
+pub const PUBLISH_RUNTIME_EVENT_CHANNEL: &str = "publish-runtime-event";
+
+/// `publish-runtime-event` 的载荷：完整事件 + 其发布 scope（规范化
+/// 仓库路径 + 配置修订），前端按 scope 持久化已观测高水位，供
+/// `synchronize_publish_runtime` 的 `lastKnownSequence` 声明使用。
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PublishRuntimeEventEnvelope {
+    pub event: RuntimePublishEvent,
+    pub repository_path: String,
+    pub configuration_revision_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -1891,12 +1909,19 @@ pub async fn start_publish_runtime(
     let identity = new_attempt_identity(&request.runtime_token);
     let captured = Arc::new(Mutex::new(None));
     let port = Arc::new(TauriProviderExecutionPort {
-        app,
+        app: app.clone(),
         runtime: tokio::runtime::Handle::current(),
         captured: Arc::clone(&captured),
     });
     tokio::task::spawn_blocking(move || {
-        start_runtime_with_port(request, port, captured, identity, lease_coordinator())
+        start_runtime_with_port(
+            request,
+            port,
+            captured,
+            identity,
+            lease_coordinator(),
+            Some(app),
+        )
     })
     .await
     .map_err(|error| {
@@ -1983,6 +2008,7 @@ pub(crate) fn start_runtime_with_port(
     captured_result: Arc<Mutex<Option<crate::commands::PublishResult>>>,
     identity: AttemptIdentity,
     leases: Arc<PublishLeaseCoordinator>,
+    event_emitter: Option<tauri::AppHandle>,
 ) -> Result<PublishRuntimeResult, AppError> {
     start_runtime_with_repository(
         request,
@@ -1991,6 +2017,7 @@ pub(crate) fn start_runtime_with_port(
         identity,
         leases,
         journal::AttemptJournalRepository::for_current_user().map_err(runtime_error)?,
+        event_emitter,
     )
 }
 
@@ -2001,6 +2028,7 @@ fn start_runtime_with_repository(
     identity: AttemptIdentity,
     leases: Arc<PublishLeaseCoordinator>,
     journal_repository: journal::AttemptJournalRepository,
+    event_emitter: Option<tauri::AppHandle>,
 ) -> Result<PublishRuntimeResult, AppError> {
     if request.runtime_token.trim().is_empty() {
         return Err(AppError::validation_with_code(
@@ -2066,13 +2094,17 @@ fn start_runtime_with_repository(
             LOCAL_LEASE_TTL_SECONDS,
         )
         .map_err(runtime_error)?;
-    let persistence = Arc::new(journal::AttemptJournalPersistence::new(
+    let mut persistence = journal::AttemptJournalPersistence::new(
         journal_repository.clone(),
         prepared.clone(),
         repository_path,
         now.as_nanos(),
         lease.clone(),
-    ));
+    );
+    if let Some(app) = event_emitter {
+        persistence = persistence.with_event_emitter(app);
+    }
+    let persistence = Arc::new(persistence);
     let lease_maintenance = Arc::new(JournalLeaseMaintenance::new(
         journal_repository.clone(),
         Arc::clone(&leases),
@@ -2242,6 +2274,7 @@ fn acquire_or_renew_attempt_lease(
 
 #[tauri::command]
 pub async fn resume_publish_runtime(
+    app: tauri::AppHandle,
     request: ResumePublishRuntimeRequest,
 ) -> Result<PublishRuntimeResult, AppError> {
     tokio::task::spawn_blocking(move || {
@@ -2249,6 +2282,7 @@ pub async fn resume_publish_runtime(
             request,
             journal::AttemptJournalRepository::for_current_user().map_err(runtime_error)?,
             lease_coordinator(),
+            Some(app),
         )
     })
     .await
@@ -2265,8 +2299,15 @@ fn resume_runtime_with_repository(
     request: ResumePublishRuntimeRequest,
     repository: journal::AttemptJournalRepository,
     leases: Arc<PublishLeaseCoordinator>,
+    event_emitter: Option<tauri::AppHandle>,
 ) -> Result<PublishRuntimeResult, AppError> {
-    resume_runtime_with_repository_and_cancellation(request, repository, leases, false)
+    resume_runtime_with_repository_and_cancellation(
+        request,
+        repository,
+        leases,
+        false,
+        event_emitter,
+    )
 }
 
 fn resume_runtime_with_repository_and_cancellation(
@@ -2274,6 +2315,7 @@ fn resume_runtime_with_repository_and_cancellation(
     repository: journal::AttemptJournalRepository,
     leases: Arc<PublishLeaseCoordinator>,
     cancellation_requested: bool,
+    event_emitter: Option<tauri::AppHandle>,
 ) -> Result<PublishRuntimeResult, AppError> {
     if request.attempt_id.trim().is_empty() {
         return Err(AppError::validation_with_code(
@@ -2289,12 +2331,17 @@ fn resume_runtime_with_repository_and_cancellation(
     let now_seconds = unix_now_seconds()?;
     let cancellation = RegisteredCancellation::register_attempt(&request.attempt_id)?;
     let lease = acquire_or_renew_attempt_lease(&repository, leases.as_ref(), &loaded, now_seconds)?;
-    let persistence = Arc::new(journal::AttemptJournalPersistence::for_existing(
+    let mut persistence = journal::AttemptJournalPersistence::for_existing(
         repository.clone(),
         loaded.prepared.clone(),
         loaded.repository_path,
         request.attempt_id.clone(),
-    ));
+        loaded.view.attempt.configuration_revision.clone(),
+    );
+    if let Some(app) = event_emitter {
+        persistence = persistence.with_event_emitter(app);
+    }
+    let persistence = Arc::new(persistence);
     let lease_maintenance = Arc::new(JournalLeaseMaintenance::new(
         repository.clone(),
         Arc::clone(&leases),
@@ -3862,6 +3909,7 @@ mod tests {
             identity,
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
             super::journal::AttemptJournalRepository::new(journal.path().to_path_buf()),
+            None,
         )
     }
 
@@ -6983,6 +7031,7 @@ mod tests {
             identity.clone(),
             Arc::clone(&leases),
             journals.clone(),
+            None,
         );
 
         assert!(result.is_err());
@@ -7276,6 +7325,7 @@ mod tests {
             },
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
             journals.clone(),
+            None,
         )
         .expect("complete newer terminal attempt");
         assert_eq!(terminal.attempt.status, RuntimeAttemptStatus::Published);
@@ -7409,6 +7459,7 @@ mod tests {
             },
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
             journals.clone(),
+            None,
         )
         .expect("start disjoint attempt despite unrelated corrupt journals");
         assert_eq!(terminal.attempt.status, RuntimeAttemptStatus::Published);
@@ -7464,6 +7515,7 @@ mod tests {
             identity.clone(),
             Arc::clone(&leases),
             journals.clone(),
+            None,
         );
 
         let error = result.expect_err("post-header failure must expose recovery identity");
@@ -7513,6 +7565,7 @@ mod tests {
             identity.clone(),
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
             super::journal::AttemptJournalRepository::new(journal_root.clone()),
+            None,
         )
         .expect("start persisted attempt");
         assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
@@ -8625,6 +8678,7 @@ mod tests {
             },
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
             journals.clone(),
+            None,
         )
         .expect("start persisted attempt");
         assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
@@ -8640,6 +8694,7 @@ mod tests {
             },
             super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf()),
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+            None,
         )
         .unwrap_err();
         assert_eq!(
@@ -8657,6 +8712,7 @@ mod tests {
             },
             super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf()),
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+            None,
         )
         .unwrap_err();
         assert!(
@@ -8682,6 +8738,7 @@ mod tests {
             },
             journals.clone(),
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+            None,
         )
         .expect_err("a fully published attempt has no resumable route");
 
@@ -8727,6 +8784,7 @@ mod tests {
             },
             journals.clone(),
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+            None,
         )
         .expect_err("terminal attempt still has no resumable route");
 

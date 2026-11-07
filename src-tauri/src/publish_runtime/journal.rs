@@ -1065,7 +1065,10 @@ pub(super) struct AttemptJournalPersistence {
     repository_path: String,
     created_at_unix_nanos: u128,
     lease: Option<PublishResourceLease>,
-    attempt_id: Mutex<Option<String>>,
+    // (attempt_id, configuration_revision) 同源写入：emit scope 的两半
+    // 都在 begin_attempt 一次性确定，分开存会出现半初始化窗口。
+    attempt_context: Mutex<Option<(String, String)>>,
+    event_emitter: Option<tauri::AppHandle>,
 }
 
 impl AttemptJournalPersistence {
@@ -1082,7 +1085,8 @@ impl AttemptJournalPersistence {
             repository_path,
             created_at_unix_nanos,
             lease: Some(lease),
-            attempt_id: Mutex::new(None),
+            attempt_context: Mutex::new(None),
+            event_emitter: None,
         }
     }
 
@@ -1091,6 +1095,7 @@ impl AttemptJournalPersistence {
         prepared: PreparedPublishPlan,
         repository_path: String,
         attempt_id: String,
+        configuration_revision: String,
     ) -> Self {
         Self {
             repository,
@@ -1098,20 +1103,58 @@ impl AttemptJournalPersistence {
             repository_path,
             created_at_unix_nanos: 0,
             lease: None,
-            attempt_id: Mutex::new(Some(attempt_id)),
+            attempt_context: Mutex::new(Some((attempt_id, configuration_revision))),
+            event_emitter: None,
         }
     }
 
+    /// 命令层注入 emit 通道：持久化端口落盘前广播事件，使前端观测到
+    /// Journal 尚未持久化的序号——这正是 last_known_sequence 检测尾部
+    /// 截断所需的生产顺序。测试与无 AppHandle 的内部调用方保持 None。
+    pub(super) fn with_event_emitter(mut self, app: tauri::AppHandle) -> Self {
+        self.event_emitter = Some(app);
+        self
+    }
+
     fn attempt_id(&self) -> Result<String, PublishError> {
-        self.attempt_id
+        self.attempt_context
             .lock()
             .map_err(|_| journal_error("lock attempt persistence", "lock is poisoned"))?
-            .clone()
+            .as_ref()
+            .map(|(attempt_id, _)| attempt_id.clone())
             .ok_or_else(|| {
                 PublishError::Execution(
                     "attempt persistence was used before its write-once header".to_string(),
                 )
             })
+    }
+
+    /// 落盘前广播：crash 若发生在 emit 与持久化之间，前端高水位恰为
+    /// Journal 缺失的尾段——这是声明语义的负载点。emit 失败只意味着
+    /// 前端少观测一次（声明保守化），绝不能反过来阻断持久化。
+    fn emit_produced_events(&self, events: &[PublishEvent]) {
+        let Some(app) = &self.event_emitter else {
+            return;
+        };
+        let scope = self
+            .attempt_context
+            .lock()
+            .ok()
+            .and_then(|context| context.as_ref().map(|(_, revision)| revision.clone()));
+        let Some(configuration_revision) = scope else {
+            return;
+        };
+        use tauri::Emitter;
+        for event in events {
+            let _ = app.emit(
+                crate::publish_runtime::PUBLISH_RUNTIME_EVENT_CHANNEL,
+                crate::publish_runtime::PublishRuntimeEventEnvelope {
+                    event: crate::publish_runtime::RuntimePublishEvent::from(event.clone()),
+                    repository_path: self.repository_path.clone(),
+                    configuration_revision_id: configuration_revision.clone(),
+                },
+            );
+        }
     }
 }
 
@@ -1131,17 +1174,22 @@ impl AttemptPersistencePort for AttemptJournalPersistence {
             lease,
         };
         self.repository.write_header(&header)?;
-        let mut attempt_id = self
-            .attempt_id
+        let mut context = self
+            .attempt_context
             .lock()
             .map_err(|_| journal_error("lock attempt persistence", "lock is poisoned"))?;
-        match attempt_id.as_deref() {
+        match context.as_ref().map(|(attempt_id, _)| attempt_id.as_str()) {
             Some(existing) if existing != attempt.attempt_id => {
                 return Err(PublishError::Execution(
                     "one persistence port cannot own multiple publish attempts".to_string(),
                 ));
             }
-            _ => *attempt_id = Some(attempt.attempt_id.clone()),
+            _ => {
+                *context = Some((
+                    attempt.attempt_id.clone(),
+                    attempt.configuration_revision.clone(),
+                ))
+            }
         }
         Ok(())
     }
@@ -1158,6 +1206,7 @@ impl AttemptPersistencePort for AttemptJournalPersistence {
                 event.event_id, event.attempt_id
             )));
         }
+        self.emit_produced_events(events);
         self.repository
             .append_local_events(&attempt_id, events.to_vec(), manifest)
     }
