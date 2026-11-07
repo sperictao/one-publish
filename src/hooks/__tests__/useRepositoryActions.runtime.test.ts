@@ -718,6 +718,75 @@ describe("handleRemoveRepoRuntime", () => {
     });
     expect(removeRepository).toHaveBeenCalledWith("repo-existing");
   });
+
+  it("按字面量渲染含 $ 替换模式的仓库名，不把模板片段注入确认文案", async () => {
+    mocks.askDialog.mockResolvedValue(false);
+    const name = "sales$&-$'-$$-$`-team";
+    const removeRepository = vi.fn();
+
+    await handleRemoveRepoRuntime({
+      appT: {
+        removeRepositoryConfirm: 'Remove "{{name}}"?',
+      },
+      translations: {},
+      repo: existingRepo({ name }),
+      removeRepository,
+    });
+
+    // $& / $' / $$ / $` 在字符串形式替换里会被当作替换模式解释；
+    // 确认框必须逐字显示仓库名，否则用户无法确认自己要删除的对象。
+    expect(mocks.askDialog.mock.calls[0][0]).toBe(`Remove "${name}"?`);
+    expect(removeRepository).not.toHaveBeenCalled();
+  });
+
+  it("自定义译文中重复出现的 {{name}} 全部展开", async () => {
+    mocks.askDialog.mockResolvedValue(false);
+
+    await handleRemoveRepoRuntime({
+      appT: {
+        removeRepositoryConfirm: "Remove {{name}} / {{name}}?",
+      },
+      translations: {},
+      repo: existingRepo({ name: "demo-repo" }),
+      removeRepository: vi.fn(),
+    });
+
+    expect(mocks.askDialog.mock.calls[0][0]).toBe(
+      "Remove demo-repo / demo-repo?"
+    );
+  });
+
+  it("守卫：未提供的占位符保持原样，插入值不会被二次展开", async () => {
+    mocks.askDialog.mockResolvedValue(false);
+
+    await handleRemoveRepoRuntime({
+      appT: {
+        removeRepositoryConfirm: "Remove {{name}} (keeps {{other}})?",
+      },
+      translations: {},
+      repo: existingRepo({ name: "{{name}}" }),
+      removeRepository: vi.fn(),
+    });
+
+    expect(mocks.askDialog.mock.calls[0][0]).toBe(
+      "Remove {{name}} (keeps {{other}})?"
+    );
+  });
+
+  it("守卫：默认中文文案与普通仓库名保持原有渲染", async () => {
+    mocks.askDialog.mockResolvedValue(false);
+
+    await handleRemoveRepoRuntime({
+      appT: {},
+      translations: {},
+      repo: existingRepo(),
+      removeRepository: vi.fn(),
+    });
+
+    expect(mocks.askDialog.mock.calls[0][0]).toBe(
+      "确认移除仓库「demo-repo」？"
+    );
+  });
 });
 
 // Tauri invoke 以 AppError 对象 reject；后端 message 恒为中文，界面语言为英文时

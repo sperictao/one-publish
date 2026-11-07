@@ -455,11 +455,13 @@ export async function handleRemoveRepoRuntime(params: {
   removeRepository: (repoId: string) => Promise<unknown>;
 }) {
   const { appT, translations, repo, removeRepository } = params;
+  // 与同文件其余提示文案一致，统一走 fillTemplate：仓库名来自用户目录名，
+  // 字符串形式替换会把其中的 $& / $$ / $' / $` 当作替换模式解释（把模板前后文
+  // 注入确认文案），且只展开首处 {{name}}。函数形式回调按字面量写入并全局扫描。
   const confirmed = await ask(
-    (appT.removeRepositoryConfirm || "确认移除仓库「{{name}}」？").replace(
-      "{{name}}",
-      repo.name
-    ),
+    fillTemplate(appT.removeRepositoryConfirm || "确认移除仓库「{{name}}」？", {
+      name: repo.name,
+    }),
     {
       title: appT.removeRepository || "移除仓库",
       kind: "warning",
