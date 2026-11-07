@@ -1,3 +1,12 @@
+---
+id: module-tauri-provider
+type: module-design
+status: active
+title: Tauri 本地构建与 GitHub 发布设计
+parent: architecture
+depends-on: [module-publish-domain, module-publish-adapters]
+---
+
 # Tauri 本地构建与 GitHub 发布设计
 
 > 状态：Tauri Adapter 实施基线。跨 Provider、执行后端与交付目标的通用边界以[可扩展发布平台架构](./publish-platform-architecture.md)为准；两者冲突时，通用架构优先。
