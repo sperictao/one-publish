@@ -35,6 +35,7 @@ import {
   loadReleaseSettingsDraft,
   updateProfileReleaseSettings,
 } from "@/lib/store/api";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import type { ConfigProfile } from "@/lib/store/types";
 import type {
   ReleaseGate,
@@ -70,18 +71,6 @@ const MIRROR_KINDS: VersionMirrorKind[] = [
   "toml_key",
   "cargo_lock_package",
 ];
-
-/**
- * 用配置名展开弹窗标题里的 {{name}} 占位符。配置名只要求仓库内唯一（后端不做字符限制），
- * 因此用单次全局扫描 + 函数回调：① `$&` / `$$` / `$'` / `` $` `` 按字面量写入，不被
- * String.replace 解释为替换模式而把模板前后文注入标题；② 重复占位符全部展开；
- * ③ 插入值里的 `{{...}}` 不会被二次解析。未提供的 key 保持原样。
- */
-function formatReleaseSettingsTitle(template: string, name: string): string {
-  return template.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) =>
-    key === "name" ? name : match
-  );
-}
 
 /** 复用参数编辑器的列表与映射控件；它们只读取 description 与 label。 */
 const LIST_DEFINITION: ParameterDefinition = { type: "array", flag: "" };
@@ -285,10 +274,9 @@ export function ReleaseSettingsEditorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <AppDialogShell
         size="workspace"
-        title={formatReleaseSettingsTitle(
-          t.title || "发布设置：{{name}}",
-          profile.name
-        )}
+        title={interpolateTemplate(t.title || "发布设置：{{name}}", {
+          name: profile.name,
+        })}
         description={
           t.description ||
           "编辑 Tauri 配置的发布期设置；保存前经后端校验，并产生一版新修订。"

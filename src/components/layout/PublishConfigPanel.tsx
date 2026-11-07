@@ -8,6 +8,7 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 import { reorderItemsByDrop, reorderProfilesByDrop } from "@/lib/listOrdering";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -77,21 +78,6 @@ import {
 } from "@/components/layout/publishConfigPanel/ProjectProfileViewer";
 
 const EMPTY_FRAMEWORK_OPTIONS: string[] = [];
-
-/**
- * 用新建配置名展开复制成功提示。配置名来自项目 .pubxml 的发布配置名（用户可控），
- * 用单次全局扫描 + 函数回调保证：插入值按字面量写入（$& / $$ / $' / $` 不会被
- * 当作替换模式注入模板前后文）、重复的 {{name}} 全部替换、插入值里的 {{...}}
- * 不会被二次解析，未知占位符保持原样。
- */
-function formatCopyConfigSuccessDescription(
-  template: string,
-  name: string
-): string {
-  return template.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) =>
-    key === "name" ? name : match
-  );
-}
 
 export interface PublishConfigPanelProps {
   selectedRepoId?: string | null;
@@ -513,10 +499,10 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           resolvedProfile.parameters
         );
         toast.success(t.copyConfigSuccess || "已复制为自定义配置", {
-          description: formatCopyConfigSuccessDescription(
+          description: interpolateTemplate(
             t.copyConfigSuccessDescription ||
               "已根据项目发布配置生成可编辑的自定义配置：{{name}}",
-            createdProfileName
+            { name: createdProfileName }
           ),
         });
       } catch (error) {

@@ -5,6 +5,7 @@ import { AppDialogInset } from "@/components/ui/app-dialog-inset";
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { type ConfigProfile } from "@/lib/store/types";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import { useI18n } from "@/hooks/useI18n";
 
 interface DeleteProfileConfirmDialogProps {
@@ -12,23 +13,6 @@ interface DeleteProfileConfirmDialogProps {
   profile: ConfigProfile | null;
   onClose: () => void;
   onConfirm: (profile: ConfigProfile) => void | Promise<void>;
-}
-
-/**
- * 删除不可撤销，确认文案里的配置名必须按字面量展示：
- * ① 字符串形式的 String.replace 会把配置名（用户输入）里的 $& / $$ / $' / $`
- *    当作替换模式，把模板前后文注入提示；
- * ② 字符串形式只替换首处，译文含重复占位符时第二处残留 {{name}}；
- * ③ 单次全局扫描 + 函数回调使插入值按字面量写入，且不会被再次解析。
- * 未知占位符保持原样，避免误改译文。
- */
-function formatDeleteProfileDescription(
-  template: string,
-  name: string
-): string {
-  return template.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) =>
-    key === "name" ? name : match
-  );
 }
 
 /**
@@ -69,9 +53,9 @@ export function DeleteProfileConfirmDialog({
           size="compact"
           surfaceClassName="min-h-0"
           title={profileT.deleteConfirmTitle || "删除配置"}
-          description={formatDeleteProfileDescription(
+          description={interpolateTemplate(
             profileT.deleteConfirmDescription || "确定删除配置「{{name}}」？",
-            profile.name
+            { name: profile.name }
           )}
           icon={<Trash2 className="size-4" />}
           iconWrapperClassName="bg-destructive/10 text-destructive"

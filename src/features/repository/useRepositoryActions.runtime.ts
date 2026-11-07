@@ -2,6 +2,7 @@ import { ask, open } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
 import { defaultRepoPublishConfig } from "@/lib/store/types";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import {
   detectRepositoryProvider,
   listProviders,
@@ -76,23 +77,6 @@ function createRepositoryId(): string {
   return `repo-${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2, 10)}`;
-}
-
-/**
- * 展开译文里的 {{key}} 占位符。
- *
- * 单次全局扫描 + 函数形式替换：① 同一占位符重复出现时全部展开（旧实现只替换首处）；
- * ② 替换值按字面量写入，仓库名 / Provider 名里的 `$&`、`$$`、`$'`、`` $` `` 不会被
- * String.replace 当作替换模式解释（否则会把模板前后文注入提示文案）。未提供的 key
- * 保持原样，且插入的替换值不会被再次当作模板解析，避免用户输入触发二次展开。
- */
-function fillTemplate(
-  template: string,
-  values: Record<string, string>
-): string {
-  return template.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) =>
-    Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match
-  );
 }
 
 /**
@@ -372,7 +356,7 @@ export async function handleAddRepoRuntime(params: {
   if (duplicatedRepo) {
     toast.error(appT.addRepositoryFailed || "添加仓库失败", {
       id: toastId,
-      description: fillTemplate(
+      description: interpolateTemplate(
         appT.repositoryAlreadyExistsNamed || "该目录已添加为仓库「{{name}}」",
         { name: duplicatedRepo.name }
       ),
@@ -436,7 +420,7 @@ export async function handleAddRepoRuntime(params: {
     description: [
       buildAddedRepositoryDescription(newRepo, providers),
       alternativeProviders
-        ? fillTemplate(
+        ? interpolateTemplate(
             appT.alsoDetectedProviders || "同时检测到 {{providers}}",
             { providers: alternativeProviders }
           )
@@ -455,13 +439,16 @@ export async function handleRemoveRepoRuntime(params: {
   removeRepository: (repoId: string) => Promise<unknown>;
 }) {
   const { appT, translations, repo, removeRepository } = params;
-  // 与同文件其余提示文案一致，统一走 fillTemplate：仓库名来自用户目录名，
+  // 与同文件其余提示文案一致，统一走 interpolateTemplate：仓库名来自用户目录名，
   // 字符串形式替换会把其中的 $& / $$ / $' / $` 当作替换模式解释（把模板前后文
   // 注入确认文案），且只展开首处 {{name}}。函数形式回调按字面量写入并全局扫描。
   const confirmed = await ask(
-    fillTemplate(appT.removeRepositoryConfirm || "确认移除仓库「{{name}}」？", {
-      name: repo.name,
-    }),
+    interpolateTemplate(
+      appT.removeRepositoryConfirm || "确认移除仓库「{{name}}」？",
+      {
+        name: repo.name,
+      }
+    ),
     {
       title: appT.removeRepository || "移除仓库",
       kind: "warning",
@@ -615,7 +602,7 @@ export async function handleDetectRepoProviderRuntime(params: {
       );
       toast.success(appT.providerDetected || "已自动检测 Provider", {
         description: alternativeProviders
-          ? `${providerId} (${fillTemplate(
+          ? `${providerId} (${interpolateTemplate(
               appT.alsoDetectedProviders || "同时检测到 {{providers}}",
               { providers: alternativeProviders }
             )})`
