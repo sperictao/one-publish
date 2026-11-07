@@ -278,7 +278,14 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
               max={200}
               value={executionHistoryLimit}
               onChange={(e) => {
-                const next = Math.trunc(Number(e.target.value));
+                const raw = e.target.value;
+                // 清空输入框（或浏览器对非法中间态返回空串）时 Number("") === 0，
+                // 会绕过下方 NaN 守卫被钳成下限 5 并静默写入偏好；空白不是数值，
+                // 直接忽略以保留原值，让用户继续输入。
+                if (!raw.trim()) {
+                  return;
+                }
+                const next = Math.trunc(Number(raw));
                 if (Number.isNaN(next)) {
                   return;
                 }

@@ -310,6 +310,65 @@ describe("SettingsDialog", () => {
     expect(onSelectDirectory).toHaveBeenCalled();
   });
 
+  describe("执行历史上限输入框的空白输入", () => {
+    function renderHistoryInput() {
+      const onExecutionHistoryLimitChange = vi.fn();
+      render(
+        <GeneralSettingsSection
+          translations={{
+            language: { label: "界面语言", placeholder: "选择语言" },
+            outputDir: { label: "默认发布目录", support: "支持" },
+            settings: {
+              general: {
+                executionHistoryLimitLabel: "限制",
+              },
+            },
+            tray: { label: "最小化托盘" },
+          }}
+          language="zh"
+          onLanguageChange={vi.fn()}
+          executionHistoryLimit={10}
+          onExecutionHistoryLimitChange={onExecutionHistoryLimitChange}
+          defaultOutputDir="/old"
+          onDefaultOutputDirChange={vi.fn()}
+          onSelectDirectory={vi.fn()}
+          minimizeToTrayOnClose={true}
+          onMinimizeToTrayOnCloseChange={vi.fn()}
+        />
+      );
+      return {
+        historyInput: screen.getByLabelText("限制"),
+        onExecutionHistoryLimitChange,
+      };
+    }
+
+    it("清空输入框时不得把上限静默改成下限 5", () => {
+      const { historyInput, onExecutionHistoryLimitChange } =
+        renderHistoryInput();
+
+      // 用户全选删除准备重新输入：Number("") === 0，原实现会绕过
+      // Number.isNaN 守卫，被钳成 5 并触发偏好写盘。
+      fireEvent.change(historyInput, { target: { value: "" } });
+      expect(onExecutionHistoryLimitChange).not.toHaveBeenCalled();
+    });
+
+    it("纯空白输入同样不得落盘，合法数值与越界钳制保持不变", () => {
+      const { historyInput, onExecutionHistoryLimitChange } =
+        renderHistoryInput();
+
+      fireEvent.change(historyInput, { target: { value: "   " } });
+      expect(onExecutionHistoryLimitChange).not.toHaveBeenCalled();
+
+      // 守卫：合法值与两端钳制行为逐字保留。
+      fireEvent.change(historyInput, { target: { value: "25" } });
+      expect(onExecutionHistoryLimitChange).toHaveBeenLastCalledWith(25);
+      fireEvent.change(historyInput, { target: { value: "3" } });
+      expect(onExecutionHistoryLimitChange).toHaveBeenLastCalledWith(5);
+      fireEvent.change(historyInput, { target: { value: "999" } });
+      expect(onExecutionHistoryLimitChange).toHaveBeenLastCalledWith(200);
+    });
+  });
+
   it("UpdaterProgressBar 能够正确展示下载进度百分比", () => {
     render(
       <UpdaterProgressBar
