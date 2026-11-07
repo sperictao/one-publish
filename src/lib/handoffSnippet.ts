@@ -12,9 +12,16 @@ function normalizeCommandLine(commandLine?: string | null): string | null {
     return null;
   }
 
+  // 引号内的空白是参数值本身的一部分：后端 build_display_command 会给含空白的
+  // 参数加双引号（用户目录名 "My  Project"、Windows 路径里的连续空格/制表符等），
+  // 全局折叠会把这些路径改写成另一个目录，交接片段复制执行后即指向错误位置。
+  // 因此只折叠引号外的空白，仍保证 display_command 即使含换行也只生成单行片段；
+  // 双引号参数里的 \\ 与 \" 转义按原样整段保留，不做二次解析。
   const normalized = commandLine
     .replace(/^\$\s*/, "")
-    .replace(/\s+/g, " ")
+    .replace(/"(?:\\.|[^"\\])*"|\s+/g, (token) =>
+      token.startsWith('"') ? token : " "
+    )
     .trim();
 
   return normalized || null;

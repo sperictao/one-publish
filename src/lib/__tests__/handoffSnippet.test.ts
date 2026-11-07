@@ -288,4 +288,51 @@ describe("handoffSnippet", () => {
       'dotnet publish "/tmp/my project/src/app.csproj"'
     );
   });
+
+  it("逐字保留引号内命令参数的连续空白", () => {
+    const commandLine =
+      '$ dotnet publish "/tmp/My  Project/App.csproj" -c Release';
+    const expected = 'dotnet publish "/tmp/My  Project/App.csproj" -c Release';
+
+    expect(buildShellHandoffSnippet({ spec, commandLine })).toContain(expected);
+    expect(buildGitHubActionsSnippet({ spec, commandLine })).toContain(
+      expected
+    );
+    expect(buildGitLabCISnippet({ spec, commandLine })).toContain(expected);
+  });
+
+  it("逐字保留引号内的制表符", () => {
+    const commandLine = '$ dotnet publish -p:OutDir="/tmp/a\tb"';
+
+    expect(buildShellHandoffSnippet({ spec, commandLine })).toContain(
+      'dotnet publish -p:OutDir="/tmp/a\tb"'
+    );
+  });
+
+  it("引号内含转义反斜杠或转义引号时仍逐字保留", () => {
+    const windowsArg = '"C:\\\\My  Project\\\\App.csproj"';
+    const escapedQuoteArg = '"C:\\\\a\\"b  c\\\\App.csproj"';
+
+    expect(
+      buildShellHandoffSnippet({
+        spec,
+        commandLine: `$ dotnet publish ${windowsArg} -c Release`,
+      })
+    ).toContain(`dotnet publish ${windowsArg} -c Release`);
+    expect(
+      buildShellHandoffSnippet({
+        spec,
+        commandLine: `$ dotnet publish ${escapedQuoteArg} -c Release`,
+      })
+    ).toContain(`dotnet publish ${escapedQuoteArg} -c Release`);
+  });
+
+  it("引号外的空白仍折叠为单行且 $ 前缀与首尾空白被去除", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec,
+      commandLine: "$   dotnet   publish\n  -c\tRelease  ",
+    });
+
+    expect(snippet.split("\n").pop()).toBe("dotnet publish -c Release");
+  });
 });
