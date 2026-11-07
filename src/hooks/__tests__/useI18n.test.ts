@@ -15,6 +15,14 @@ const zh = {
     },
   },
   version: { current: "当前版本: v{}" },
+  params: {
+    output: "输出目录: {{dir}}",
+    pair: "先 {{first}} 后 {{second}}",
+    repeated: "{{key}} 与 {{key}}",
+    dotted: "{{a.b}} {{axb}}",
+    regexKey: "{{(}}",
+    counts: "共 {{count}} 项，保留 {{missing}}",
+  },
 };
 
 const en = {
@@ -25,6 +33,14 @@ const en = {
     },
   },
   version: { current: "Current Version: v{}" },
+  params: {
+    output: "Output directory: {{dir}}",
+    pair: "{{first}} then {{second}}",
+    repeated: "{{key}} and {{key}}",
+    dotted: "{{a.b}} {{axb}}",
+    regexKey: "{{(}}",
+    counts: "{{count}} items, keep {{missing}}",
+  },
 };
 
 type TestTranslationCache = Parameters<typeof __setTranslationsCacheForTest>[0];
@@ -61,6 +77,43 @@ describe("useI18n.t", () => {
   it("falls back to default language when storage value is invalid", () => {
     localStorage.setItem("app-language", "fr");
     expect(t("settings.title")).toBe("应用设置");
+  });
+});
+
+describe("useI18n.t parameter interpolation", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __setTranslationsCacheForTest({ zh, en } as TestTranslationCache);
+    localStorage.setItem("app-language", "zh");
+  });
+
+  it("renders parameter values containing $ replacement patterns literally", () => {
+    const raw = "/out/$&-$$-$'-$`";
+
+    expect(t("params.output", { dir: raw })).toBe(`输出目录: ${raw}`);
+  });
+
+  it("replaces every occurrence and keeps unknown placeholders intact", () => {
+    expect(t("params.repeated", { key: "K" })).toBe("K 与 K");
+    expect(t("params.counts", { count: 3 })).toBe("共 3 项，保留 {{missing}}");
+  });
+
+  it("does not re-expand placeholder-like text inserted by an earlier parameter", () => {
+    expect(t("params.pair", { first: "{{second}}", second: "done" })).toBe(
+      "先 {{second}} 后 done"
+    );
+  });
+
+  it("matches parameter keys literally instead of compiling them as regex", () => {
+    expect(t("params.dotted", { "a.b": "OK" })).toBe("OK {{axb}}");
+    expect(() => t("params.regexKey", { "(": "X" })).not.toThrow();
+    expect(t("params.regexKey", { "(": "X" })).toBe("X");
+  });
+
+  it("uses the active language's template for parameter interpolation", () => {
+    localStorage.setItem("app-language", "en");
+
+    expect(t("params.output", { dir: "D" })).toBe("Output directory: D");
   });
 });
 

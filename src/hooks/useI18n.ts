@@ -103,12 +103,18 @@ function t(key: string, params?: Record<string, string | number>): string {
     text = value;
   }
 
-  // 替换参数 {{key}}
+  // 替换参数 {{key}}：单次全局扫描 + 函数回调，避免三类问题：
+  // ① 用参数名拼动态正则——键含正则元字符（.、(、+）会误匹配或抛 SyntaxError；
+  // ② 字符串形式替换——用户值里的 $& / $$ / $' / $` 会被当作替换模式解释，
+  //    把模板前后文注入译文（如自定义 Map 键、参数 flag、输出目录）；
+  // ③ 按键逐个链式替换——插入值里的 {{...}} 会被后续参数二次展开。
+  // 未提供的 key 保持原样，插入值统一按字面量写入且不会被再次解析。
   if (params) {
-    Object.keys(params).forEach((paramKey) => {
-      const regex = new RegExp(`{{${paramKey}}}`, "g");
-      text = text.replace(regex, String(params[paramKey]));
-    });
+    text = text.replace(/\{\{([^{}]+)\}\}/g, (match, paramKey: string) =>
+      Object.prototype.hasOwnProperty.call(params, paramKey)
+        ? String(params[paramKey])
+        : match
+    );
   }
 
   return text;
