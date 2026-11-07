@@ -42,13 +42,18 @@ function fillProfileMismatchTemplate(
   );
 }
 
-/** Provider 加载配置时，仅保留 schema 认识的参数键；无 schema 时直通。 */
+/**
+ * Provider 加载配置时，仅保留 schema 认识的参数键。
+ *
+ * `schema` 缺失表示尚未加载或加载失败，此时直通已保存的参数，避免静默丢弃；
+ * schema 已就绪时它就是权威声明——包括 `parameters: {}` 这种零参数 schema，
+ * 此时应过滤掉全部键，不能与「无 schema」混为一谈而让 orphan 参数进入编辑状态。
+ */
 function filterParametersBySchema(
   parameters: ConfigParameters,
   schema?: ParameterSchema
 ): ConfigParameters {
-  const supportedKeys = schema ? Object.keys(schema.parameters) : [];
-  const allowed = supportedKeys.length > 0 ? new Set(supportedKeys) : null;
+  const allowed = schema ? new Set(Object.keys(schema.parameters)) : null;
 
   const filtered: ConfigParameters = {};
   for (const [key, value] of Object.entries(parameters)) {

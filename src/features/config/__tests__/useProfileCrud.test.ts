@@ -143,6 +143,66 @@ describe("applyProfile", () => {
     );
   });
 
+  it("drops every stored parameter when the provider schema declares zero parameters", () => {
+    const p = params({
+      providerSchemas: { dotnet: { parameters: {} } as never },
+    });
+    const { result } = renderHook(() => useProfileCrud(p));
+
+    const applied = result.current.applyProfile({
+      id: "p1",
+      name: "release",
+      providerId: "dotnet",
+      parameters: { configuration: "Release", orphan: "x" },
+    });
+
+    expect(applied).toBe(true);
+    const setParams = vi.mocked(p.setProviderParameters);
+    const updater = setParams.mock.calls[0][0] as (prev: object) => object;
+    expect(updater({})).toEqual({ dotnet: {} });
+  });
+
+  it("keeps other providers' parameters when the loaded schema declares zero parameters", () => {
+    const p = params({
+      providerSchemas: { dotnet: { parameters: {} } as never },
+    });
+    const { result } = renderHook(() => useProfileCrud(p));
+
+    result.current.applyProfile({
+      id: "p1",
+      name: "release",
+      providerId: "dotnet",
+      parameters: { orphan: "x" },
+    });
+
+    const setParams = vi.mocked(p.setProviderParameters);
+    const updater = setParams.mock.calls[0][0] as (prev: object) => object;
+    expect(updater({ cargo: { target: "kept" } })).toEqual({
+      cargo: { target: "kept" },
+      dotnet: {},
+    });
+  });
+
+  it("passes stored parameters through when the provider schema has not loaded", () => {
+    // No entry in providerSchemas means the schema is still loading/failed;
+    // loading a profile must not silently discard its stored parameters.
+    const p = params();
+    const { result } = renderHook(() => useProfileCrud(p));
+
+    result.current.applyProfile({
+      id: "p1",
+      name: "release",
+      providerId: "dotnet",
+      parameters: { configuration: "Release", orphan: "x" },
+    });
+
+    const setParams = vi.mocked(p.setProviderParameters);
+    const updater = setParams.mock.calls[0][0] as (prev: object) => object;
+    expect(updater({})).toEqual({
+      dotnet: { configuration: "Release", orphan: "x" },
+    });
+  });
+
   it("switches providers when the profile's provider differs", () => {
     const p = params({
       repositoryProviderId: null,
