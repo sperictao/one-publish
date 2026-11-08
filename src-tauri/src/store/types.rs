@@ -731,6 +731,18 @@ fn profile_revision_not_found_error(profile_id: &str) -> crate::errors::AppError
     .with_details(profile_id)
 }
 
+/// 配置文件字段底线：名称与 Provider 空白会穿透前端校验落库——空白名渲染
+/// 不可选、空白 provider_id 的修订在发布期才以更费解的方式失败。
+fn ensure_profile_fields(name: &str, provider_id: &str) -> Result<(), crate::errors::AppError> {
+    if name.trim().is_empty() || provider_id.trim().is_empty() {
+        return Err(crate::errors::AppError::validation_with_code(
+            "配置名称与 Provider 不能为空",
+            "profile_fields_required",
+        ));
+    }
+    Ok(())
+}
+
 impl RepoPublishConfig {
     pub(crate) fn is_default(&self) -> bool {
         self.selection.is_none() && self.drafts.is_empty() && self.profiles.is_empty()
@@ -745,6 +757,7 @@ impl RepoPublishConfig {
         project_binding: Option<String>,
         created_at: String,
     ) -> Result<&ConfigProfile, crate::errors::AppError> {
+        ensure_profile_fields(&name, &provider_id)?;
         if self
             .profiles
             .iter()
@@ -1133,6 +1146,7 @@ impl RepoPublishConfig {
         project_binding: Option<String>,
         updated_at: String,
     ) -> Result<(), crate::errors::AppError> {
+        ensure_profile_fields(&name, &provider_id)?;
         // 参数编辑器只管理 schema 声明的命令参数；未显式携带 `releaseSettings`
         // 的更新从当前修订继承发布设置，保存不得静默清除它们。发布设置属于
         // 原 Provider，切换 Provider 的修订不再携带；显式传 null 表示清除。

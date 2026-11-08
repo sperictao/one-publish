@@ -1629,6 +1629,62 @@ fn update_profile_carries_composition_as_revision_content() {
 }
 
 #[test]
+fn create_profile_rejects_blank_name_and_provider() {
+    for (name, provider_id) in [(" ", "dotnet"), ("Named", " ")] {
+        let mut config = RepoPublishConfig::default();
+        let error = config
+            .create_profile(
+                name.to_string(),
+                provider_id.to_string(),
+                serde_json::json!({}),
+                None,
+                None,
+                "2026-07-21T10:00:00Z".to_string(),
+            )
+            .expect_err("blank name/provider must be rejected");
+        assert_eq!(error.code.as_deref(), Some("profile_fields_required"));
+        assert!(config.profiles.is_empty());
+    }
+}
+
+#[test]
+fn update_profile_rejects_blank_name_and_provider() {
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .create_profile(
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({}),
+            None,
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+
+    for (name, provider_id) in [(" ", "tauri"), ("Desktop", " ")] {
+        let error = config
+            .update_profile(
+                &profile.id,
+                name.to_string(),
+                provider_id.to_string(),
+                serde_json::json!({}),
+                None,
+                None,
+                None,
+                "2026-07-22T10:00:00Z".to_string(),
+            )
+            .expect_err("blank name/provider must be rejected");
+        assert_eq!(error.code.as_deref(), Some("profile_fields_required"));
+    }
+
+    // 拒绝的更新不得留痕：名称与修订数保持不变。
+    let unchanged = config.profile(&profile.id).expect("profile");
+    assert_eq!(unchanged.name, "Desktop");
+    assert_eq!(unchanged.revisions.len(), 1);
+}
+
+#[test]
 fn rebind_profile_project_creates_a_revision_only_when_the_candidate_changes() {
     let mut config = RepoPublishConfig::default();
     let profile = config
