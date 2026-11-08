@@ -757,6 +757,9 @@ impl RepoPublishConfig {
         project_binding: Option<String>,
         created_at: String,
     ) -> Result<&ConfigProfile, crate::errors::AppError> {
+        // 先归一化再判重：" Release " 与 "Release" 必须命中同一冲突。
+        let name = name.trim().to_string();
+        let provider_id = provider_id.trim().to_string();
         ensure_profile_fields(&name, &provider_id)?;
         if self
             .profiles
@@ -1146,6 +1149,8 @@ impl RepoPublishConfig {
         project_binding: Option<String>,
         updated_at: String,
     ) -> Result<(), crate::errors::AppError> {
+        let name = name.trim().to_string();
+        let provider_id = provider_id.trim().to_string();
         ensure_profile_fields(&name, &provider_id)?;
         // 参数编辑器只管理 schema 声明的命令参数；未显式携带 `releaseSettings`
         // 的更新从当前修订继承发布设置，保存不得静默清除它们。发布设置属于

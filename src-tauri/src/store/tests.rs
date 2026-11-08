@@ -1650,6 +1650,43 @@ fn create_profile_rejects_blank_name_and_provider() {
 }
 
 #[test]
+fn create_profile_normalizes_name_and_provider() {
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .create_profile(
+            "  Release  ".to_string(),
+            " dotnet ".to_string(),
+            serde_json::json!({}),
+            None,
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create profile");
+
+    assert_eq!(profile.name, "Release");
+    assert_eq!(
+        profile
+            .current_revision()
+            .expect("current revision")
+            .provider_id,
+        "dotnet"
+    );
+
+    // 归一化后的等价名仍按重复拒绝。
+    let error = config
+        .create_profile(
+            "Release".to_string(),
+            "cargo".to_string(),
+            serde_json::json!({}),
+            None,
+            None,
+            "2026-07-22T10:00:00Z".to_string(),
+        )
+        .expect_err("normalized duplicate name must conflict");
+    assert_eq!(error.code.as_deref(), Some("profile_exists"));
+}
+
+#[test]
 fn update_profile_rejects_blank_name_and_provider() {
     let mut config = RepoPublishConfig::default();
     let profile = config

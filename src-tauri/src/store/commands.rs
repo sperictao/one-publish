@@ -259,9 +259,19 @@ fn ensure_repository_fields(repo: &Repository) -> Result<(), AppError> {
     Ok(())
 }
 
+/// 归一化标识字段：首尾空白会落成真实路径名（" /repo " 与 "/repo" 是两个
+/// 路径）或绕过 id 查找/判重比较。
+fn normalize_repository_fields(repo: &mut Repository) {
+    repo.id = repo.id.trim().to_string();
+    repo.name = repo.name.trim().to_string();
+    repo.path = repo.path.trim().to_string();
+}
+
 /// 新增仓库：判重后入列并选中新增项。
 fn add_repository_in_state(state: &mut AppState, repo: &Repository) -> Result<(), AppError> {
-    ensure_repository_fields(repo)?;
+    let mut repo = repo.clone();
+    normalize_repository_fields(&mut repo);
+    ensure_repository_fields(&repo)?;
     ensure_repository_path_absent(&state.repositories, &repo.path)?;
     state.repositories.push(repo.clone());
     state.selected_repo_id = Some(repo.id.clone());
@@ -303,6 +313,8 @@ fn merge_repository_metadata(existing: &Repository, mut update: Repository) -> R
 /// 更新仓库前的暂存：定位既有仓库并继承权威 publish_config（含历史修订）。
 /// 返回的合并结果仍需经项目绑定校验才可写回。
 fn stage_repository_update(state: &AppState, repo: Repository) -> Result<Repository, AppError> {
+    let mut repo = repo;
+    normalize_repository_fields(&mut repo);
     ensure_repository_fields(&repo)?;
     let existing = find_repository(&state.repositories, &repo.id)?;
     Ok(merge_repository_metadata(existing, repo))
@@ -664,6 +676,9 @@ pub async fn save_profile(
     profile_group: Option<String>,
 ) -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::save_profile");
+    // Provider 解析与落库须基于同一归一化值：带空白的 provider_id 会让
+    // 绑定解析失败却通过域内字段校验（域内再 trim），产生未绑定的修订。
+    let provider_id = provider_id.trim().to_string();
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
@@ -695,6 +710,7 @@ pub async fn update_profile(
     composition: Option<crate::store::PublishComposition>,
 ) -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::update_profile");
+    let provider_id = provider_id.trim().to_string();
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
@@ -2000,6 +2016,26 @@ mod tests {
             assert!(state.repositories.is_empty());
             assert_eq!(state.selected_repo_id, None);
         }
+    }
+
+    #[test]
+    fn add_repository_in_state_normalizes_identity_fields() {
+        use super::{add_repository_in_state, AppState};
+
+        let mut state = AppState::default();
+        add_repository_in_state(&mut state, &test_repository(" r1 ", " /repo-one "))
+            .expect("padded fields must be normalized");
+
+        let stored = &state.repositories[0];
+        assert_eq!(stored.id, "r1");
+        assert_eq!(stored.name.trim(), stored.name);
+        assert_eq!(stored.path, "/repo-one");
+        assert_eq!(state.selected_repo_id.as_deref(), Some("r1"));
+
+        // 归一化后的等价路径仍按重复拒绝。
+        let error = add_repository_in_state(&mut state, &test_repository("r2", "/repo-one"))
+            .expect_err("normalized duplicate must be rejected");
+        assert_eq!(error.code.as_deref(), Some("repository_exists"));
     }
 
     #[test]
