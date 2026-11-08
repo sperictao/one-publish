@@ -66,7 +66,9 @@ describe("ReleaseChecklistDialog 错误展示", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Updater 配置/ }));
     expect(
-      await screen.findByText("updater plugin is not initialized")
+      await screen.findByText(
+        "updater plugin is not initialized | kind: updater"
+      )
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "导出预检报告" }));
@@ -79,7 +81,10 @@ describe("ReleaseChecklistDialog 错误展示", () => {
     expect(mocks.exportPreflightReport).toHaveBeenCalledWith({
       filePath: "/tmp/preflight-report.md",
       report: expect.objectContaining({
-        updater: { health: null, error: "updater plugin is not initialized" },
+        updater: {
+          health: null,
+          error: "updater plugin is not initialized | kind: updater",
+        },
       }),
     });
   });
