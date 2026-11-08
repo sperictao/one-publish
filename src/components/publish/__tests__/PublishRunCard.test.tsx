@@ -761,6 +761,7 @@ describe("PublishRunCard", () => {
               {
                 eventId: "event-receipt-A",
                 planNodeId: "publish-routes",
+                sequence: 1,
                 kind: "delivery_receipt_observed",
                 manifestDigest: "manifest-digest-A",
                 receiptId: "receipt-stable-A",
@@ -821,6 +822,7 @@ describe("PublishRunCard", () => {
               {
                 eventId: "event-gate-A",
                 planNodeId: "release-gates",
+                sequence: 1,
                 kind: "plan_node_completed",
                 manifestDigest: null,
                 receiptId: null,

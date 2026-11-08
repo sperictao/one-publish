@@ -845,6 +845,8 @@ pub struct RuntimeDeliveryReceiptSummary {
 pub struct RuntimePublishEventSummary {
     pub event_id: String,
     pub plan_node_id: String,
+    #[ts(type = "number")]
+    pub sequence: u64,
     pub kind: String,
     pub manifest_digest: Option<String>,
     pub receipt_id: Option<String>,
@@ -2912,6 +2914,7 @@ fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
                 RuntimePublishEventSummary {
                     event_id: event.event_id,
                     plan_node_id: event.plan_node_id,
+                    sequence: event.sequence,
                     kind: event.kind,
                     manifest_digest: event
                         .payload

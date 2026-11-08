@@ -128,8 +128,32 @@ export function usePublishExecute({
   const activeRunRef = useRef<ActivePublishRun | null>(null);
   const [activeRuntime, setActiveRuntime] =
     useState<ReadyPublishRuntime | null>(null);
-  const [runtimeResult, setRuntimeResult] =
+  const [runtimeResult, setRuntimeResultState] =
     useState<PublishRuntimeResult | null>(null);
+  // 本会话内每个 Attempt 已观察到的最高事件序号：sync 以此声明
+  // lastKnownSequence 时后端才能检测自身事件日志的尾部截断（#360 /
+  // ADR-0057）。不持久化——跨重启的高水位声明必须绑定到已知 Attempt，
+  // mount recovery 在 sync 解析前并不知道目标 Attempt。
+  const observedSequencesRef = useRef<Map<string, number>>(new Map());
+  const setRuntimeResult = useCallback(
+    (result: PublishRuntimeResult | null) => {
+      if (result) {
+        const events = Array.isArray(result.attempt.events)
+          ? result.attempt.events
+          : [];
+        const observed = events.reduce(
+          (max, event) => Math.max(max, event.sequence),
+          0
+        );
+        const known = observedSequencesRef.current;
+        if (observed > (known.get(result.attempt.attemptId) ?? 0)) {
+          known.set(result.attempt.attemptId, observed);
+        }
+      }
+      setRuntimeResultState(result);
+    },
+    []
+  );
 
   const setIsPublishing = usePublishStore((s) => s.setIsPublishing);
   const setIsCancellingPublish = usePublishStore(
@@ -207,13 +231,19 @@ export function usePublishExecute({
       setRuntimeResult(null);
       activeRunRef.current = null;
     }
-  }, [validate.publishPresentationScopeKey, resetPublishPresentation]);
+  }, [
+    resetPublishPresentation,
+    setRuntimeResult,
+    validate.publishPresentationScopeKey,
+  ]);
 
   useEffect(() => {
     if (!selectedRepoPath || !currentConfigurationRevisionId) {
       return;
     }
     let disposed = false;
+    // 不带 lastKnownSequence：目标 Attempt 要等 sync 解析才知道，声明其它
+    // Attempt 的高水位会在其事件日志上虚构缺口。
     void synchronizePublishRuntime({
       repositoryPath: selectedRepoPath,
       configurationRevisionId: currentConfigurationRevisionId,
@@ -258,6 +288,7 @@ export function usePublishExecute({
     currentConfigurationRevisionId,
     selectedRepoPath,
     setIsPublishing,
+    setRuntimeResult,
   ]);
 
   const runPublishSpec = useCallback(
@@ -495,11 +526,16 @@ export function usePublishExecute({
           selectedRepoPath
         ) {
           try {
+            const uncertainAttemptId =
+              extractInvokeErrorDetails(err) || undefined;
             const synchronized = await synchronizePublishRuntime({
               repositoryPath: selectedRepoPath,
               configurationRevisionId: ready.configurationRevisionId,
-              attemptId: extractInvokeErrorDetails(err) || undefined,
+              attemptId: uncertainAttemptId,
               events: [],
+              lastKnownSequence: uncertainAttemptId
+                ? observedSequencesRef.current.get(uncertainAttemptId)
+                : undefined,
             });
             logMissingSyncRanges(synchronized);
             if (
@@ -616,6 +652,7 @@ export function usePublishExecute({
       setLastPublishSpec,
       setPublishResult,
       setCurrentPublishRecordId,
+      setRuntimeResult,
       replaceCapturedOutputLog,
       startPublishPresentationRun,
       waitForOutputLogSnapshot,
@@ -651,7 +688,12 @@ export function usePublishExecute({
     } finally {
       setIsPublishing(false);
     }
-  }, [appT.publishRuntimeRecoveryFailed, runtimeResult, setIsPublishing]);
+  }, [
+    appT.publishRuntimeRecoveryFailed,
+    runtimeResult,
+    setIsPublishing,
+    setRuntimeResult,
+  ]);
 
   const startPublish = useCallback(async () => {
     if (runtimeResult?.attempt.status === "running") {
@@ -761,6 +803,7 @@ export function usePublishExecute({
             configurationRevisionId: currentConfigurationRevisionId,
             attemptId,
             events: [],
+            lastKnownSequence: observedSequencesRef.current.get(attemptId),
           });
           logMissingSyncRanges(synchronized);
           if (synchronized.result) {
@@ -791,6 +834,7 @@ export function usePublishExecute({
     appT,
     currentConfigurationRevisionId,
     resetPublishPresentation,
+    setRuntimeResult,
     runtimeResult,
     selectedRepoPath,
     setIsCancellingPublish,

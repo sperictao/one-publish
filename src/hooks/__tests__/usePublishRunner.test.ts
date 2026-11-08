@@ -361,6 +361,7 @@ function createRuntimeResult(revision: string): PublishRuntimeResult {
         {
           eventId: `event-${revision}`,
           planNodeId: "publish-routes",
+          sequence: 1,
           kind: "delivery_receipt_observed",
           manifestDigest: `manifest-${revision}`,
           receiptId: `receipt-${revision}`,
@@ -1774,6 +1775,8 @@ describe("usePublishRunner", () => {
       configurationRevisionId: "revision-runtime-submitted",
       attemptId: submittedRuntime.attempt.attemptId,
       events: [],
+      // 已观察事件的高水位序号（fixture 事件 sequence=1）用于后端缺口检测。
+      lastKnownSequence: 1,
     });
     expect(result.current.runtimeResult?.attempt.status).toBe("published");
   });

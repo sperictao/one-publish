@@ -187,7 +187,7 @@ export type RuntimeDeliveryStatus = "pending" | "staged" | "submitted" | "publis
 
 export type RuntimeDeliveryReceiptSummary = { version: number, receiptId: string, revision: number, routeId: string, manifestDigest: string, status: RuntimeDeliveryStatus, externalReference: string, };
 
-export type RuntimePublishEventSummary = { eventId: string, planNodeId: string, kind: string, manifestDigest: string | null, receiptId: string | null, deliveryStatus: string | null, receipt: RuntimeDeliveryReceiptSummary | null, error: string | null, };
+export type RuntimePublishEventSummary = { eventId: string, planNodeId: string, sequence: number, kind: string, manifestDigest: string | null, receiptId: string | null, deliveryStatus: string | null, receipt: RuntimeDeliveryReceiptSummary | null, error: string | null, };
 
 export type RuntimeRouteSummary = { routeId: string, required: boolean, status: RuntimeDeliveryStatus, externalReference: string | null, error: string | null, };
 
