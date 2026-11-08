@@ -171,7 +171,9 @@ fn apply_preference_update(state: &mut AppState, update: PreferenceUpdate) -> bo
         state.minimize_to_tray_on_close = minimize;
     }
     if let Some(output_dir) = update.default_output_dir {
-        state.default_output_dir = output_dir;
+        // 设置输入框直传原始值：首尾空白会落成真实目录名（"dist " 与
+        // "dist" 是两个目录）。空串保留"未配置"语义，由 Provider 自行兜底。
+        state.default_output_dir = output_dir.trim().to_string();
     }
     if let Some(theme) = update.theme {
         state.theme = theme;
@@ -1596,6 +1598,31 @@ mod tests {
             state.execution_history_limit,
             crate::store::types::MAX_EXECUTION_HISTORY_LIMIT
         );
+    }
+
+    #[test]
+    fn apply_preference_update_trims_default_output_dir() {
+        use super::{apply_preference_update, AppState, PreferenceUpdate};
+
+        let mut state = AppState::default();
+        apply_preference_update(
+            &mut state,
+            PreferenceUpdate {
+                default_output_dir: Some("  dist/release  ".to_string()),
+                ..PreferenceUpdate::default()
+            },
+        );
+        assert_eq!(state.default_output_dir, "dist/release");
+
+        // 纯空白收缩为空串（"未配置"），而非空白目录名。
+        apply_preference_update(
+            &mut state,
+            PreferenceUpdate {
+                default_output_dir: Some("   ".to_string()),
+                ..PreferenceUpdate::default()
+            },
+        );
+        assert_eq!(state.default_output_dir, "");
     }
 
     #[test]
