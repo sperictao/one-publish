@@ -1010,6 +1010,7 @@
     "repository_fields_required": "Repository name and path are required.",
     "profile_fields_required": "Profile name and provider are required.",
     "publish_draft_provider_required": "A draft provider is required.",
+    "publish_draft_not_found": "The selected draft no longer exists.",
     "project_binding_not_found": "The bound project file wasn't found for this provider. Choose a project again.",
     "profile_exists": "A configuration profile with this name already exists.",
     "profile_order_mismatch": "The new order doesn't match the current profile list. Refresh and try again.",

@@ -404,7 +404,35 @@ fn sanitize_state_with_migration(mut state: AppState) -> (AppState, bool) {
         state.selected_repo_id = None;
     }
 
-    (state, profiles_migrated || selection_orphaned)
+    // 仓库级发布选择同理：Revision 须命中未删除的配置，Draft 须命中同作用域
+    // 草稿；删除路径会同步清空，但迁移与外部编辑留下的悬空引用需要清理。
+    let mut publish_selection_orphaned = false;
+    for repo in &mut state.repositories {
+        let orphaned = match &repo.publish_config.selection {
+            Some(PublishSelectionRef::Revision { configuration_id }) => !repo
+                .publish_config
+                .profiles
+                .iter()
+                .any(|profile| profile.deleted_at.is_none() && profile.id == *configuration_id),
+            Some(PublishSelectionRef::Draft {
+                provider_id,
+                project_binding,
+            }) => !repo.publish_config.drafts.iter().any(|draft| {
+                &draft.provider_id == provider_id && &draft.project_binding == project_binding
+            }),
+            _ => false,
+        };
+        if orphaned {
+            log::warn!("仓库 {} 的发布选择指向不存在的作用域，已清理", repo.id);
+            repo.publish_config.selection = None;
+            publish_selection_orphaned = true;
+        }
+    }
+
+    (
+        state,
+        profiles_migrated || selection_orphaned || publish_selection_orphaned,
+    )
 }
 
 pub(crate) fn sanitize_state(state: AppState) -> AppState {
@@ -1236,6 +1264,54 @@ mod stored_state_tests {
         state.selected_repo_id = Some("a".to_string());
         let (state, _) = sanitize_stored_state(state);
         assert_eq!(state.selected_repo_id.as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn sanitize_drops_orphaned_publish_selection_refs() {
+        use super::PublishSelectionRef;
+
+        let mut state = crate::store::types::AppState::default();
+        let mut repo = test_repo("a", Some("dotnet"));
+        repo.publish_config.selection = Some(PublishSelectionRef::Revision {
+            configuration_id: "ghost".to_string(),
+        });
+        state.repositories.push(repo);
+        state.repositories.push({
+            let mut repo = test_repo("b", Some("dotnet"));
+            repo.publish_config.selection = Some(PublishSelectionRef::Draft {
+                provider_id: "dotnet".to_string(),
+                project_binding: None,
+            });
+            repo
+        });
+
+        let (state, migrated) = sanitize_stored_state(state);
+        assert!(migrated);
+        assert!(state.repositories[0].publish_config.selection.is_none());
+        assert!(state.repositories[1].publish_config.selection.is_none());
+
+        // 可解析的选择保留：Revision 命中存活配置、Draft 命中同作用域草稿。
+        let mut state = crate::store::types::AppState::default();
+        let mut repo = test_repo("a", Some("dotnet"));
+        let profile_id = repo
+            .publish_config
+            .create_profile(
+                "Release".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({}),
+                None,
+                None,
+                "2026-01-01T00:00:00+00:00".to_string(),
+            )
+            .expect("create profile")
+            .id
+            .clone();
+        repo.publish_config.selection = Some(PublishSelectionRef::Revision {
+            configuration_id: profile_id,
+        });
+        state.repositories.push(repo);
+        let (state, _) = sanitize_stored_state(state);
+        assert!(state.repositories[0].publish_config.selection.is_some());
     }
 
     #[test]

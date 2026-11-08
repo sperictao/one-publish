@@ -6,7 +6,7 @@ use super::runtime::{
 };
 use super::types::{
     normalize_environment_provider_ids, normalize_execution_history_limit, trim_execution_history,
-    AppState, ConfigProfile, ExecutionRecord, PublishComposition, PublishConfigurationRevision,
+    AppState, ExecutionRecord, PublishComposition, PublishConfigurationRevision,
     PublishSelectionRef, Repository, ScopedPublishDraft, CURRENT_SETTINGS_VERSION,
     PUBLISH_CONFIGURATION_CONTRACT_VERSION,
 };
@@ -491,29 +491,52 @@ pub async fn update_publish_edit_state(
     Ok(get_bootstrap_state())
 }
 
-/// 命名配置的当前修订必须属于仓库声明的 Provider；跨 Provider 导入的存量
-/// 配置不能被选为当前发布配置。
+/// 选择引用必须在写入时即可解析：Revision 指向的配置须存在且未删除、拥有
+/// 当前修订，其 Provider 还须与仓库一致（跨 Provider 导入的存量配置不能被
+/// 选为当前发布配置）；Draft 须恰好命中一个同作用域草稿。悬空引用若放行，
+/// 发布期才以 revisionMissing/draftUnresolved 失败。
 fn ensure_selection_matches_repository_provider(
     repo: &Repository,
     selection: &PublishSelectionRef,
 ) -> Result<(), AppError> {
-    let PublishSelectionRef::Revision { configuration_id } = selection else {
-        return Ok(());
-    };
-    let Some(revision) = repo
-        .publish_config
-        .profile(configuration_id)
-        .and_then(ConfigProfile::current_revision)
-    else {
-        return Ok(());
-    };
-    match repo.provider_mismatch_reason(&revision.provider_id) {
-        Some(reason) => Err(AppError::validation_with_code(
-            "配置的 Provider 与仓库不一致，不能选择",
-            "publish_selection_provider_mismatch",
-        )
-        .with_details(reason)),
-        None => Ok(()),
+    match selection {
+        PublishSelectionRef::Revision { configuration_id } => {
+            let revision = repo
+                .publish_config
+                .profile(configuration_id)
+                .filter(|profile| profile.deleted_at.is_none())
+                .and_then(|profile| profile.current_revision())
+                .ok_or_else(|| super::types::profile_not_found_error(configuration_id))?;
+            match repo.provider_mismatch_reason(&revision.provider_id) {
+                Some(reason) => Err(AppError::validation_with_code(
+                    "配置的 Provider 与仓库不一致，不能选择",
+                    "publish_selection_provider_mismatch",
+                )
+                .with_details(reason)),
+                None => Ok(()),
+            }
+        }
+        PublishSelectionRef::Draft {
+            provider_id,
+            project_binding,
+        } => {
+            let matches = repo
+                .publish_config
+                .drafts
+                .iter()
+                .filter(|draft| {
+                    &draft.provider_id == provider_id && &draft.project_binding == project_binding
+                })
+                .count();
+            if matches != 1 {
+                return Err(AppError::validation_with_code(
+                    "所选草稿不存在",
+                    "publish_draft_not_found",
+                ));
+            }
+            Ok(())
+        }
+        _ => Ok(()),
     }
 }
 
@@ -2147,6 +2170,86 @@ mod tests {
             Some("publish_selection_provider_mismatch")
         );
         assert!(repo.publish_config.selection.is_none());
+    }
+
+    #[test]
+    fn apply_publish_edit_update_rejects_dangling_selections() {
+        use super::{apply_publish_edit_update, PublishEditStateUpdate};
+        use crate::store::PublishSelectionRef;
+
+        let mut repo = test_repository("r1", "/repo");
+        let error = apply_publish_edit_update(
+            &mut repo,
+            PublishEditStateUpdate {
+                selection: Some(PublishSelectionRef::Revision {
+                    configuration_id: "ghost".to_string(),
+                }),
+                draft: None,
+            },
+        )
+        .expect_err("missing profile selection must be rejected");
+        assert_eq!(error.code.as_deref(), Some("profile_not_found"));
+        assert!(repo.publish_config.selection.is_none());
+
+        // 已删除配置同样不可选。
+        let profile = repo
+            .publish_config
+            .create_profile(
+                "Release".to_string(),
+                "dotnet".to_string(),
+                json!({}),
+                None,
+                None,
+                "2026-11-02T10:00:00Z".to_string(),
+            )
+            .expect("create profile")
+            .clone();
+        repo.publish_config
+            .delete_profile(&profile.id, "2026-11-02T11:00:00Z".to_string())
+            .expect("tombstone profile");
+        let error = apply_publish_edit_update(
+            &mut repo,
+            PublishEditStateUpdate {
+                selection: Some(PublishSelectionRef::Revision {
+                    configuration_id: profile.id,
+                }),
+                draft: None,
+            },
+        )
+        .expect_err("deleted profile selection must be rejected");
+        assert_eq!(error.code.as_deref(), Some("profile_not_found"));
+
+        // 无匹配草稿的 Draft 选择不可写。
+        let error = apply_publish_edit_update(
+            &mut repo,
+            PublishEditStateUpdate {
+                selection: Some(PublishSelectionRef::Draft {
+                    provider_id: "dotnet".to_string(),
+                    project_binding: None,
+                }),
+                draft: None,
+            },
+        )
+        .expect_err("unmatched draft selection must be rejected");
+        assert_eq!(error.code.as_deref(), Some("publish_draft_not_found"));
+
+        // 草稿存在时 Draft 选择正常写入。
+        super::upsert_edit_draft(&mut repo, "dotnet", None, json!({}), None).expect("create draft");
+        apply_publish_edit_update(
+            &mut repo,
+            PublishEditStateUpdate {
+                selection: Some(PublishSelectionRef::Draft {
+                    provider_id: "dotnet".to_string(),
+                    project_binding: None,
+                }),
+                draft: None,
+            },
+        )
+        .expect("existing draft stays selectable");
+        assert!(matches!(
+            repo.publish_config.selection,
+            Some(PublishSelectionRef::Draft { .. })
+        ));
     }
 
     #[test]
