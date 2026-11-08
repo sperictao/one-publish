@@ -20,6 +20,7 @@
     "test:updater": "node scripts/test-updater-scripts.mjs",
     "test:release": "node scripts/test-release-script.mjs",
     "check:i18n": "node scripts/check-i18n-coverage.mjs",
+    "check:error-codes": "node scripts/check-error-codes.mjs",
     "check:design": "node scripts/check-geist-compliance.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

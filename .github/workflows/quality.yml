@@ -40,6 +40,7 @@ jobs:
           path: coverage/
           retention-days: 14
       - run: pnpm check:i18n
+      - run: pnpm check:error-codes
       - run: pnpm check:design
       - name: Audit frontend dependencies
         run: pnpm audit --prod
