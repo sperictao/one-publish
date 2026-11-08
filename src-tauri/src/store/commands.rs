@@ -260,11 +260,27 @@ fn ensure_repository_fields(repo: &Repository) -> Result<(), AppError> {
 }
 
 /// 归一化标识字段：首尾空白会落成真实路径名（" /repo " 与 "/repo" 是两个
-/// 路径）或绕过 id 查找/判重比较。
+/// 路径）或绕过 id 查找/判重比较。provider_id/project_file 的空白与缺省
+/// 等价（binding 解析把空白当未绑定处理），收缩为 None。
 fn normalize_repository_fields(repo: &mut Repository) {
     repo.id = repo.id.trim().to_string();
     repo.name = repo.name.trim().to_string();
     repo.path = repo.path.trim().to_string();
+    repo.provider_id = repo
+        .provider_id
+        .take()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    repo.project_file = repo
+        .project_file
+        .take()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    repo.current_branch = repo.current_branch.trim().to_string();
+    for branch in &mut repo.branches {
+        branch.name = branch.name.trim().to_string();
+        branch.path = branch.path.trim().to_string();
+    }
 }
 
 /// 新增仓库：判重后入列并选中新增项。
@@ -2023,13 +2039,28 @@ mod tests {
         use super::{add_repository_in_state, AppState};
 
         let mut state = AppState::default();
-        add_repository_in_state(&mut state, &test_repository(" r1 ", " /repo-one "))
-            .expect("padded fields must be normalized");
+        let mut padded = test_repository(" r1 ", " /repo-one ");
+        padded.provider_id = Some(" dotnet ".to_string());
+        padded.project_file = Some(" ".to_string());
+        padded.current_branch = " main ".to_string();
+        padded.branches.push(crate::store::Branch {
+            name: " feature/x ".to_string(),
+            is_main: false,
+            is_current: false,
+            path: " refs/heads/feature/x ".to_string(),
+            commit_count: None,
+        });
+        add_repository_in_state(&mut state, &padded).expect("padded fields must be normalized");
 
         let stored = &state.repositories[0];
         assert_eq!(stored.id, "r1");
         assert_eq!(stored.name.trim(), stored.name);
         assert_eq!(stored.path, "/repo-one");
+        assert_eq!(stored.provider_id.as_deref(), Some("dotnet"));
+        assert_eq!(stored.project_file, None);
+        assert_eq!(stored.current_branch, "main");
+        assert_eq!(stored.branches[0].name, "feature/x");
+        assert_eq!(stored.branches[0].path, "refs/heads/feature/x");
         assert_eq!(state.selected_repo_id.as_deref(), Some("r1"));
 
         // 归一化后的等价路径仍按重复拒绝。
