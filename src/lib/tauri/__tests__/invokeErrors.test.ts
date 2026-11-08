@@ -258,7 +258,24 @@ describe("localizeInvokeError", () => {
     ).toBe("raw message | detail");
   });
 
-  it("兜底路径附加 kind 分类以区分不同失败类别", () => {
+  it("兜底路径使用已登记的 kind 分类标签", () => {
+    expect(
+      localizeInvokeError(
+        {
+          kind: "unsupported_spec_version",
+          code: "unregistered_code",
+          message: "unsupported spec version",
+        },
+        {
+          errors: {
+            error_kind_unsupported_spec_version: "unsupported spec version",
+          },
+        }
+      )
+    ).toBe("unsupported spec version | unsupported spec version");
+  });
+
+  it("kind 变体未登记本地化标签时退回原始 kind 后缀", () => {
     expect(
       localizeInvokeError(
         {

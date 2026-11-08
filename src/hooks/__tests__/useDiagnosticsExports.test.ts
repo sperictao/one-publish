@@ -432,8 +432,7 @@ describe("useDiagnosticsExports", () => {
     });
 
     expect(mocks.toast.error).toHaveBeenCalledWith("导出执行历史失败", {
-      description:
-        "write error | Permission denied (os error 13) | kind: export",
+      description: "write error | Permission denied (os error 13) | 导出失败",
     });
   });
 });

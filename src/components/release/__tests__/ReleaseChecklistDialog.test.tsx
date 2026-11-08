@@ -67,7 +67,7 @@ describe("ReleaseChecklistDialog 错误展示", () => {
     fireEvent.click(screen.getByRole("button", { name: /Updater 配置/ }));
     expect(
       await screen.findByText(
-        "updater plugin is not initialized | kind: updater"
+        "updater plugin is not initialized | 更新检查失败"
       )
     ).toBeInTheDocument();
 
@@ -83,7 +83,7 @@ describe("ReleaseChecklistDialog 错误展示", () => {
       report: expect.objectContaining({
         updater: {
           health: null,
-          error: "updater plugin is not initialized | kind: updater",
+          error: "updater plugin is not initialized | 更新检查失败",
         },
       }),
     });

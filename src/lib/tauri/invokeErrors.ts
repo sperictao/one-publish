@@ -191,9 +191,10 @@ export interface InvokeErrorTranslations {
  * 后端 message 语言不受界面语言控制，只作为未登记错误码时的兜底。
  * details 约定为语言中立的技术细节（路径、分支、底层错误），本地化后原样附加。
  *
- * 兜底路径附上 AppError.kind 分类（`kind: <snake_case>`）：错误码未登记时
- * 不同失败类别（repository / store / unsupported_spec_version 等）在 toast
- * 中仍可区分，而不是全部塌进同一段后端文案。kind 为 unknown 或缺失时不追加。
+ * 兜底路径附上 AppError.kind 分类标签（`errors.error_kind_<kind>`）：错误码
+ * 未登记时不同失败类别（repository / store / unsupported_spec_version 等）
+ * 在 toast 中仍可区分，而不是全部塌进同一段后端文案。kind 为 unknown、
+ * 缺失或未登记的变体（未来新增）时退回 `kind: <snake_case>` 原始后缀。
  */
 export function localizeInvokeError(
   error: unknown,
@@ -204,7 +205,13 @@ export function localizeInvokeError(
   if (typeof localized !== "string" || localized.length === 0) {
     const message = extractInvokeErrorMessage(error);
     const kind = extractInvokeErrorKind(error);
-    return kind && kind !== "unknown" ? `${message} | kind: ${kind}` : message;
+    if (!kind || kind === "unknown") {
+      return message;
+    }
+    const kindLabel = translations?.errors?.[`error_kind_${kind}`];
+    return typeof kindLabel === "string" && kindLabel.length > 0
+      ? `${message} | ${kindLabel}`
+      : `${message} | kind: ${kind}`;
   }
 
   const details = extractInvokeErrorDetails(error);

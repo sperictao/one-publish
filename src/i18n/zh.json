@@ -1129,6 +1129,21 @@
     "tray_menu_update_failed": "无法更新托盘菜单",
     "tray_title_update_failed": "无法更新托盘标题",
     "tray_tooltip_update_failed": "无法更新托盘提示",
-    "render_error": "渲染失败"
+    "render_error": "渲染失败",
+    "error_kind_validation": "参数校验失败",
+    "error_kind_artifact": "产物处理失败",
+    "error_kind_config": "配置处理失败",
+    "error_kind_provider": "发布提供程序错误",
+    "error_kind_export": "导出失败",
+    "error_kind_repository": "仓库操作失败",
+    "error_kind_publish": "发布执行失败",
+    "error_kind_external_open": "打开外部目标失败",
+    "error_kind_external_command": "外部命令执行失败",
+    "error_kind_store": "状态存储失败",
+    "error_kind_updater": "更新检查失败",
+    "error_kind_tray": "托盘操作失败",
+    "error_kind_unsupported_provider": "不支持的发布提供程序",
+    "error_kind_unsupported_spec_version": "不支持的规范版本",
+    "error_kind_render_error": "参数渲染失败"
   }
 }

@@ -1129,6 +1129,21 @@
     "tray_menu_update_failed": "Failed to update the tray menu",
     "tray_title_update_failed": "Failed to update the tray title",
     "tray_tooltip_update_failed": "Failed to update the tray tooltip",
-    "render_error": "Rendering failed"
+    "render_error": "Rendering failed",
+    "error_kind_validation": "validation failed",
+    "error_kind_artifact": "artifact processing failed",
+    "error_kind_config": "configuration processing failed",
+    "error_kind_provider": "provider error",
+    "error_kind_export": "export failed",
+    "error_kind_repository": "repository operation failed",
+    "error_kind_publish": "publish execution failed",
+    "error_kind_external_open": "failed to open external target",
+    "error_kind_external_command": "external command failed",
+    "error_kind_store": "state storage failed",
+    "error_kind_updater": "update check failed",
+    "error_kind_tray": "tray operation failed",
+    "error_kind_unsupported_provider": "unsupported provider",
+    "error_kind_unsupported_spec_version": "unsupported spec version",
+    "error_kind_render_error": "parameter render error"
   }
 }

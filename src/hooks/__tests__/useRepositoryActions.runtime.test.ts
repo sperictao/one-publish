@@ -936,7 +936,7 @@ describe("invoke 失败按界面语言本地化 toast 描述", () => {
     expect(mocks.toastError).toHaveBeenCalledWith(
       "Failed to remove repository",
       {
-        description: "未知存储错误 | EIO | kind: store",
+        description: "未知存储错误 | EIO | state storage failed",
       }
     );
   });
