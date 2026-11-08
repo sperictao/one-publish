@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -243,6 +244,81 @@ describe("ConfigManagementContent", () => {
       });
     });
     expect(mocks.toastSuccess).toHaveBeenCalledWith("配置已保存");
+  });
+
+  it("对话框关闭后迟到的保存成功不再弹 toast", async () => {
+    let resolveSave!: () => void;
+    mocks.saveProfile.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      })
+    );
+    const { unmount } = renderConfigManagementContent({
+      currentParameters: {
+        configuration: "Release",
+      },
+    });
+
+    fireEvent.change(screen.getByLabelText("输入配置文件名称"), {
+      target: { value: "Release" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+
+    await waitFor(() => {
+      expect(mocks.saveProfile).toHaveBeenCalled();
+    });
+
+    unmount();
+    await act(async () => {
+      resolveSave();
+    });
+
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("对话框关闭后迟到的导入应用结果不再弹 toast 或清空状态", async () => {
+    let resolveApply!: (value: {
+      imported: number;
+      skippedExisting: number;
+      skippedProviderMismatch: number;
+      overwritten: number;
+      renamed: number;
+    }) => void;
+    mocks.applyImportedProfiles.mockReturnValue(
+      new Promise((resolve) => {
+        resolveApply = resolve;
+      })
+    );
+    const { unmount } = renderConfigManagementContent();
+
+    await openImportPreview([
+      importedProfile("Release", "dotnet"),
+    ] satisfies ConfigProfile[]);
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "导入配置",
+      })
+    );
+
+    await waitFor(() => {
+      expect(mocks.applyImportedProfiles).toHaveBeenCalled();
+    });
+
+    unmount();
+    await act(async () => {
+      resolveApply({
+        imported: 1,
+        skippedExisting: 0,
+        skippedProviderMismatch: 0,
+        overwritten: 0,
+        renamed: 0,
+      });
+    });
+
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    expect(mocks.toastWarning).not.toHaveBeenCalled();
+    expect(mocks.toastError).not.toHaveBeenCalled();
   });
 
   it("导出配置时用保存对话框选择目标路径，以便创建新文件", async () => {

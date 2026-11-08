@@ -1,17 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
 import type { ProviderManifest } from "@/lib/store/types";
 
-const { importFromCommand, toastError } = vi.hoisted(() => ({
+const { importFromCommand, toastError, toastSuccess } = vi.hoisted(() => ({
   importFromCommand: vi.fn(),
   toastError: vi.fn(),
+  toastSuccess: vi.fn(),
 }));
 vi.mock("@/features/publish/publishRuntime", () => ({
   importFromCommand,
 }));
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: toastError },
+  toast: { success: toastSuccess, error: toastError },
 }));
 // 只给真实 zh 的 errors 分支：界面文案走组件内中文兜底，错误码文案校验已登记。
 vi.mock("@/hooks/useI18n", async () => {
@@ -132,6 +133,68 @@ describe("CommandImportDialog", () => {
     expect(toastError).toHaveBeenCalledWith("解析失败", {
       description: expected,
     });
+  });
+
+  it("对话框关闭后迟到的解析成功结果不再写入状态或 toast", async () => {
+    let resolveParse!: (value: typeof result) => void;
+    importFromCommand.mockReturnValue(
+      new Promise<typeof result>((resolve) => {
+        resolveParse = resolve;
+      })
+    );
+    const { unmount } = render(
+      <CommandImportDialog
+        open
+        onOpenChange={vi.fn()}
+        providerId="cargo"
+        provider={provider}
+        projectPath="/repo"
+        onImport={vi.fn()}
+      />
+    );
+    fireEvent.change(screen.getByLabelText("构建命令"), {
+      target: { value: "cargo build --release" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "解析命令" }));
+
+    unmount();
+    await act(async () => {
+      resolveParse(result);
+    });
+
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("对话框关闭后迟到的解析失败不再弹 toast 或写入内联错误", async () => {
+    let rejectParse!: (reason: unknown) => void;
+    importFromCommand.mockReturnValue(
+      new Promise<never>((_, reject) => {
+        rejectParse = reject;
+      })
+    );
+    const { unmount } = render(
+      <CommandImportDialog
+        open
+        onOpenChange={vi.fn()}
+        providerId="cargo"
+        provider={provider}
+        projectPath="/repo"
+        onImport={vi.fn()}
+      />
+    );
+    fireEvent.change(screen.getByLabelText("构建命令"), {
+      target: { value: "cargo build --release" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "解析命令" }));
+
+    unmount();
+    await act(async () => {
+      rejectParse({ kind: "provider", message: "boom" });
+    });
+
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
   it("不支持命令导入的 Provider 无法触发解析", () => {
