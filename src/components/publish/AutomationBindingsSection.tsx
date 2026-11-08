@@ -126,6 +126,15 @@ export function AutomationBindingsSection({
   useEffect(() => {
     repoIdRef.current = repoId;
   }, [repoId]);
+  // 组件卸载活跃标记：容器卸载后，僵尸闭包不得再弹出与失效视图关联的
+  // 错误 toast。
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [view, setView] = useState<AutomationBindingsView | null>(null);
   const [loading, setLoading] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
@@ -178,7 +187,7 @@ export function AutomationBindingsSection({
       if (repoIdRef.current !== requestedRepo) return;
       setView(next);
     } catch (error) {
-      if (repoIdRef.current !== requestedRepo) return;
+      if (!mountedRef.current || repoIdRef.current !== requestedRepo) return;
       setView(null);
       toast.error(configPanelT.automationLoadFailed || "自动化绑定加载失败", {
         description: localizeInvokeError(error, translationsRef.current),
@@ -204,6 +213,7 @@ export function AutomationBindingsSection({
         if (repoIdRef.current !== requestedRepo) return;
         setPending({ preview, applying: false });
       } catch (error) {
+        if (!mountedRef.current || repoIdRef.current !== requestedRepo) return;
         toast.error(
           configPanelT.automationPreviewFailed || "投影差异预览失败",
           { description: localizeInvokeError(error, translationsRef.current) }
@@ -230,9 +240,14 @@ export function AutomationBindingsSection({
       setPending((current) =>
         current ? { ...current, applying: false } : current
       );
-      toast.error(configPanelT.automationApplyFailed || "自动化投影应用失败", {
-        description: localizeInvokeError(error, translationsRef.current),
-      });
+      if (mountedRef.current && repoIdRef.current === repoId) {
+        toast.error(
+          configPanelT.automationApplyFailed || "自动化投影应用失败",
+          {
+            description: localizeInvokeError(error, translationsRef.current),
+          }
+        );
+      }
     }
   }, [pending, refresh, repoId, configPanelT]);
 
@@ -245,7 +260,7 @@ export function AutomationBindingsSection({
       if (repoIdRef.current !== requestedRepo) return;
       setRemoteEvidence(evidence);
     } catch (error) {
-      if (repoIdRef.current !== requestedRepo) return;
+      if (!mountedRef.current || repoIdRef.current !== requestedRepo) return;
       toast.error(
         configPanelT.automationRemoteSyncFailed || "远端发布记录同步失败",
         { description: localizeInvokeError(error, translationsRef.current) }
@@ -278,9 +293,14 @@ export function AutomationBindingsSection({
       setDispatchVersion("");
       await syncRemoteEvidence();
     } catch (error) {
-      toast.error(configPanelT.automationDispatchFailed || "触发远端发布失败", {
-        description: localizeInvokeError(error, translationsRef.current),
-      });
+      if (mountedRef.current && repoIdRef.current === repoId) {
+        toast.error(
+          configPanelT.automationDispatchFailed || "触发远端发布失败",
+          {
+            description: localizeInvokeError(error, translationsRef.current),
+          }
+        );
+      }
     } finally {
       setDispatching(false);
     }
@@ -303,10 +323,12 @@ export function AutomationBindingsSection({
         );
         await syncRemoteEvidence();
       } catch (error) {
-        toast.error(
-          configPanelT.automationRemoteCancelFailed || "取消远端运行失败",
-          { description: localizeInvokeError(error, translationsRef.current) }
-        );
+        if (mountedRef.current && repoIdRef.current === repoId) {
+          toast.error(
+            configPanelT.automationRemoteCancelFailed || "取消远端运行失败",
+            { description: localizeInvokeError(error, translationsRef.current) }
+          );
+        }
       } finally {
         setCancellingRunId(null);
       }
