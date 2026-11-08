@@ -245,8 +245,21 @@ pub async fn get_repository(repo_id: String) -> Result<Repository, AppError> {
     with_read_state(|state| find_repository(&state.repositories, &repo_id).cloned())
 }
 
+/// 写库前的字段底线：id/name/path 空白会穿透前端校验直达持久层，
+/// 之后所有按 id 查找与按 path 扫描的消费者都以更费解的方式失败。
+fn ensure_repository_fields(repo: &Repository) -> Result<(), AppError> {
+    if repo.id.trim().is_empty() || repo.name.trim().is_empty() || repo.path.trim().is_empty() {
+        return Err(AppError::validation_with_code(
+            "仓库 id、名称与路径均不能为空",
+            "repository_fields_required",
+        ));
+    }
+    Ok(())
+}
+
 /// 新增仓库：判重后入列并选中新增项。
 fn add_repository_in_state(state: &mut AppState, repo: &Repository) -> Result<(), AppError> {
+    ensure_repository_fields(repo)?;
     ensure_repository_path_absent(&state.repositories, &repo.path)?;
     state.repositories.push(repo.clone());
     state.selected_repo_id = Some(repo.id.clone());
@@ -288,6 +301,7 @@ fn merge_repository_metadata(existing: &Repository, mut update: Repository) -> R
 /// 更新仓库前的暂存：定位既有仓库并继承权威 publish_config（含历史修订）。
 /// 返回的合并结果仍需经项目绑定校验才可写回。
 fn stage_repository_update(state: &AppState, repo: Repository) -> Result<Repository, AppError> {
+    ensure_repository_fields(&repo)?;
     let existing = find_repository(&state.repositories, &repo.id)?;
     Ok(merge_repository_metadata(existing, repo))
 }
@@ -1890,6 +1904,52 @@ mod tests {
             .expect_err("normalized duplicate path must be rejected");
         assert_eq!(error.code.as_deref(), Some("repository_exists"));
         assert_eq!(state.repositories.len(), 1);
+    }
+
+    #[test]
+    fn add_repository_in_state_rejects_blank_identity_fields() {
+        use super::{add_repository_in_state, AppState};
+
+        for repo in [
+            test_repository(" ", "/repo-one"),
+            {
+                let mut repo = test_repository("r2", "/repo-two");
+                repo.name = "  ".to_string();
+                repo
+            },
+            {
+                let mut repo = test_repository("r3", "");
+                repo.path = " ".to_string();
+                repo
+            },
+        ] {
+            let mut state = AppState::default();
+            let error = add_repository_in_state(&mut state, &repo)
+                .expect_err("blank id/name/path must be rejected");
+            assert_eq!(error.code.as_deref(), Some("repository_fields_required"));
+            assert!(state.repositories.is_empty());
+            assert_eq!(state.selected_repo_id, None);
+        }
+    }
+
+    #[test]
+    fn stage_repository_update_rejects_blank_name_and_path() {
+        use super::{stage_repository_update, AppState};
+
+        let mut state = AppState::default();
+        state.repositories.push(test_repository("r1", "/repo"));
+
+        for update in [
+            Repository {
+                name: " ".to_string(),
+                ..test_repository("r1", "/repo")
+            },
+            test_repository("r1", " "),
+        ] {
+            let error = stage_repository_update(&state, update)
+                .expect_err("blank name/path must be rejected");
+            assert_eq!(error.code.as_deref(), Some("repository_fields_required"));
+        }
     }
 
     #[test]
