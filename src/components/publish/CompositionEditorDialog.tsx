@@ -273,12 +273,12 @@ export function CompositionEditorDialog({
     }
     if (invalidCredential) {
       toast.error(
-        (
+        interpolateTemplate(
           t.credentialInvalid ||
-          "凭据引用格式无效（应形如 keychain:one-publish/xxx）: {{location}}"
-        ).replace(
-          "{{location}}",
-          `${invalidCredential.routeId}/${invalidCredential.key}`
+            "凭据引用格式无效（应形如 keychain:one-publish/xxx）: {{location}}",
+          {
+            location: `${invalidCredential.routeId}/${invalidCredential.key}`,
+          }
         )
       );
       return;

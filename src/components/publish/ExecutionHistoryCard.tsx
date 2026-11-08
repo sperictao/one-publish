@@ -21,6 +21,7 @@ import type {
   HistoryFilterWindow,
 } from "@/features/history/historyFilterPresets";
 import type { HandoffSnippetFormat } from "@/lib/handoffSnippet";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
 
 function getExecutionFailureReason(record: ExecutionRecord): string | null {
@@ -116,9 +117,10 @@ export function ExecutionHistoryCard({
           {historyT.title || "最近执行历史"}
         </CardTitle>
         <CardDescription>
-          {(
-            historyT.description || "本地保留最近 {{count}} 条发布记录"
-          ).replace("{{count}}", String(executionHistoryLimit))}
+          {interpolateTemplate(
+            historyT.description || "本地保留最近 {{count}} 条发布记录",
+            { count: executionHistoryLimit }
+          )}
           {filteredExecutionHistory.length !== scopedExecutionHistory.length
             ? ` · ${historyT.currentFilter || "当前筛选"} ${filteredExecutionHistory.length}/${scopedExecutionHistory.length}`
             : ""}
@@ -373,12 +375,10 @@ export function ExecutionHistoryCard({
                       type="button"
                       size="sm"
                       variant="secondary"
-                      title={(
+                      title={interpolateTemplate(
                         historyT.promoteDesc ||
-                        "复用该次封存产物直接再交付（跳过构建）"
-                      ).replace(
-                        "{{digest}}",
-                        record.manifestDigest.slice(0, 8)
+                          "复用该次封存产物直接再交付（跳过构建）",
+                        { digest: record.manifestDigest.slice(0, 8) }
                       )}
                       onClick={() => void onPromoteFromHistory(record)}
                       disabled={isPublishing}

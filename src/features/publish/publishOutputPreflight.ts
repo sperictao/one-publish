@@ -9,6 +9,7 @@ import {
   type ProviderPublishSpec,
   type PublishOutputPreflightResult,
 } from "@/features/publish/publishRuntime";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 
 export type { PublishOutputPreflightResult } from "@/features/publish/publishRuntime";
 
@@ -121,16 +122,14 @@ export function buildProtectedOutputAccessDescription(
     appT.publishProtectedDirectoryAccessDeniedDesc ||
     "当前输出目录位于 macOS 受保护位置「{{location}}」下。OnePublish 已尝试向系统申请写入权限，但仍无法访问：{{path}}。请在“系统设置 > 隐私与安全性 > 文件与文件夹”中允许 OnePublish 访问「{{location}}」后重试；如果没有出现授权弹窗，请改用非受保护目录。";
 
-  return template
-    .replace(/\{\{location\}\}/g, () => location)
-    .replace(
-      /\{\{path\}\}/g,
-      () =>
-        result.access.probeDirectory ||
-        result.outputDir ||
-        result.access.protectedRoot ||
-        "-"
-    );
+  return interpolateTemplate(template, {
+    location,
+    path:
+      result.access.probeDirectory ||
+      result.outputDir ||
+      result.access.protectedRoot ||
+      "-",
+  });
 }
 
 export function buildPublishOutputValidationTitle(
@@ -152,28 +151,32 @@ export function buildPublishOutputValidationDescription(
     result.configuredOutputDir?.trim() || result.outputDir?.trim() || "-";
 
   if (result.validation.issue === "windows_style_path_on_posix") {
-    return (
+    return interpolateTemplate(
       appT.publishWindowsStyleOutputPathIncompatibleDesc ||
-      `当前发布目录看起来是 Windows 风格路径：${path}。请改为当前系统可识别的路径，或使用相对路径（如 ./publish）。`
-    ).replace(/\{\{path\}\}/g, () => path);
+        `当前发布目录看起来是 Windows 风格路径：${path}。请改为当前系统可识别的路径，或使用相对路径（如 ./publish）。`,
+      { path }
+    );
   }
 
   if (result.validation.issue === "posix_absolute_path_on_windows") {
-    return (
+    return interpolateTemplate(
       appT.publishPosixStyleOutputPathIncompatibleDesc ||
-      `当前发布目录看起来是 Unix 风格绝对路径：${path}。请改为当前系统可识别的 Windows 路径，或使用相对路径。`
-    ).replace(/\{\{path\}\}/g, () => path);
+        `当前发布目录看起来是 Unix 风格绝对路径：${path}。请改为当前系统可识别的 Windows 路径，或使用相对路径。`,
+      { path }
+    );
   }
 
   if (result.validation.issue === "windows_drive_root_missing") {
-    return (
+    return interpolateTemplate(
       appT.publishWindowsDriveRootMissingDesc ||
-      `当前发布目录指向不存在的 Windows 盘符或共享根：${path}。请改为当前系统可访问的磁盘或目录后重试。`
-    ).replace(/\{\{path\}\}/g, () => path);
+        `当前发布目录指向不存在的 Windows 盘符或共享根：${path}。请改为当前系统可访问的磁盘或目录后重试。`,
+      { path }
+    );
   }
 
-  return (
+  return interpolateTemplate(
     appT.publishOutputPathIncompatibleDesc ||
-    `当前发布目录路径与当前系统不兼容：${path}。请改为当前系统可识别的路径，或使用相对路径。`
-  ).replace(/\{\{path\}\}/g, () => path);
+      `当前发布目录路径与当前系统不兼容：${path}。请改为当前系统可识别的路径，或使用相对路径。`,
+    { path }
+  );
 }

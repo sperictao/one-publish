@@ -32,6 +32,7 @@ import type {
   ImportedConfigSummary,
 } from "@/generated/tauri-contracts";
 import { importConfig } from "@/lib/store/api";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import { type ConfigParameters, type ConfigProfile } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
@@ -108,7 +109,7 @@ function formatImportSummary(
   profileT: TranslationMap
 ): string {
   const withCount = (template: string, count: number) =>
-    template.replace("{{count}}", String(count));
+    interpolateTemplate(template, { count });
   const parts = [
     withCount(
       profileT.importSummaryImported || "已导入：{{count}}",
@@ -563,10 +564,11 @@ export function ConfigManagementContent({
           <AppDialogShell
             size="compact"
             title={profileT.importConfirmTitle || "确认导入配置"}
-            description={(
+            description={interpolateTemplate(
               profileT.importConfirmDescription ||
-              "文件中共有 {{count}} 个配置。同名配置会被跳过，不会覆盖当前仓库已有的配置。"
-            ).replace("{{count}}", String(pendingImport.profiles.length))}
+                "文件中共有 {{count}} 个配置。同名配置会被跳过，不会覆盖当前仓库已有的配置。",
+              { count: pendingImport.profiles.length }
+            )}
             icon={<Upload className="size-4" />}
             bodyInnerClassName="space-y-4"
             footer={
@@ -611,29 +613,33 @@ export function ConfigManagementContent({
                 >
                   <AlertCircle className="mt-0.5 size-4 flex-shrink-0" />
                   <p>
-                    {(
+                    {interpolateTemplate(
                       profileT.importProviderMismatchWarning ||
-                      "{{count}} 个配置属于其他 Provider，与当前仓库的 Provider（{{provider}}）不一致，不会导入。"
-                    )
-                      .replace("{{count}}", String(providerMismatchCount))
-                      .replace("{{provider}}", repositoryProviderId ?? "")}
+                        "{{count}} 个配置属于其他 Provider，与当前仓库的 Provider（{{provider}}）不一致，不会导入。",
+                      {
+                        count: providerMismatchCount,
+                        provider: repositoryProviderId ?? "",
+                      }
+                    )}
                   </p>
                 </div>
               ) : null}
               {existingCount > 0 ? (
                 <div className="rounded-sm border border-warning/20 bg-warning/5 px-3 py-2.5">
                   <p className="text-copy-14 font-normal">
-                    {(
+                    {interpolateTemplate(
                       profileT.importConflictStrategyTitle ||
-                      "{{count}} 个配置与仓库内现有配置同名，选择处理方式："
-                    ).replace("{{count}}", String(existingCount))}
+                        "{{count}} 个配置与仓库内现有配置同名，选择处理方式：",
+                      { count: existingCount }
+                    )}
                   </p>
                   <div
                     role="radiogroup"
-                    aria-label={(
+                    aria-label={interpolateTemplate(
                       profileT.importConflictStrategyTitle ||
-                      "{{count}} 个配置与仓库内现有配置同名，选择处理方式："
-                    ).replace("{{count}}", String(existingCount))}
+                        "{{count}} 个配置与仓库内现有配置同名，选择处理方式：",
+                      { count: existingCount }
+                    )}
                     className="mt-2 flex flex-wrap gap-2"
                   >
                     {(

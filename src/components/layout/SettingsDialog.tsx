@@ -49,6 +49,7 @@ import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
 import type { Language, TranslationTree } from "@/hooks/useI18n";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { cn } from "@/lib/utils";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import { toast } from "sonner";
 import { ThemePreviewMock } from "./ThemePreviewMock";
 
@@ -764,9 +765,9 @@ export function SettingsDialog({
               : languageT.chinese || "简体中文";
 
           toast.success(
-            (languageT.changed || "界面语言已切换为 {{language}}").replace(
-              "{{language}}",
-              languageLabel
+            interpolateTemplate(
+              languageT.changed || "界面语言已切换为 {{language}}",
+              { language: languageLabel }
             )
           );
         })

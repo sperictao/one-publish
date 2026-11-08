@@ -639,9 +639,10 @@ export function ReleaseSettingsEditorDialog({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      aria-label={(
-                        t.removeGate || "移除门禁 {{index}}"
-                      ).replace("{{index}}", String(index + 1))}
+                      aria-label={interpolateTemplate(
+                        t.removeGate || "移除门禁 {{index}}",
+                        { index: index + 1 }
+                      )}
                       onClick={() =>
                         update({
                           releaseGates: draft.releaseGates.filter(
@@ -734,9 +735,10 @@ export function ReleaseSettingsEditorDialog({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      aria-label={(
-                        t.removeMirror || "移除版本镜像 {{index}}"
-                      ).replace("{{index}}", String(index + 1))}
+                      aria-label={interpolateTemplate(
+                        t.removeMirror || "移除版本镜像 {{index}}",
+                        { index: index + 1 }
+                      )}
                       onClick={() =>
                         update({
                           versionMirrors: draft.versionMirrors.filter(

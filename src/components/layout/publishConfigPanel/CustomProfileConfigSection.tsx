@@ -6,6 +6,7 @@ import { ProfileListItem } from "@/components/layout/publishConfigPanel/ProfileL
 import { ConfigGroup } from "@/components/layout/publishConfigPanel/ConfigGroup";
 import { composeNodeRefs } from "@/components/layout/composeNodeRefs";
 import { createUserProfileConfigKey } from "@/features/config/publishConfigIdentity";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import type { PreferredSelectedRenderAnchor } from "@/components/layout/usePublishConfigListModel";
 import type { usePointerListReorder } from "@/components/layout/usePointerListReorder";
 import type {
@@ -132,13 +133,12 @@ export function CustomProfileConfigSection({
                 editTitle={editConfigLabel}
                 updateUnavailableTitle={updateUnavailableLabel}
                 deleteTitle={deleteConfigLabel}
-                blockedDeleteTitle={deleteBlockedLabel.replace(
-                  "{{reason}}",
-                  blockedReason
-                )}
-                blockedStatusTitle={configurationBlockedLabel.replace(
-                  "{{reason}}",
-                  profile.blockedReason || ""
+                blockedDeleteTitle={interpolateTemplate(deleteBlockedLabel, {
+                  reason: blockedReason,
+                })}
+                blockedStatusTitle={interpolateTemplate(
+                  configurationBlockedLabel,
+                  { reason: profile.blockedReason || "" }
                 )}
                 favoriteLabel={favoriteConfigLabel}
                 unfavoriteLabel={unfavoriteConfigLabel}

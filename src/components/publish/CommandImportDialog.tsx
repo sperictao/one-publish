@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Terminal } from "lucide-react";
 import { useI18n } from "@/hooks/useI18n";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import {
   importFromCommand,
   type CommandImportResult,
@@ -123,9 +124,10 @@ export function CommandImportDialog({
                 {commandT.commandSectionTitle || "命令输入"}
               </div>
               <p className="text-label-12 text-muted-foreground">
-                {(
-                  commandT.currentProvider || "当前 Provider: {{provider}}"
-                ).replace("{{provider}}", providerLabel)}
+                {interpolateTemplate(
+                  commandT.currentProvider || "当前 Provider: {{provider}}",
+                  { provider: providerLabel }
+                )}
               </p>
             </div>
             <div className="space-y-2">

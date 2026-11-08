@@ -6,6 +6,7 @@ import {
   GeneralSettingsSection,
   UpdaterProgressBar,
 } from "../SettingsDialog";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 
 // Mock Tauri modules
 vi.mock("@tauri-apps/api/core", () => ({
@@ -115,12 +116,7 @@ vi.mock("@/hooks/useI18n", async (importOriginal) => {
           text = current;
         }
         if (params) {
-          Object.keys(params).forEach((paramKey) => {
-            text = text.replace(
-              new RegExp(`{{${paramKey}}}`, "g"),
-              String(params[paramKey])
-            );
-          });
+          text = interpolateTemplate(text, params);
         }
         return text;
       },

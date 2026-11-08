@@ -11,6 +11,7 @@ import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 import { save } from "@tauri-apps/plugin-dialog";
 
 import { createFailureGroupBundleExportPlan } from "@/features/history/diagnosticsExportPayload";
+import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import { exportHandoffBundleFile } from "@/features/history/diagnosticsExportRuntime";
 import { useI18n } from "@/hooks/useI18n";
 import { openExecutionSnapshot } from "@/lib/store/api";
@@ -75,9 +76,11 @@ export function useHistoryActions({
       const normalized = text.trim();
       if (!normalized) {
         toast.error(
-          (appT.missingCopyTarget || "缺少可复制的{{label}}").replace(
-            "{{label}}",
-            label
+          interpolateTemplate(
+            appT.missingCopyTarget || "缺少可复制的{{label}}",
+            {
+              label,
+            }
           )
         );
         return;
@@ -107,14 +110,13 @@ export function useHistoryActions({
         }
 
         toast.success(
-          (appT.copySuccess || "{{label}}已复制").replace("{{label}}", label)
+          interpolateTemplate(appT.copySuccess || "{{label}}已复制", { label })
         );
       } catch (err) {
         toast.error(
-          (appT.copyFailedWithLabel || "复制{{label}}失败").replace(
-            "{{label}}",
-            label
-          ),
+          interpolateTemplate(appT.copyFailedWithLabel || "复制{{label}}失败", {
+            label,
+          }),
           {
             description: String(err),
           }
