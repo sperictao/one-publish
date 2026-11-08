@@ -1009,6 +1009,7 @@
     "repository_exists": "该目录已添加为仓库",
     "repository_fields_required": "仓库名称与路径不能为空",
     "profile_fields_required": "配置名称与 Provider 不能为空",
+    "publish_draft_provider_required": "草稿缺少 Provider",
     "project_binding_not_found": "当前 Provider 下找不到已绑定的项目文件，请重新选择项目",
     "profile_exists": "同名配置文件已存在",
     "profile_order_mismatch": "排序目标与当前配置列表不一致，请刷新后重试",

@@ -1212,14 +1212,16 @@ fn find_repository_returns_consistent_not_found_error() {
 #[test]
 fn apply_selected_repo_id_update_supports_clearing_selection() {
     let mut state = AppState {
+        repositories: vec![test_repo("repo-1"), test_repo("repo-2")],
         selected_repo_id: Some("repo-1".to_string()),
         ..AppState::default()
     };
 
-    apply_selected_repo_id_update(&mut state, None, true);
+    apply_selected_repo_id_update(&mut state, None, true).expect("clearing selection");
     assert_eq!(state.selected_repo_id, None);
 
-    apply_selected_repo_id_update(&mut state, Some("repo-2".to_string()), false);
+    apply_selected_repo_id_update(&mut state, Some("repo-2".to_string()), false)
+        .expect("existing repository must be selectable");
     assert_eq!(state.selected_repo_id, Some("repo-2".to_string()));
 }
 

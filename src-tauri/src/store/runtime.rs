@@ -110,12 +110,16 @@ pub(crate) fn apply_selected_repo_id_update(
     state: &mut AppState,
     selected_repo_id: Option<String>,
     clear_selected_repo_id: bool,
-) {
+) -> Result<(), crate::errors::AppError> {
     if clear_selected_repo_id {
         state.selected_repo_id = None;
     } else if let Some(repo_id) = selected_repo_id {
+        // 选中引用必须指向既有仓库：悬空 id 落库后没有修复路径，此后所有
+        // 按 selected_repo_id 的查找都以 repository_not_found 失败。
+        find_repository(&state.repositories, &repo_id)?;
         state.selected_repo_id = Some(repo_id);
     }
+    Ok(())
 }
 
 pub(crate) fn get_execution_history_snapshot() -> Vec<ExecutionRecord> {
@@ -259,15 +263,30 @@ mod tests {
     #[test]
     fn apply_selected_repo_id_update_honours_clear_flag() {
         let mut state = AppState::default();
+        state.repositories.push(test_repository("repo-1"));
 
-        apply_selected_repo_id_update(&mut state, Some("repo-1".into()), false);
+        apply_selected_repo_id_update(&mut state, Some("repo-1".into()), false)
+            .expect("existing repository must be selectable");
         assert_eq!(state.selected_repo_id.as_deref(), Some("repo-1"));
 
         // 非清除调用携带 None 时保留既有选择。
-        apply_selected_repo_id_update(&mut state, None, false);
+        apply_selected_repo_id_update(&mut state, None, false).expect("noop selection");
         assert_eq!(state.selected_repo_id.as_deref(), Some("repo-1"));
 
-        apply_selected_repo_id_update(&mut state, Some("ignored".into()), true);
+        apply_selected_repo_id_update(&mut state, Some("ignored".into()), true)
+            .expect("clearing selection");
+        assert_eq!(state.selected_repo_id, None);
+    }
+
+    #[test]
+    fn apply_selected_repo_id_update_rejects_unknown_repository() {
+        let mut state = AppState::default();
+        state.repositories.push(test_repository("repo-1"));
+
+        let error = apply_selected_repo_id_update(&mut state, Some("ghost".into()), false)
+            .expect_err("unknown repository must be rejected");
+        assert_eq!(error.code.as_deref(), Some("repository_not_found"));
+        // 拒绝的写入不得改变既有选择。
         assert_eq!(state.selected_repo_id, None);
     }
 

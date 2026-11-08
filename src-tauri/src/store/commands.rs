@@ -374,7 +374,7 @@ pub async fn update_ui_state(
         &mut state,
         selected_repo_id,
         clear_selected_repo_id.unwrap_or(false),
-    );
+    )?;
 
     update_state(state)?;
     Ok(get_bootstrap_state())
@@ -524,6 +524,12 @@ fn upsert_edit_draft(
     parameters: serde_json::Value,
     base_revision: Option<PublishBaseRevisionRef>,
 ) -> Result<Option<String>, AppError> {
+    if provider_id.trim().is_empty() {
+        return Err(AppError::validation_with_code(
+            "草稿缺少 Provider",
+            "publish_draft_provider_required",
+        ));
+    }
     let mut content = if let Some(base) = &base_revision {
         let revision = repo
             .publish_config
@@ -1720,6 +1726,20 @@ mod tests {
             .find(|draft| draft.project_binding.is_none())
             .expect("first scope still exists");
         assert_eq!(first.content.parameters, json!({ "a": 3 }));
+    }
+
+    #[test]
+    fn upsert_edit_draft_rejects_blank_provider() {
+        use super::upsert_edit_draft;
+
+        let mut repo = test_repository("r1", "/repo");
+        let error = upsert_edit_draft(&mut repo, "  ", None, json!({}), None)
+            .expect_err("blank provider must be rejected");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_draft_provider_required")
+        );
+        assert!(repo.publish_config.drafts.is_empty());
     }
 
     #[test]
