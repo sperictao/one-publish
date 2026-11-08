@@ -12,6 +12,7 @@ import {
   classifyLogLine,
   type LogLineLevel,
 } from "@/features/publish/classifyLogLine";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 // 贴底容差（px）：滚动位置距底部小于此值即视为"跟随中"。
@@ -94,7 +95,7 @@ export function PublishLogView({
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(getSnapshot());
+      await copyTextToClipboard(getSnapshot());
       toast.success(copiedLabel);
     } catch (err) {
       toast.error(String(err));

@@ -10,6 +10,7 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { AppDialogBadge } from "@/components/ui/app-dialog-badge";
@@ -269,7 +270,7 @@ export function EnvironmentCheckContent({
 
   const handleCopy = async (command: string) => {
     try {
-      await navigator.clipboard.writeText(command);
+      await copyTextToClipboard(command);
       toast.success(translations.environment?.copied || "已复制命令");
     } catch {
       window.prompt(

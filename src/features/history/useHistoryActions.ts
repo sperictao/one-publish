@@ -11,6 +11,7 @@ import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 import { save } from "@tauri-apps/plugin-dialog";
 
 import { createFailureGroupBundleExportPlan } from "@/features/history/diagnosticsExportPayload";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { interpolateTemplate } from "@/lib/interpolateTemplate";
 import { exportHandoffBundleFile } from "@/features/history/diagnosticsExportRuntime";
 import { useI18n } from "@/hooks/useI18n";
@@ -87,27 +88,7 @@ export function useHistoryActions({
       }
 
       try {
-        if (
-          typeof navigator !== "undefined" &&
-          navigator.clipboard?.writeText
-        ) {
-          await navigator.clipboard.writeText(normalized);
-        } else {
-          const input = document.createElement("textarea");
-          input.value = normalized;
-          input.style.position = "fixed";
-          input.style.opacity = "0";
-          document.body.appendChild(input);
-          input.focus();
-          input.select();
-
-          const copied = document.execCommand("copy");
-          document.body.removeChild(input);
-
-          if (!copied) {
-            throw new Error(appT.copyFailed || "复制失败");
-          }
-        }
+        await copyTextToClipboard(normalized);
 
         toast.success(
           interpolateTemplate(appT.copySuccess || "{{label}}已复制", { label })
