@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { getCurrentTranslations } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import {
   FileSearch,
   FolderGit2,
@@ -470,6 +472,12 @@ function EditRepositoryDialogContent({
       }
     } catch (err) {
       console.error("选择项目路径失败:", err);
+      const translations = getCurrentTranslations();
+      toast.error(
+        translations.app?.selectRepositoryDirectoryFailed ||
+          "无法打开目录选择器",
+        { description: localizeInvokeError(err, translations) }
+      );
     }
   }, [repoT.repositoryPath]);
 

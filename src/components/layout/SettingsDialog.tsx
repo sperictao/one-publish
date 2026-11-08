@@ -46,6 +46,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import type { Language, TranslationTree } from "@/hooks/useI18n";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { cn } from "@/lib/utils";
@@ -854,8 +855,13 @@ export function SettingsDialog({
       }
     } catch (err) {
       console.error("\u9009\u62E9\u76EE\u5F55\u5931\u8D25:", err);
+      toast.error(
+        translations.app?.selectRepositoryDirectoryFailed ||
+          "\u65E0\u6CD5\u6253\u5F00\u76EE\u5F55\u9009\u62E9\u5668",
+        { description: localizeInvokeError(err, translations) }
+      );
     }
-  }, [onDefaultOutputDirChange, outputDirLabel]);
+  }, [onDefaultOutputDirChange, outputDirLabel, translations]);
 
   const generalSettingsContent = (
     <GeneralSettingsSection
