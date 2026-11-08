@@ -1065,6 +1065,33 @@ describe("handleEditRepoRuntime", () => {
     expect(params.applySelectedRepositoryProvider).not.toHaveBeenCalled();
   });
 
+  it("evaluate selection at apply time: a mid-save repo switch skips provider application", async () => {
+    const params = baseParams();
+    params.repo = existingRepo({ providerId: "dotnet" });
+    params.repositories = [existingRepo()];
+    let resolveUpdate!: () => void;
+    params.updateRepository.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveUpdate = resolve;
+      })
+    );
+    // 保存开始时该仓库仍是选中项；await 期间用户切走，断言必须在应用时评估。
+    params.isSelectedRepo.mockReturnValue(true);
+
+    const pending = handleEditRepoRuntime(params);
+    await vi.waitFor(() => {
+      expect(params.updateRepository).toHaveBeenCalled();
+    });
+    params.isSelectedRepo.mockReturnValue(false);
+    resolveUpdate();
+
+    const result = await pending;
+
+    expect(result).toBe(true);
+    expect(params.applySelectedRepositoryProvider).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).toHaveBeenCalled();
+  });
+
   it("maps a repository_exists failure to the dedicated copy", async () => {
     const params = baseParams();
     params.updateRepository.mockRejectedValue({

@@ -58,4 +58,70 @@ describe("ProjectProfileViewer", () => {
       expect(mocks.resolveDotnetProjectProfile).not.toHaveBeenCalled();
     }
   );
+
+  it("卸载后迟到的解析失败不再弹 toast 或写入 viewer 状态", async () => {
+    let rejectResolve!: (reason: unknown) => void;
+    mocks.resolveDotnetProjectProfile.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectResolve = reject;
+      })
+    );
+    const ref = createRef<ProjectProfileViewerHandle>();
+    const { unmount } = render(
+      <ProjectProfileViewer
+        ref={ref}
+        projectFilePath="/repo/App.csproj"
+        configPanelT={zh.configPanel}
+        commonT={zh.common}
+      />
+    );
+
+    await act(async () => {
+      ref.current?.viewProfile("FolderProfile");
+    });
+    expect(mocks.resolveDotnetProjectProfile).toHaveBeenCalled();
+
+    unmount();
+    await act(async () => {
+      rejectResolve({ kind: "io", message: "read failed" });
+    });
+
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("项目文件变化后在途响应不再落回 viewer", async () => {
+    let rejectResolve!: (reason: unknown) => void;
+    mocks.resolveDotnetProjectProfile.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectResolve = reject;
+      })
+    );
+    const ref = createRef<ProjectProfileViewerHandle>();
+    const { rerender } = render(
+      <ProjectProfileViewer
+        ref={ref}
+        projectFilePath="/repo/App.csproj"
+        configPanelT={zh.configPanel}
+        commonT={zh.common}
+      />
+    );
+
+    await act(async () => {
+      ref.current?.viewProfile("FolderProfile");
+    });
+
+    rerender(
+      <ProjectProfileViewer
+        ref={ref}
+        projectFilePath="/repo/Other.csproj"
+        configPanelT={zh.configPanel}
+        commonT={zh.common}
+      />
+    );
+    await act(async () => {
+      rejectResolve({ kind: "io", message: "read failed" });
+    });
+
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
 });
