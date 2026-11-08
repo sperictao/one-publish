@@ -35,14 +35,27 @@ function resolveProjectPath(projectPath: string): string {
   return projectPath.trim() ? projectPath : ".";
 }
 
-function inferWorkingDirectory(projectPath: string): string {
-  const normalized = projectPath.replace(/\\/g, "/");
+// cargo/go/java 的 project_path 是仓库根目录（src-tauri ProviderProjectPathKind::RepositoryRoot），
+// 目录名可以合法含 '.'（my.app、site.dev），不能按「含点即文件」剥掉最后一级；
+// dotnet/tauri 的 project_path 是项目文件，仍走下方文件名启发式。
+const REPOSITORY_ROOT_PROVIDER_IDS: ReadonlySet<string> = new Set([
+  "cargo",
+  "go",
+  "java",
+]);
+
+function inferWorkingDirectory(spec: HandoffSpec): string {
+  const normalized = spec.project_path.replace(/\\/g, "/");
   // project_path 可能来自历史记录里不可信的持久化 spec 投影（见 extractSpecFromRecord）。
   // 空路径已回退到当前目录，纯空白路径同样没有可用目录信息；否则三个片段会生成
   // `cd "   "` / `working-directory:    ` 这类不可执行的交接命令。与
   // normalizeCommandLine 一致地按 trim 判定空白，非纯空白路径仍逐字保留。
   if (!normalized.trim()) {
     return ".";
+  }
+
+  if (REPOSITORY_ROOT_PROVIDER_IDS.has(spec.provider_id)) {
+    return normalized;
   }
 
   const segment = normalized.split("/").pop() || "";
@@ -102,7 +115,7 @@ export function buildShellHandoffSnippet(params: {
   commandLine?: string | null;
 }): string {
   const command = resolveCommand(params.spec, params.commandLine);
-  const workingDir = inferWorkingDirectory(params.spec.project_path);
+  const workingDir = inferWorkingDirectory(params.spec);
 
   return [
     "# OnePublish handoff snippet (shell)",
@@ -119,7 +132,7 @@ export function buildGitHubActionsSnippet(params: {
   commandLine?: string | null;
 }): string {
   const command = resolveCommand(params.spec, params.commandLine);
-  const workingDir = inferWorkingDirectory(params.spec.project_path);
+  const workingDir = inferWorkingDirectory(params.spec);
 
   return [
     `- name: Publish (${params.spec.provider_id})`,
@@ -134,7 +147,7 @@ export function buildGitLabCISnippet(params: {
   commandLine?: string | null;
 }): string {
   const command = resolveCommand(params.spec, params.commandLine);
-  const workingDir = inferWorkingDirectory(params.spec.project_path);
+  const workingDir = inferWorkingDirectory(params.spec);
 
   return [
     "publish:",

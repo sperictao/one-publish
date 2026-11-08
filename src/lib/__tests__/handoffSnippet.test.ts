@@ -82,6 +82,29 @@ describe("handoffSnippet", () => {
     expect(snippet).toContain("go build ./...");
   });
 
+  it("RepositoryRoot provider 的含点目录名不剥父级", () => {
+    // project_path_kind = RepositoryRoot 时 project_path 即工作目录；
+    // 目录名里的 '.' 不表示文件扩展名，不能按文件名剥掉最后一级。
+    const repoRootSpec = {
+      provider_id: "cargo",
+      project_path: "/repos/my.app",
+      parameters: {},
+    };
+
+    expect(buildShellHandoffSnippet({ spec: repoRootSpec })).toContain(
+      'cd "/repos/my.app"'
+    );
+    expect(buildGitHubActionsSnippet({ spec: repoRootSpec })).toContain(
+      "working-directory: /repos/my.app"
+    );
+    expect(buildGitLabCISnippet({ spec: repoRootSpec })).toContain(
+      '- cd "/repos/my.app"'
+    );
+    expect(buildShellHandoffSnippet({ spec: repoRootSpec })).not.toContain(
+      'cd "/repos"'
+    );
+  });
+
   it("GitLab CI 片段对 cargo provider 回退为 cargo build --release", () => {
     const snippet = buildGitLabCISnippet({
       spec: {
