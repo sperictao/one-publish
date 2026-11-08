@@ -534,4 +534,61 @@ describe("quick create dialog loading and save", () => {
     );
     expect(result.current.quickCreateProfileOpen).toBe(false);
   });
+
+  it("skips onProfileSaved when the selected repo changes mid-save", async () => {
+    const saved = profile({ id: "p-new", name: "fresh-cfg" });
+    const saveProfileToStore = vi.fn().mockResolvedValue({
+      repositories: [{ id: "repo-a", publishConfig: { profiles: [saved] } }],
+    });
+    let releaseRefresh!: (profiles: (typeof saved)[]) => void;
+    const refreshProfilesAfterMutation = vi.fn().mockImplementation(
+      () =>
+        new Promise<(typeof saved)[]>((done) => {
+          releaseRefresh = done;
+        })
+    );
+    const onProfileSaved = vi.fn();
+    const input = props();
+    const { result, rerender } = renderHook(
+      (hookProps: UseQuickCreateProfileParams) =>
+        useQuickCreateProfile(hookProps),
+      {
+        initialProps: {
+          ...input,
+          saveProfileToStore,
+          refreshProfilesAfterMutation,
+          onProfileSaved,
+        },
+      }
+    );
+    act(() => {
+      result.current.openQuickCreateProfileDialog();
+      result.current.setQuickCreateProfileName("fresh-cfg");
+    });
+
+    let savePromise!: Promise<void>;
+    await act(async () => {
+      savePromise = result.current.handleQuickCreateProfileSave();
+      // 推进到 refresh 挂起点：保存已落库但选择尚未回写。
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender({
+      ...input,
+      saveProfileToStore,
+      refreshProfilesAfterMutation,
+      onProfileSaved,
+      selectedRepoId: "repo-b",
+    });
+    await act(async () => {
+      releaseRefresh([saved]);
+      await savePromise;
+    });
+
+    // repo-a 的保存正常完成，但 saved 配置不被选进 repo-b 的编辑状态。
+    expect(saveProfileToStore).toHaveBeenCalledWith(
+      expect.objectContaining({ repoId: "repo-a" })
+    );
+    expect(onProfileSaved).not.toHaveBeenCalled();
+  });
 });

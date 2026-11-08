@@ -343,17 +343,23 @@ export function useProfileCrud({
         throw new Error("保存后未找到配置身份");
       }
 
-      setActiveProfileName(createdProfile.name);
-      updatePublishEditState({
-        selection: {
-          kind: "revision",
-          configurationId: createdProfile.id,
-        },
-      });
+      // 保存期间切换仓库后，选择与激活态只写回仍属该配置的目标仓库——
+      // updatePublishEditState 按当前选中仓库寻址，无守卫会把本仓库新建的
+      // revision 选择写进另一个仓库的 publishConfig（同 deleteProfileById）。
+      if (isCurrentRepo(selectedRepoId)) {
+        setActiveProfileName(createdProfile.name);
+        updatePublishEditState({
+          selection: {
+            kind: "revision",
+            configurationId: createdProfile.id,
+          },
+        });
+      }
 
       return profileName;
     },
     [
+      isCurrentRepo,
       profileT.saveFailed,
       profiles,
       refreshProfilesAfterMutation,

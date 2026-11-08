@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { toast } from "sonner";
+import { useLazyRef } from "@/hooks/useLazyRef";
 import { resolvePublishSource } from "@/features/publish/publishRuntime";
 import type { ConfigParameters, ConfigProfile } from "@/lib/store/types";
 import { toSpecValue, type ParameterValue } from "@/types/parameters";
@@ -130,6 +131,10 @@ export function useQuickCreateProfile({
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [quickCreateViewing, setQuickCreateViewing] = useState(false);
 
+  const selectedRepoIdRef = useLazyRef<string | null>(() => selectedRepoId);
+  useEffect(() => {
+    selectedRepoIdRef.current = selectedRepoId;
+  });
   const templateRequestRef = useRef(0);
   const templateLoadingRef = useRef(false);
   const [templateLoading, setTemplateLoading] = useState(false);
@@ -413,7 +418,12 @@ export function useQuickCreateProfile({
       if (!savedProfile?.id) {
         throw new Error("保存后未找到配置身份");
       }
-      onProfileSaved(savedProfile);
+      // 保存期间的仓库切换不回灌选择：onProfileSaved 会把该配置选进
+      // 当前选中仓库的编辑状态，跨仓库会写错归属（同 deleteProfileById 的
+      // isCurrentRepo 约定）。
+      if (selectedRepoIdRef.current === selectedRepoId) {
+        onProfileSaved(savedProfile);
+      }
 
       toast.success(
         isEditing
@@ -445,6 +455,7 @@ export function useQuickCreateProfile({
     refreshProfilesAfterMutation,
     saveProfileToStore,
     selectedRepoId,
+    selectedRepoIdRef,
     translations,
     updateProfile,
   ]);

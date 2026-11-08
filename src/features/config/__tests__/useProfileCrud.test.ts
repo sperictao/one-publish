@@ -371,6 +371,31 @@ describe("handleCreateProfileFromProjectProfile", () => {
     });
   });
 
+  it("does not write the new revision selection into another repo after a mid-save switch", async () => {
+    const created = { id: "new-1", name: "Release-copy" } as ConfigProfile;
+    const p = params({
+      saveProfileToStore: vi.fn().mockResolvedValue({
+        repositories: [
+          { id: "repo-1", publishConfig: { profiles: [created] } },
+        ],
+      }),
+      refreshProfilesAfterMutation: vi.fn().mockResolvedValue([created]),
+      isCurrentRepo: vi.fn().mockReturnValue(false),
+    });
+    const { result } = renderHook(() => useProfileCrud(p));
+
+    const name = await result.current.handleCreateProfileFromProjectProfile(
+      "Release",
+      {}
+    );
+
+    // 保存在 repo-1 正常完成，但选择与激活态不写回已离开的仓库。
+    expect(name).toBe("Release-copy");
+    expect(p.saveProfileToStore).toHaveBeenCalled();
+    expect(p.setActiveProfileName).not.toHaveBeenCalled();
+    expect(p.updatePublishEditState).not.toHaveBeenCalled();
+  });
+
   it("throws when the created profile cannot be found after refresh", async () => {
     const p = params({
       saveProfileToStore: vi.fn().mockResolvedValue({ repositories: [] }),
