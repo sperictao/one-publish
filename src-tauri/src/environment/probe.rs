@@ -69,12 +69,13 @@ pub async fn check_tool(probe: &ToolProbe, parse_version: VersionParser) -> Prov
     let path = command_path(probe.command);
     let program = path.clone().unwrap_or_else(|| probe.command.to_string());
 
-    // new_tokio_command 已内置 kill_on_drop：超时分支 drop 掉 output()
-    // future 时回收挂死的探测子进程（tokio Child 默认不随 drop 终止，
-    // 否则会残留等待 stdin 的孤儿）。
-    let command = crate::process_utils::new_tokio_command(&program)
-        .args(probe.version_args)
-        .output();
+    // new_tokio_command 已内置 kill_on_drop：超时分支 drop 掉 future 时
+    // 回收挂死的探测子进程（tokio Child 默认不随 drop 终止，否则会残留
+    // 等待 stdin 的孤儿）。capture_child_output_bounded 顺带按上限截断
+    // 探测输出，异常工具刷屏不会放大内存。
+    let mut process = crate::process_utils::new_tokio_command(&program);
+    process.args(probe.version_args);
+    let command = crate::process_utils::capture_child_output_bounded(&mut process);
 
     // Bound the probe so a hung toolchain cannot wedge the environment
     // check. `output()` here is the async tokio variant, so the timeout

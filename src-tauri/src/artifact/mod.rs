@@ -380,9 +380,9 @@ async fn sign_gpg_detached(
 
     let output = timeout(
         Duration::from_secs(10 * 60),
-        crate::process_utils::new_tokio_command("gpg")
-            .args(&args)
-            .output(),
+        crate::process_utils::capture_child_output_bounded(
+            crate::process_utils::new_tokio_command("gpg").args(&args),
+        ),
     )
     .await
     .map_err(|_| ArtifactError::SignTimeout)?

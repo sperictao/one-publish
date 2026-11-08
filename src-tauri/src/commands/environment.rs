@@ -46,9 +46,9 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
             log::info!("Applying fix via command: {} {}", program, args.join(" "));
             let output = timeout(
                 Duration::from_secs(10 * 60),
-                crate::process_utils::new_tokio_command(&resolved_program)
-                    .args(&args)
-                    .output(),
+                crate::process_utils::capture_child_output_bounded(
+                    crate::process_utils::new_tokio_command(&resolved_program).args(&args),
+                ),
             )
             .await
             .map_err(|_| {

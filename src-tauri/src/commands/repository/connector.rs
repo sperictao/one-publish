@@ -128,14 +128,15 @@ pub async fn check_repository_branch_connectivity(
             .unwrap_or_default();
 
         if branch_name.is_empty() {
-            let head_output = match crate::process_utils::new_tokio_command("git")
-                .arg("-C")
-                .arg(&path)
-                .arg("rev-parse")
-                .arg("--abbrev-ref")
-                .arg("HEAD")
-                .output()
-                .await
+            let head_output = match crate::process_utils::capture_child_output_bounded(
+                crate::process_utils::new_tokio_command("git")
+                    .arg("-C")
+                    .arg(&path)
+                    .arg("rev-parse")
+                    .arg("--abbrev-ref")
+                    .arg("HEAD"),
+            )
+            .await
             {
                 Ok(output) if output.status.success() => output,
                 _ => return RepositoryBranchConnectivityResult { can_connect: false },
@@ -150,15 +151,16 @@ pub async fn check_repository_branch_connectivity(
             return RepositoryBranchConnectivityResult { can_connect: false };
         }
 
-        let upstream_output = match crate::process_utils::new_tokio_command("git")
-            .arg("-C")
-            .arg(&path)
-            .arg("rev-parse")
-            .arg("--abbrev-ref")
-            .arg("--symbolic-full-name")
-            .arg(format!("{}@{{upstream}}", branch_name))
-            .output()
-            .await
+        let upstream_output = match crate::process_utils::capture_child_output_bounded(
+            crate::process_utils::new_tokio_command("git")
+                .arg("-C")
+                .arg(&path)
+                .arg("rev-parse")
+                .arg("--abbrev-ref")
+                .arg("--symbolic-full-name")
+                .arg(format!("{}@{{upstream}}", branch_name)),
+        )
+        .await
         {
             Ok(output) if output.status.success() => output,
             _ => return RepositoryBranchConnectivityResult { can_connect: false },
@@ -178,15 +180,16 @@ pub async fn check_repository_branch_connectivity(
         let remote_branch_ref = format!("refs/heads/{}", remote_branch);
         let ls_remote_output = match timeout(
             Duration::from_secs(5),
-            crate::process_utils::new_tokio_command("git")
-                .arg("-C")
-                .arg(&path)
-                .arg("ls-remote")
-                .arg("--exit-code")
-                .arg("--heads")
-                .arg(remote)
-                .arg(&remote_branch_ref)
-                .output(),
+            crate::process_utils::capture_child_output_bounded(
+                crate::process_utils::new_tokio_command("git")
+                    .arg("-C")
+                    .arg(&path)
+                    .arg("ls-remote")
+                    .arg("--exit-code")
+                    .arg("--heads")
+                    .arg(remote)
+                    .arg(&remote_branch_ref),
+            ),
         )
         .await
         {
@@ -229,11 +232,12 @@ async fn scan_repository_branches_internal(
 
     let remote_output = timeout(
         Duration::from_secs(5),
-        crate::process_utils::new_tokio_command("git")
-            .arg("-C")
-            .arg(&path)
-            .arg("remote")
-            .output(),
+        crate::process_utils::capture_child_output_bounded(
+            crate::process_utils::new_tokio_command("git")
+                .arg("-C")
+                .arg(&path)
+                .arg("remote"),
+        ),
     )
     .await
     .map_err(|_| repository_error("git remote timed out after 5s", "timeout"))?
@@ -250,13 +254,14 @@ async fn scan_repository_branches_internal(
     if refresh_remote && has_remote {
         let fetch_output = timeout(
             Duration::from_secs(5),
-            crate::process_utils::new_tokio_command("git")
-                .arg("-C")
-                .arg(&path)
-                .arg("fetch")
-                .arg("--all")
-                .arg("--prune")
-                .output(),
+            crate::process_utils::capture_child_output_bounded(
+                crate::process_utils::new_tokio_command("git")
+                    .arg("-C")
+                    .arg(&path)
+                    .arg("fetch")
+                    .arg("--all")
+                    .arg("--prune"),
+            ),
         )
         .await
         .map_err(|_| repository_error("git fetch timed out after 5s", "timeout"))?
@@ -269,13 +274,14 @@ async fn scan_repository_branches_internal(
 
     let output = timeout(
         Duration::from_secs(5),
-        crate::process_utils::new_tokio_command("git")
-            .arg("-C")
-            .arg(&path)
-            .arg("branch")
-            .arg("--list")
-            .arg("--no-color")
-            .output(),
+        crate::process_utils::capture_child_output_bounded(
+            crate::process_utils::new_tokio_command("git")
+                .arg("-C")
+                .arg(&path)
+                .arg("branch")
+                .arg("--list")
+                .arg("--no-color"),
+        ),
     )
     .await
     .map_err(|_| repository_error("git branch timed out after 5s", "timeout"))?
@@ -326,13 +332,14 @@ async fn scan_repository_branches_internal(
     if current_branch.is_empty() {
         let head_output = timeout(
             Duration::from_secs(5),
-            crate::process_utils::new_tokio_command("git")
-                .arg("-C")
-                .arg(&path)
-                .arg("rev-parse")
-                .arg("--abbrev-ref")
-                .arg("HEAD")
-                .output(),
+            crate::process_utils::capture_child_output_bounded(
+                crate::process_utils::new_tokio_command("git")
+                    .arg("-C")
+                    .arg(&path)
+                    .arg("rev-parse")
+                    .arg("--abbrev-ref")
+                    .arg("HEAD"),
+            ),
         )
         .await
         .map_err(|_| repository_error("git rev-parse timed out after 5s", "timeout"))?

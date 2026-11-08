@@ -104,6 +104,59 @@ pub(crate) fn wait_child_with_timeout(
     })
 }
 
+/// tokio 版 `.output()` 的有界等价：spawn 后 stdout/stderr 各起一个读取任务
+/// 截断 drain（同 wait_child_with_timeout 的上限与「超限读到 EOF 丢弃」语义），
+/// 与 wait 并行推进，避免无界缓冲。
+///
+/// 超时不属于本函数职责——调用方用 tokio::time::timeout 包住返回的 future：
+/// new_tokio_command 的 kill_on_drop 保证丢弃 future 时回收子进程，读取任务
+/// 在管道 EOF 后自行结束，不会泄漏。
+pub async fn capture_child_output_bounded(
+    command: &mut TokioCommand,
+) -> std::io::Result<std::process::Output> {
+    use tokio::io::AsyncReadExt;
+
+    fn drain_pipe(
+        pipe: Option<impl tokio::io::AsyncRead + Unpin + Send + 'static>,
+    ) -> tokio::task::JoinHandle<Vec<u8>> {
+        tokio::spawn(async move {
+            let mut buf = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let kept = (&mut pipe)
+                    .take(MAX_CHILD_OUTPUT_BYTES)
+                    .read_to_end(&mut buf)
+                    .await;
+                if kept.is_ok() {
+                    // 余量读到 EOF 丢弃；返回值非零说明发生了截断。
+                    match tokio::io::copy(&mut pipe, &mut tokio::io::sink()).await {
+                        Ok(discarded) if discarded > 0 => {
+                            log::warn!(
+                                "child process output truncated at {MAX_CHILD_OUTPUT_BYTES} bytes ({discarded} bytes discarded)"
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            buf
+        })
+    }
+
+    let mut child = command
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    let stdout = drain_pipe(child.stdout.take());
+    let stderr = drain_pipe(child.stderr.take());
+    let status = child.wait().await?;
+
+    Ok(std::process::Output {
+        status,
+        stdout: stdout.await.unwrap_or_default(),
+        stderr: stderr.await.unwrap_or_default(),
+    })
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -168,6 +221,31 @@ mod tests {
             Duration::from_secs(30),
         )
         .expect("oversized output");
+
+        assert!(output.status.success());
+        assert_eq!(output.stdout.len() as u64, MAX_CHILD_OUTPUT_BYTES);
+    }
+
+    #[tokio::test]
+    async fn bounded_capture_collects_output_and_status() {
+        let mut command = new_tokio_command("sh");
+        command.arg("-c").arg("printf out; printf err >&2; exit 3");
+        let output = capture_child_output_bounded(&mut command)
+            .await
+            .expect("bounded capture");
+
+        assert_eq!(output.status.code(), Some(3));
+        assert_eq!(output.stdout, b"out");
+        assert_eq!(output.stderr, b"err");
+    }
+
+    #[tokio::test]
+    async fn bounded_capture_truncates_but_drains_oversized_output() {
+        let mut command = new_tokio_command("sh");
+        command.arg("-c").arg("head -c 33554433 /dev/zero");
+        let output = capture_child_output_bounded(&mut command)
+            .await
+            .expect("oversized capture");
 
         assert!(output.status.success());
         assert_eq!(output.stdout.len() as u64, MAX_CHILD_OUTPUT_BYTES);
