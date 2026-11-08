@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { EditRepositoryDialog } from "@/components/layout/EditRepositoryDialog";
 import type {
   Branch,
@@ -53,10 +60,23 @@ function createRepositoryWithoutBinding(): Repository {
 
 function renderDialog(overrides?: {
   onScanProjectCandidates?: ScanCandidatesFn;
+  onDetectProvider?: (
+    path: string,
+    options?: { silentSuccess?: boolean; silentFailure?: boolean }
+  ) => Promise<string | null>;
+  onRefreshBranches?: (
+    path: string,
+    options?: { silentSuccess?: boolean }
+  ) => Promise<{ branches: Branch[]; currentBranch: string } | null>;
 }) {
   const onScanProjectCandidates: ScanCandidatesFn =
     overrides?.onScanProjectCandidates ??
     (vi.fn().mockResolvedValue(GAMMA_CANDIDATES) as ScanCandidatesFn);
+  const onDetectProvider =
+    overrides?.onDetectProvider ?? vi.fn().mockResolvedValue("dotnet");
+  const onRefreshBranches =
+    overrides?.onRefreshBranches ??
+    vi.fn().mockResolvedValue({ branches: BRANCHES, currentBranch: "main" });
 
   render(
     <EditRepositoryDialog
@@ -72,15 +92,13 @@ function renderDialog(overrides?: {
       repoT={{}}
       onOpenChange={vi.fn()}
       onEditRepo={vi.fn().mockResolvedValue(true)}
-      onDetectProvider={vi.fn().mockResolvedValue("dotnet")}
+      onDetectProvider={onDetectProvider}
       onScanProjectCandidates={onScanProjectCandidates}
-      onRefreshBranches={vi
-        .fn()
-        .mockResolvedValue({ branches: BRANCHES, currentBranch: "main" })}
+      onRefreshBranches={onRefreshBranches}
     />
   );
 
-  return { onScanProjectCandidates };
+  return { onScanProjectCandidates, onDetectProvider, onRefreshBranches };
 }
 
 describe("EditRepositoryDialog 初始焦点", () => {
@@ -133,5 +151,97 @@ describe("EditRepositoryDialog 自动绑定推荐项目文件", () => {
     expect(
       screen.queryByText("先选择一个 Project File。")
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("EditRepositoryDialog 路径变化作废在途手动操作", () => {
+  it("路径变化后迟到的 Provider 检测结果不回填表单", async () => {
+    const resolvers: Array<(value: string | null) => void> = [];
+    const onDetectProvider = vi.fn().mockImplementation(
+      () =>
+        new Promise<string | null>((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+    renderDialog({ onDetectProvider });
+
+    // 打开时无 Provider 会自动触发一次检测；返回 null 保持未设置。
+    await waitFor(() => {
+      expect(onDetectProvider).toHaveBeenCalledTimes(1);
+    });
+    await act(async () => {
+      resolvers[0](null);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "自动检测 Provider" }));
+    await waitFor(() => {
+      expect(onDetectProvider).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.change(screen.getByLabelText("Project Root"), {
+      target: { value: "/workspace/moved-elsewhere" },
+    });
+    await act(async () => {
+      resolvers[1]("dotnet");
+    });
+
+    expect(screen.getByLabelText("Provider")).toHaveTextContent("未设置");
+    expect(
+      screen.getByRole("button", { name: "自动检测 Provider" })
+    ).not.toBeDisabled();
+  });
+
+  it("路径变化后迟到的分支刷新结果不回填表单", async () => {
+    const resolvers: Array<
+      (value: { branches: Branch[]; currentBranch: string } | null) => void
+    > = [];
+    const onRefreshBranches = vi.fn().mockImplementation(
+      () =>
+        new Promise<{ branches: Branch[]; currentBranch: string } | null>(
+          (resolve) => {
+            resolvers.push(resolve);
+          }
+        )
+    );
+    renderDialog({ onRefreshBranches });
+
+    // 打开时的自动分支刷新先落定（占用 resolvers[0]），手动刷新成为第二次调用。
+    await waitFor(() => {
+      expect(onRefreshBranches).toHaveBeenCalledTimes(1);
+    });
+    await act(async () => {
+      resolvers[0]({ branches: BRANCHES, currentBranch: "main" });
+    });
+
+    const refreshButton = screen.getByRole("button", { name: "刷新分支" });
+    await waitFor(() => {
+      expect(refreshButton).not.toBeDisabled();
+    });
+
+    fireEvent.click(refreshButton);
+    await waitFor(() => {
+      expect(onRefreshBranches).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.change(screen.getByLabelText("Project Root"), {
+      target: { value: "/workspace/moved-elsewhere" },
+    });
+    await act(async () => {
+      resolvers[1]({
+        branches: [
+          {
+            name: "dev",
+            isMain: false,
+            isCurrent: true,
+            path: "/workspace/moved-elsewhere",
+            commitCount: 0,
+          },
+        ],
+        currentBranch: "dev",
+      });
+    });
+
+    expect(screen.getByLabelText("当前分支")).toHaveTextContent("main");
+    expect(screen.getByRole("button", { name: "刷新分支" })).not.toBeDisabled();
   });
 });
