@@ -504,7 +504,8 @@ export async function handleEditRepoRuntime(params: {
   translations: InvokeErrorTranslations;
   repo: Repository;
   repositories: Repository[];
-  selectedRepoId: string | null;
+  /** 断言目标仓库仍是当前选中——在应用副作用时实时求值，不用调用时快照。 */
+  isSelectedRepo: (repoId: string) => boolean;
   applySelectedRepositoryProvider: (providerId?: string | null) => void;
   updateRepository: (repo: Repository) => Promise<unknown>;
 }) {
@@ -513,7 +514,7 @@ export async function handleEditRepoRuntime(params: {
     translations,
     repo,
     repositories,
-    selectedRepoId,
+    isSelectedRepo,
     applySelectedRepositoryProvider,
     updateRepository,
   } = params;
@@ -552,7 +553,7 @@ export async function handleEditRepoRuntime(params: {
   try {
     await updateRepository(normalizedRepo);
 
-    if (selectedRepoId === repo.id && nextProviderId) {
+    if (isSelectedRepo(repo.id) && nextProviderId) {
       applySelectedRepositoryProvider(nextProviderId);
     }
 

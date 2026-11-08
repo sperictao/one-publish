@@ -49,6 +49,16 @@ export function useRepositoryActions({
   useEffect(() => {
     translationsRef.current = translations;
   }, [translations]);
+  // 编辑保存跨越多个 await：快照值会让迟到回调把 Provider 应用到
+  // 用户已离开的选择，断言必须在应用时读取实时选择。
+  const selectedRepoIdRef = useRef(selectedRepoId);
+  useEffect(() => {
+    selectedRepoIdRef.current = selectedRepoId;
+  }, [selectedRepoId]);
+  const isSelectedRepo = useCallback(
+    (repoId: string) => selectedRepoIdRef.current === repoId,
+    []
+  );
   // 添加流程是「选目录 → 检测 → 扫描分支 → 写库」的长链路，
   // 期间必须让入口可见地进入进行中状态，并禁止并发触发第二次目录选择。
   const [isAddingRepo, setIsAddingRepo] = useState(false);
@@ -111,7 +121,7 @@ export function useRepositoryActions({
         translations: translationsRef.current,
         repo,
         repositories,
-        selectedRepoId,
+        isSelectedRepo,
         applySelectedRepositoryProvider,
         updateRepository,
       });
@@ -119,7 +129,7 @@ export function useRepositoryActions({
     [
       appT,
       repositories,
-      selectedRepoId,
+      isSelectedRepo,
       applySelectedRepositoryProvider,
       updateRepository,
     ]

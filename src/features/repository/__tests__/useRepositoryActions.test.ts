@@ -127,7 +127,7 @@ describe("delegated handlers", () => {
     expect(runtimeMocks.handleEditRepoRuntime).toHaveBeenCalledWith(
       expect.objectContaining({
         repo: target,
-        selectedRepoId: "a",
+        isSelectedRepo: expect.any(Function),
       })
     );
 

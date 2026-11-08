@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
@@ -46,6 +46,14 @@ export function CommandImportDialog({
   const [error, setError] = useState<string | null>(null);
   const { translations } = useI18n();
   const commandT = translations.commandImport || {};
+  // 对话框随 open 卸载：迟到的解析结果/toast 不得落回已关闭的会话。
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const commandExample = resolveProviderCommandExample(provider);
   const providerLabel = resolveProviderLabel(provider, providerId);
@@ -67,16 +75,20 @@ export function CommandImportDialog({
         providerId,
         projectPath,
       });
+      if (!mountedRef.current) return;
       setParsedResult(result);
       toast.success(commandT.parseSuccess || "参数已导入");
     } catch (err) {
+      if (!mountedRef.current) return;
       const errorMsg = localizeInvokeError(err, translations);
       setError(errorMsg);
       toast.error(commandT.parseFailed || "解析失败", {
         description: errorMsg,
       });
     } finally {
-      setIsParsing(false);
+      if (mountedRef.current) {
+        setIsParsing(false);
+      }
     }
   };
 

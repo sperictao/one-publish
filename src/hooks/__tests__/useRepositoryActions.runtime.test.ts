@@ -462,7 +462,7 @@ describe("handleAddRepoRuntime", () => {
     await runAddRepo();
 
     const [, errorOptions] = mocks.toastError.mock.calls[0];
-    expect(errorOptions.description).toBe("failed to persist state");
+    expect(errorOptions.description).toBe("failed to persist state | kind: io");
   });
 
   it("前端预检拦截重复目录（尾部分隔符写法不同），不调用后端", async () => {
@@ -904,7 +904,7 @@ describe("invoke 失败按界面语言本地化 toast 描述", () => {
       translations: en,
       repo,
       repositories: [repo],
-      selectedRepoId: null,
+      isSelectedRepo: () => false,
       applySelectedRepositoryProvider: vi.fn(),
       updateRepository,
     });
@@ -936,7 +936,7 @@ describe("invoke 失败按界面语言本地化 toast 描述", () => {
     expect(mocks.toastError).toHaveBeenCalledWith(
       "Failed to remove repository",
       {
-        description: "未知存储错误 | EIO",
+        description: "未知存储错误 | EIO | kind: store",
       }
     );
   });
@@ -998,7 +998,7 @@ describe("handleEditRepoRuntime", () => {
     translations: en,
     repo: existingRepo(),
     repositories: [existingRepo()],
-    selectedRepoId: null as string | null,
+    isSelectedRepo: vi.fn().mockReturnValue(false),
     applySelectedRepositoryProvider: vi.fn(),
     updateRepository: vi.fn().mockResolvedValue(undefined),
   });
@@ -1036,7 +1036,7 @@ describe("handleEditRepoRuntime", () => {
       providerId: " dotnet ",
     });
     params.repositories = [existingRepo()];
-    params.selectedRepoId = "repo-existing";
+    params.isSelectedRepo.mockReturnValue(true);
 
     const result = await handleEditRepoRuntime(params);
 

@@ -19,7 +19,7 @@ import {
   Layers3,
   Sparkles,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   open as openDialog,
   save as saveDialog,
@@ -241,6 +241,14 @@ export function ConfigManagementContent({
     void onRefreshProfiles();
   }, [active, onRefreshProfiles]);
 
+  // 对话框随 open 卸载：迟到的异步结果/toast 不得落回已关闭的会话。
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const handleSaveProfile = async () => {
     if (!repoId) return;
     if (!newProfileName.trim()) {
@@ -255,14 +263,18 @@ export function ConfigManagementContent({
         providerId: currentProviderId,
         parameters: currentParameters,
       });
+      if (!mountedRef.current) return;
       toast.success(profileT.saveSuccess || "配置已保存");
       setNewProfileName("");
     } catch (err) {
+      if (!mountedRef.current) return;
       toast.error(profileT.saveFailed || "保存配置文件失败", {
         description: localizeInvokeError(err, translations),
       });
     } finally {
-      setIsSaving(false);
+      if (mountedRef.current) {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -275,8 +287,10 @@ export function ConfigManagementContent({
 
     try {
       await onDeleteProfile(profile);
+      if (!mountedRef.current) return;
       toast.success(profileT.deleteSuccess || "配置已删除");
     } catch (err) {
+      if (!mountedRef.current) return;
       toast.error(profileT.deleteFailed || "删除配置文件失败", {
         description: localizeInvokeError(err, translations),
       });
@@ -305,11 +319,13 @@ export function ConfigManagementContent({
       if (filePath) {
         // 后端可能补齐 `.json` 扩展名，提示实际写入的路径。
         const exportedPath = await onExportProfiles(filePath);
+        if (!mountedRef.current) return;
         toast.success(profileT.exportSuccess || "配置已导出", {
           description: exportedPath,
         });
       }
     } catch (err) {
+      if (!mountedRef.current) return;
       toast.error(profileT.exportFailed || "导出配置失败", {
         description: localizeInvokeError(err, translations),
       });
@@ -336,6 +352,7 @@ export function ConfigManagementContent({
         conflictStrategy
       );
       const description = formatImportSummary(summary, profileT);
+      if (!mountedRef.current) return;
       if (summary.imported + summary.overwritten + summary.renamed > 0) {
         toast.success(profileT.importSuccess || "配置已导入", { description });
       } else {
@@ -345,11 +362,14 @@ export function ConfigManagementContent({
       }
       setPendingImport(null);
     } catch (err) {
+      if (!mountedRef.current) return;
       toast.error(profileT.importFailed || "导入配置失败", {
         description: localizeInvokeError(err, translations),
       });
     } finally {
-      setIsApplyingImport(false);
+      if (mountedRef.current) {
+        setIsApplyingImport(false);
+      }
     }
   }, [
     conflictStrategy,
@@ -376,19 +396,24 @@ export function ConfigManagementContent({
         setIsImportLoading(true);
         try {
           const config = await importConfig(filePath as string);
+          if (!mountedRef.current) return;
           setConflictStrategy("skip");
           setPendingImport({
             profiles: config.profiles,
           });
         } catch (err) {
+          if (!mountedRef.current) return;
           toast.error(profileT.importFailed || "导入配置失败", {
             description: localizeInvokeError(err, translations),
           });
         } finally {
-          setIsImportLoading(false);
+          if (mountedRef.current) {
+            setIsImportLoading(false);
+          }
         }
       }
     } catch (err) {
+      if (!mountedRef.current) return;
       toast.error(profileT.importFailed || "导入配置失败", {
         description: localizeInvokeError(err, translations),
       });

@@ -1,6 +1,7 @@
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -59,6 +60,14 @@ export const ProjectProfileViewer = forwardRef<
     profileName: null,
   });
   const latestRequestId = useRef(0);
+
+  // 作用域变化（项目文件/框架选项）或卸载时作废在途解析：迟到的响应
+  // 属于旧作用域，不得把别的仓库的发布配置落回 viewer。
+  useEffect(() => {
+    return () => {
+      latestRequestId.current += 1;
+    };
+  }, [projectFilePath, projectFrameworkOptions]);
 
   const handleViewProjectProfile = useCallback(
     async (profileName: string) => {

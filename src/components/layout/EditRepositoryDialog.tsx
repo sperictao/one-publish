@@ -165,6 +165,8 @@ function EditRepositoryDialogContent({
   );
   const editProjectFileRef = useRef(repository.projectFile || "");
   const projectScanRequestIdRef = useRef(0);
+  const detectProviderRequestIdRef = useRef(0);
+  const refreshBranchesRequestIdRef = useRef(0);
   const shouldAutoDetectProviderRef = useRef(!initialProviderId);
   const shouldAutoRefreshBranchesRef = useRef(true);
   const invalidateProjectScanRequest = useCallback(() => {
@@ -316,6 +318,16 @@ function EditRepositoryDialogContent({
   }, [editPath, invalidateProjectScanRequest, runProjectCandidateScan]);
 
   useEffect(() => {
+    // 路径变化作废手动触发的探测/刷新：其结果与 running 指示都属于旧
+    // 路径，迟到的响应不得落回新路径的表单。
+    detectProviderRequestIdRef.current += 1;
+    refreshBranchesRequestIdRef.current += 1;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsDetectingProvider(false);
+    setIsRefreshingBranches(false);
+  }, [editPath]);
+
+  useEffect(() => {
     if (!shouldAutoDetectProviderRef.current) {
       return;
     }
@@ -407,16 +419,22 @@ function EditRepositoryDialogContent({
 
   const handleDetectProvider = useCallback(async () => {
     const detectPath = editPath.trim();
+    const requestId = ++detectProviderRequestIdRef.current;
 
     shouldAutoDetectProviderRef.current = false;
     setIsDetectingProvider(true);
     try {
       const providerId = await onDetectProvider(detectPath);
+      if (detectProviderRequestIdRef.current !== requestId) {
+        return;
+      }
       if (providerId) {
         setEditProviderId(providerId);
       }
     } finally {
-      setIsDetectingProvider(false);
+      if (detectProviderRequestIdRef.current === requestId) {
+        setIsDetectingProvider(false);
+      }
     }
   }, [editPath, onDetectProvider]);
 
@@ -431,13 +449,14 @@ function EditRepositoryDialogContent({
 
   const handleRefreshBranches = useCallback(async () => {
     const refreshPath = editPath.trim();
+    const requestId = ++refreshBranchesRequestIdRef.current;
 
     shouldAutoRefreshBranchesRef.current = false;
     setIsRefreshingBranches(true);
     try {
       const refreshed = await onRefreshBranches(refreshPath);
 
-      if (!refreshed) {
+      if (refreshBranchesRequestIdRef.current !== requestId || !refreshed) {
         return;
       }
 
@@ -451,7 +470,9 @@ function EditRepositoryDialogContent({
       setEditBranches(refreshed.branches);
       setEditCurrentBranch(nextCurrentBranch);
     } finally {
-      setIsRefreshingBranches(false);
+      if (refreshBranchesRequestIdRef.current === requestId) {
+        setIsRefreshingBranches(false);
+      }
     }
   }, [
     editCurrentBranch,
