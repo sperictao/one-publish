@@ -143,6 +143,12 @@ describe("paths", () => {
     expect(joinPath("C:\\repo", "out")).toBe("C:\\repo\\out");
   });
 
+  it("joinPath 跟随基路径的分隔符写法，不产出混合分隔符", () => {
+    expect(joinPath("C:/repo", "out")).toBe("C:/repo/out");
+    expect(joinPath("C:\\repo", "out", "bin")).toBe("C:\\repo\\out\\bin");
+    expect(joinPath("//nas01/share", "pkg")).toBe("//nas01/share/pkg");
+  });
+
   it("appendExtensionToPath 对无点扩展名、空基名与根路径给出兜底", () => {
     expect(appendExtensionToPath("/repo/out", "zip")).toBe("/repo/out.zip");
     expect(appendExtensionToPath("", ".md")).toBe("artifact.md");

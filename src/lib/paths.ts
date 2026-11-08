@@ -132,8 +132,9 @@ export function getPathRelativeToRoot(path: string, root: string): string {
     return path;
   }
 
-  const separator =
-    isWindowsLikePath(path) || isWindowsLikePath(root) ? "\\" : "/";
+  // 与 joinPath 一致：分隔符跟随输入写法，`C:/repo` 下的相对路径
+  // 用 `/` 而非 `\`，避免产出与输入风格不一致的混合分隔符。
+  const separator = path.includes("\\") || root.includes("\\") ? "\\" : "/";
   return (
     pathSegments.slice(rootSegments.length).join(separator) ||
     getPathBasename(path)
@@ -163,7 +164,10 @@ export function joinPath(...parts: string[]): string {
       continue;
     }
 
-    result = `${result}${isWindowsLikePath(result) ? "\\" : "/"}${part}`;
+    // 分隔符跟随 result 自己的写法：含 `\` 的 Windows 路径继续用 `\`，
+    // 正斜杠写法（含 `C:/repo` 这类 Windows 盘符路径）继续用 `/`——
+    // 否则 `C:/repo` + `out` 会产出 `C:/repo\out` 混合分隔符。
+    result = `${result}${result.includes("\\") ? "\\" : "/"}${part}`;
   }
 
   return result;
