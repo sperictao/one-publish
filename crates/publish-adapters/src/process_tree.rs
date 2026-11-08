@@ -65,11 +65,18 @@ pub fn wait_or_cancel(
     Ok((child.wait()?, true))
 }
 
+/// 单条管道保留输出的上限；与 GUI 侧 MAX_CHILD_OUTPUT_BYTES 同量级。门禁 /
+/// gh / sftp / git 等工具的输出随远端状态与任务规模放大，挂起或循环输出
+/// 的工具可在超时窗口内耗尽内存。
+pub const MAX_CHILD_OUTPUT_BYTES: u64 = 32 * 1024 * 1024;
+
 /// 有界等待已 spawn 的子进程并收集管道输出；`stdin` 载荷在独立写线程上
 /// 流式送入，与子进程 stdout/stderr 的 drain 线程并行推进——三者缺一都会
 /// 在 >64KB 管道缓冲处死锁（写方堵 stdin、读方堵 wait、子进程堵 stdout）。
 /// 超时 kill+wait 回收子进程并返回 `Ok(None)`；drain/写线程不 join——孙
 /// 进程可能继续持有管道写端，detach 让其在 EOF 后自行退出。
+/// 保留字节按 MAX_CHILD_OUTPUT_BYTES 封顶：超限后仍读到 EOF 丢弃
+/// （不 drain 会让子进程重新堵在满管道上），调用方拿到截断前缀。
 pub fn wait_piped_with_timeout(
     mut child: Child,
     stdin: Option<Vec<u8>>,
@@ -84,7 +91,21 @@ pub fn wait_piped_with_timeout(
         thread::spawn(move || {
             let mut buf = Vec::new();
             if let Some(mut pipe) = pipe {
-                let _ = pipe.read_to_end(&mut buf);
+                if pipe
+                    .by_ref()
+                    .take(MAX_CHILD_OUTPUT_BYTES)
+                    .read_to_end(&mut buf)
+                    .is_ok()
+                {
+                    // 余量读到 EOF 丢弃；返回值非零说明发生了截断。
+                    if let Ok(discarded) = io::copy(&mut pipe, &mut io::sink()) {
+                        if discarded > 0 {
+                            eprintln!(
+                                "child process output truncated at {MAX_CHILD_OUTPUT_BYTES} bytes ({discarded} bytes discarded)"
+                            );
+                        }
+                    }
+                }
             }
             buf
         })
@@ -193,6 +214,19 @@ mod wait_piped_tests {
         .expect("io")
         .expect("completed");
         assert_eq!(output.stdout.len(), 200_000);
+    }
+
+    #[test]
+    fn truncates_oversized_stdout_but_drains_to_eof() {
+        let output = wait_piped_with_timeout(
+            sh("head -c 33554433 /dev/zero"),
+            None,
+            Duration::from_secs(30),
+        )
+        .expect("io")
+        .expect("completed");
+        assert!(output.status.success());
+        assert_eq!(output.stdout.len() as u64, MAX_CHILD_OUTPUT_BYTES);
     }
 
     #[test]
