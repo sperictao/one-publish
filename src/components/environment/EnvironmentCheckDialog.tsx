@@ -130,6 +130,18 @@ export function EnvironmentCheckContent({
   const [lastFixResult, setLastFixResult] = useState<FixResult | null>(null);
   const [prevActive, setPrevActive] = useState(active);
   const activeRef = useRef(active);
+  // 组件卸载活跃标记：Radix 在关闭时卸载 dialog 内容，activeRef 永远停在
+  // true——没有它，在途检查的僵尸闭包仍会把结果回调给父级。
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  // 单调递增的检查世代号：关闭/重开与切换 provider 都会让在途检查过期，
+  // 过期响应不得落地结果、错误或清除新一代的 checking 指示。
+  const checkEpochRef = useRef(0);
 
   useEffect(() => {
     activeRef.current = active;
@@ -144,6 +156,7 @@ export function EnvironmentCheckContent({
       setLastFixResult(null);
       setPendingRun(null);
       setRunningFix(false);
+      setChecking(false);
     }
   }
 
@@ -187,31 +200,48 @@ export function EnvironmentCheckContent({
   ]);
 
   const handleCheck = async () => {
+    const epoch = ++checkEpochRef.current;
     setChecking(true);
     setError(null);
     try {
       const res = await runEnvironmentCheck(selectedProviderIds);
-      // 对话框已关闭的检查不再落地结果，也不回调父级——
+      // 已卸载/已关闭/已过期的检查不再落地结果，也不回调父级——
       // 避免把用户已放弃的检查快照推给上层。
-      if (!activeRef.current) return;
+      if (
+        !mountedRef.current ||
+        !activeRef.current ||
+        epoch !== checkEpochRef.current
+      )
+        return;
       const snapshot = createEnvironmentCheckSnapshot(res, selectedProviderIds);
       setResult(snapshot.result);
       onChecked?.(snapshot);
     } catch (err) {
-      // 与成功路径一致：已关闭的检查不报失败 toast，避免为用户
+      // 与成功路径一致：已卸载/已过期的检查不报失败 toast，避免为用户
       // 已放弃的检查弹出错误。
-      if (!activeRef.current) return;
+      if (
+        !mountedRef.current ||
+        !activeRef.current ||
+        epoch !== checkEpochRef.current
+      )
+        return;
       const msg = localizeInvokeError(err, translations);
       setError(msg);
       toast.error(translations.environment?.checkFailed || "环境检查失败", {
         description: msg,
       });
     } finally {
-      setChecking(false);
+      // 过期检查不得清掉新一代检查的 running 指示。
+      if (epoch === checkEpochRef.current) {
+        setChecking(false);
+      }
     }
   };
 
   useEffect(() => {
+    // 每次 active 变化（关/开）都先作废在途检查：迟到的响应不得落回
+    // 重开后的新会话。
+    checkEpochRef.current += 1;
     if (!active) return;
     if (result) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -220,6 +250,9 @@ export function EnvironmentCheckContent({
   }, [active]);
 
   const toggleProvider = (id: string, enabled: boolean) => {
+    // provider 选择变化让在途检查过期：其结果属于旧的选择集合。
+    checkEpochRef.current += 1;
+    setChecking(false);
     const nextSet = new Set(selectedProviderIds);
     if (enabled) nextSet.add(id);
     else nextSet.delete(id);
