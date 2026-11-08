@@ -242,8 +242,11 @@ export function ConfigManagementContent({
   }, [active, onRefreshProfiles]);
 
   // 对话框随 open 卸载：迟到的异步结果/toast 不得落回已关闭的会话。
-  const mountedRef = useRef(true);
+  // StrictMode 下 effect 会卸载-重挂：标志位必须在 effect 体内复位，
+  // 否则 cleanup 后永久停留在 false，所有异步反馈被静默吞掉。
+  const mountedRef = useRef(false);
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };

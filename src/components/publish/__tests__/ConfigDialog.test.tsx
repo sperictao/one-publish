@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
 import {
   act,
   fireEvent,
@@ -275,6 +276,38 @@ describe("ConfigManagementContent", () => {
 
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
     expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("StrictMode 挂载周期下保存成功仍弹出反馈（mountedRef 在 effect 体内复位）", async () => {
+    render(
+      <StrictMode>
+        <ConfigManagementContent
+          active
+          profiles={[]}
+          isProfilesRefreshing={false}
+          onRefreshProfiles={mocks.refreshProfiles}
+          onSaveProfile={mocks.saveProfile}
+          onDeleteProfile={mocks.deleteProfile}
+          onExportProfiles={mocks.exportProfiles}
+          onApplyImportedProfiles={mocks.applyImportedProfiles}
+          onLoadProfile={vi.fn(() => true)}
+          currentProviderId="dotnet"
+          repositoryProviderId="dotnet"
+          repoId="repo-1"
+          currentParameters={{}}
+          closeOnLoad={false}
+        />
+      </StrictMode>
+    );
+
+    fireEvent.change(screen.getByLabelText("输入配置文件名称"), {
+      target: { value: "Release" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+
+    await waitFor(() => {
+      expect(mocks.toastSuccess).toHaveBeenCalledWith("配置已保存");
+    });
   });
 
   it("对话框关闭后迟到的导入应用结果不再弹 toast 或清空状态", async () => {
