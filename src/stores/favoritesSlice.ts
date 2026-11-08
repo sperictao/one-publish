@@ -9,12 +9,6 @@ export interface FavoritesSlice {
 
   /** 切换收藏配置 */
   toggleFavoriteConfig: (key: string, repoId?: string | null) => void;
-  /** 替换作用域内的配置 key（用于重命名等场景） */
-  replaceScopedConfigKey: (
-    previousKey: string,
-    nextKey: string,
-    repoId?: string | null
-  ) => void;
 }
 
 export const createFavoritesSlice: StateCreator<
@@ -47,24 +41,6 @@ export const createFavoritesSlice: StateCreator<
       if (!isFavorite) {
         get().pushRecentPublishConfig(key, id);
       }
-    },
-
-    replaceScopedConfigKey: (previousKey, nextKey, repoId) => {
-      const { selectedRepoId, favoriteConfigKeysByRepo } = get();
-      const id = resolveScopedMutationRepoId(selectedRepoId, repoId);
-      if (!id || !previousKey || !nextKey) return;
-
-      get().replaceRecentPublishConfigKey(previousKey, nextKey, id);
-
-      const scoped = favoriteConfigKeysByRepo[id] ?? [];
-      if (!scoped.includes(previousKey)) return;
-
-      const nextScoped = Array.from(
-        new Set(scoped.map((item) => (item === previousKey ? nextKey : item)))
-      );
-      const next = { ...favoriteConfigKeysByRepo, [id]: nextScoped };
-      persistFavorites(next);
-      set({ favoriteConfigKeysByRepo: next });
     },
   };
 };

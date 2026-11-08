@@ -6,7 +6,6 @@ import {
   updatePublishEditState as apiUpdatePublishEditState,
   pushRecentPublishConfig as apiPushRecentPublishConfig,
   removeRecentPublishConfig as apiRemoveRecentPublishConfig,
-  replaceRecentPublishConfigKey as apiReplaceRecentPublishConfigKey,
   reorderRecentPublishConfigs as apiReorderRecentPublishConfigs,
 } from "@/lib/store/api";
 import {
@@ -31,12 +30,6 @@ export interface PublishStateSlice {
   /** 移除最近使用的发布配置 */
   removeRecentPublishConfig: (
     configKey: string,
-    repoId?: string | null
-  ) => void;
-  /** 替换最近使用发布配置的 key */
-  replaceRecentPublishConfigKey: (
-    previousKey: string,
-    nextKey: string,
     repoId?: string | null
   ) => void;
   /** 重排最近使用发布配置的顺序 */
@@ -128,20 +121,6 @@ export const createPublishStateSlice: StateCreator<
       enqueueRecentMutation(
         () => apiRemoveRecentPublishConfig({ repoId: id, configKey }),
         t("app.removeRecentPublishConfigFailed")
-      );
-    },
-
-    replaceRecentPublishConfigKey: (previousKey, nextKey, repoId) => {
-      const id = resolveScopedMutationRepoId(get().selectedRepoId, repoId);
-      if (!id || !previousKey.trim() || !nextKey.trim()) return;
-      enqueueRecentMutation(
-        () =>
-          apiReplaceRecentPublishConfigKey({
-            repoId: id,
-            previousKey,
-            nextKey,
-          }),
-        t("app.replaceRecentPublishConfigFailed")
       );
     },
 

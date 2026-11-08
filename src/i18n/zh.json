@@ -390,7 +390,6 @@
     "savePublishEditStateFailed": "保存发布配置失败",
     "recordRecentPublishConfigFailed": "记录最近使用的发布配置失败",
     "removeRecentPublishConfigFailed": "移除最近使用的发布配置失败",
-    "replaceRecentPublishConfigFailed": "更新最近使用的发布配置失败",
     "saveRecentPublishConfigOrderFailed": "保存最近使用的排序失败",
     "statusSuccess": "成功",
     "statusCancelled": "已取消",
