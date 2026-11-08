@@ -19,4 +19,20 @@ ignore = [
     # linicon 仅做只读 mmap 图标解析，不调用任何受影响 API，攻击面为零命中。
     # 复查：linicon 升级 memmap2 依赖线或 tauri 替换图标解析实现时。
     "RUSTSEC-2026-0186",
+    # RUSTSEC-2026-0370 / 0371 / 0372: zvariant(+_derive) 5.9.1 / zbus_names 4.3.1（unmaintained）
+    # 仅经 zbus 5.13 <- notify-rust -> tauri-plugin-notification 与
+    # tauri-plugin-single-instance 进入的 Linux D-Bus 传递依赖，本地零直接引用；
+    # 修复需等插件上游切换 zbus 维护线。
+    # 复查：tauri-plugin-notification / tauri-plugin-single-instance 下一次 minor 升级时。
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0371",
+    "RUSTSEC-2026-0372",
+    # RUSTSEC-2024-0370: proc-macro-error 1.0.4（unmaintained）
+    # 经 glib-macros <- glib <- gtk（Linux 托盘链）进入；proc-macro 辅助宏只在构建期
+    # 展开，不进入产物运行时。与 #435 glib 栈同链。复查：gtk-rs/glib 宏栈升级时。
+    "RUSTSEC-2024-0370",
+    # RUSTSEC-2026-0441: pin-utils 0.1.0（unmaintained）
+    # 经 futures-util <- futures-executor <- glib 进入的同一 Linux gtk 传递链，
+    # 无直接引用。复查：glib/futures 依赖线升级时。
+    "RUSTSEC-2026-0441",
 ]
