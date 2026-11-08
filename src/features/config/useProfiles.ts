@@ -7,6 +7,9 @@ import {
 } from "react";
 
 import { useProfileListState } from "@/hooks/useProfileListState";
+import { toast } from "sonner";
+import { getCurrentTranslations } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import {
   applyImportedConfig,
   deleteProfile as deleteProfileFromStore,
@@ -191,9 +194,12 @@ export function useProfiles({
         await deleteProfileById(selectedRepoId, profileId);
       } catch (err) {
         console.error("删除配置文件失败:", err);
+        toast.error(profileT.deleteFailed || "删除配置文件失败", {
+          description: localizeInvokeError(err, getCurrentTranslations()),
+        });
       }
     },
-    [deleteProfileById, selectedRepoId]
+    [deleteProfileById, profileT.deleteFailed, selectedRepoId]
   );
 
   const profileManagement = useMemo<ProfileManagementActions>(

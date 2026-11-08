@@ -85,6 +85,11 @@ vi.mock("@/features/config/useProfileSelection", () => ({
   }),
 }));
 
+const toastErrorMock = vi.hoisted(() => vi.fn());
+vi.mock("sonner", () => ({
+  toast: { error: toastErrorMock },
+}));
+
 import { useProfiles } from "@/features/config/useProfiles";
 import type { Repository } from "@/lib/store/types";
 import type { PublishSelectionRef } from "@/generated/tauri-contracts";
@@ -245,7 +250,7 @@ describe("useProfiles", () => {
     expect(mocks.deleteProfileById).not.toHaveBeenCalled();
   });
 
-  it("swallows deletion failures", async () => {
+  it("surfaces deletion failures via toast", async () => {
     mocks.deleteProfileById.mockRejectedValue(new Error("io"));
     const { result } = renderHook(() => useProfiles(params()));
 
@@ -254,6 +259,7 @@ describe("useProfiles", () => {
     });
 
     expect(console.error).toHaveBeenCalled();
+    expect(toastErrorMock).toHaveBeenCalled();
   });
 
   it("commits optimistic reorders only with a selected repo", () => {
