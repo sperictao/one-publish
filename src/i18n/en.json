@@ -962,6 +962,7 @@
     "fix_command_spawn_failed": "Couldn't run the command.",
     "empty_fix_command": "The command is empty.",
     "unsafe_fix_command": "Unsupported command: it contains unsafe shell characters.",
+    "unsafe_fix_url": "Unsupported link: only http(s) URLs are allowed.",
     "quoted_fix_command": "Unsupported command: quoting isn't allowed.",
     "sudo_fix_command": "Unsupported command: sudo isn't allowed.",
     "unsupported_brew_fix_command": "Unsupported brew command (only brew install … is allowed).",

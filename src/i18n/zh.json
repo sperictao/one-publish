@@ -962,6 +962,7 @@
     "fix_command_spawn_failed": "无法运行命令",
     "empty_fix_command": "命令为空",
     "unsafe_fix_command": "不支持的命令：包含不安全的 shell 字符",
+    "unsafe_fix_url": "不支持的链接：仅允许 http(s) 地址",
     "quoted_fix_command": "不支持的命令：不允许使用引号",
     "sudo_fix_command": "不支持的命令：不允许使用 sudo",
     "unsupported_brew_fix_command": "不支持的 brew 命令（仅允许 brew install …）",

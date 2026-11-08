@@ -24,6 +24,7 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
                     "missing_fix_url",
                 )
             })?;
+            validate_fix_url(&url)?;
             open::that(&url).map_err(|e| {
                 crate::errors::AppError::external_open_with_code(
                     "failed to open URL",
@@ -82,6 +83,26 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
         }
         FixType::Manual => Ok(FixResult::Manual(action.label)),
     }
+}
+
+/// FixAction 经 IPC 由渲染进程带回，url 与 command 同属不可信输入。
+/// open::that 会把任意 scheme（file://、javascript:、已注册的外部协议）
+/// 甚至无 scheme 的裸路径交给操作系统解析——与命令白名单同理收紧到
+/// http(s)，并拒绝空白/控制字符，避免被当作本地文件或外部协议处理器。
+fn validate_fix_url(url: &str) -> Result<(), crate::errors::AppError> {
+    let lower = url.to_ascii_lowercase();
+    let has_browser_scheme = lower.starts_with("https://") || lower.starts_with("http://");
+    let clean = url
+        .chars()
+        .all(|ch| !ch.is_control() && !ch.is_whitespace());
+    if !has_browser_scheme || !clean {
+        return Err(crate::errors::AppError::validation_with_code(
+            "unsupported URL: only http(s) links are allowed",
+            "unsafe_fix_url",
+        )
+        .with_details(url));
+    }
+    Ok(())
 }
 
 fn validate_and_parse_fix_command(
@@ -199,7 +220,9 @@ fn validate_and_parse_fix_command(
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_fix, validate_and_parse_fix_command, FixAction, FixResult, FixType};
+    use super::{
+        apply_fix, validate_and_parse_fix_command, validate_fix_url, FixAction, FixResult, FixType,
+    };
 
     #[test]
     fn fix_command_parsing_allows_brew_install() {
@@ -363,6 +386,35 @@ mod tests {
             .await
             .expect_err("missing url must fail");
         assert_eq!(error.code.as_deref(), Some("missing_fix_url"));
+    }
+
+    #[tokio::test]
+    async fn apply_fix_rejects_non_http_url_before_opening() {
+        for url in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "smb://host/share",
+            "C:\\Windows\\system32\\calc.exe",
+            "https://example.com/\nfile:///etc/passwd",
+        ] {
+            let mut fix = action(FixType::OpenUrl);
+            fix.url = Some(url.to_string());
+            let error = apply_fix(fix)
+                .await
+                .expect_err("non-http url must fail before open");
+            assert_eq!(error.code.as_deref(), Some("unsafe_fix_url"), "{url}");
+        }
+    }
+
+    #[test]
+    fn validate_fix_url_accepts_browser_schemes() {
+        for url in [
+            "https://adoptium.net/",
+            "http://example.com/docs",
+            "HTTPS://EXAMPLE.COM/",
+        ] {
+            validate_fix_url(url).expect("browser url must pass: {url}");
+        }
     }
 
     #[tokio::test]
