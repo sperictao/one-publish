@@ -198,6 +198,9 @@ export function EnvironmentCheckContent({
       setResult(snapshot.result);
       onChecked?.(snapshot);
     } catch (err) {
+      // 与成功路径一致：已关闭的检查不报失败 toast，避免为用户
+      // 已放弃的检查弹出错误。
+      if (!activeRef.current) return;
       const msg = localizeInvokeError(err, translations);
       setError(msg);
       toast.error(translations.environment?.checkFailed || "环境检查失败", {
