@@ -33,6 +33,11 @@ pub fn new_tokio_command(program: impl AsRef<OsStr>) -> TokioCommand {
     command
 }
 
+/// 单条管道保留输出的上限；与 MAX_REPO_FILE_BYTES 同量级。子进程输出随
+/// 仓库元数据 / 远端状态 / 工具进度放大，不设上限时挂起或循环输出的工具
+/// 可在超时窗口内耗尽内存（security hardening: 输出量而非代码执行风险）。
+pub(crate) const MAX_CHILD_OUTPUT_BYTES: u64 = 32 * 1024 * 1024;
+
 /// try_wait 轮询 + 超时 kill：同步链路没有 runtime 可用 tokio::time::timeout，
 /// std Command 也不自带 wait_timeout。超时被 kill+wait 回收（不残留孤儿），
 /// 返回 None 让调用方走既定回落。
@@ -40,6 +45,9 @@ pub fn new_tokio_command(program: impl AsRef<OsStr>) -> TokioCommand {
 /// 管道缓冲只有 ~64KB：若子进程 stdout/stderr 已接管且输出超过缓冲，子进程
 /// 堵在 write、父进程堵在 try_wait 会死锁。两条管道各起一个 drain 线程并行
 /// 消费，wait 循环独立推进；未接管的管道按空输出处理。
+///
+/// 保留字节按 MAX_CHILD_OUTPUT_BYTES 封顶：超限后仍继续读到 EOF 丢弃
+/// （只 take 不 drain 会让子进程重新堵在满管道上），调用方拿到截断前缀。
 pub(crate) fn wait_child_with_timeout(
     mut child: std::process::Child,
     timeout: std::time::Duration,
@@ -50,7 +58,21 @@ pub(crate) fn wait_child_with_timeout(
         std::thread::spawn(move || {
             let mut buf = Vec::new();
             if let Some(mut pipe) = pipe {
-                let _ = pipe.read_to_end(&mut buf);
+                let kept = pipe
+                    .by_ref()
+                    .take(MAX_CHILD_OUTPUT_BYTES)
+                    .read_to_end(&mut buf);
+                if kept.is_ok() {
+                    // 余量读到 EOF 丢弃；返回值非零说明发生了截断。
+                    match std::io::copy(&mut pipe, &mut std::io::sink()) {
+                        Ok(discarded) if discarded > 0 => {
+                            log::warn!(
+                                "child process output truncated at {MAX_CHILD_OUTPUT_BYTES} bytes ({discarded} bytes discarded)"
+                            );
+                        }
+                        _ => {}
+                    }
+                }
             }
             buf
         })
@@ -135,5 +157,19 @@ mod tests {
 
         assert!(output.status.success());
         assert_eq!(output.stdout.len(), 200_000);
+    }
+
+    #[test]
+    fn oversized_output_is_truncated_but_fully_drained() {
+        // 超出上限的字节仍被消费（不写回管道导致子进程阻塞），
+        // 返回的缓冲只保留前 MAX_CHILD_OUTPUT_BYTES 字节。
+        let output = wait_child_with_timeout(
+            piped_sh("head -c 33554433 /dev/zero"),
+            Duration::from_secs(30),
+        )
+        .expect("oversized output");
+
+        assert!(output.status.success());
+        assert_eq!(output.stdout.len() as u64, MAX_CHILD_OUTPUT_BYTES);
     }
 }
