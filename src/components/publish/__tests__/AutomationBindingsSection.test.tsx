@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 import { AutomationBindingsSection } from "@/components/publish/AutomationBindingsSection";
 import type {
@@ -599,5 +605,54 @@ describe("AutomationBindingsSection", () => {
     await waitFor(() =>
       expect(synchronizeRemoteEvidenceMock).toHaveBeenCalledTimes(2)
     );
+  });
+
+  it("drops a stale bindings response after the repository switches", async () => {
+    const deferred = <T,>() => {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((res) => {
+        resolve = res;
+      });
+      return { promise, resolve };
+    };
+    const stale = deferred<AutomationBindingsView>();
+    const fresh = deferred<AutomationBindingsView>();
+    listAutomationBindingsMock
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(fresh.promise);
+
+    const props = {
+      profiles: [createProfile("profile-1", "Stable")],
+      configPanelT: {} as Record<string, string | undefined>,
+    };
+    const { rerender } = render(
+      <AutomationBindingsSection repoId="repo-a" {...props} />
+    );
+    await waitFor(() =>
+      expect(listAutomationBindingsMock).toHaveBeenCalledWith("repo-a")
+    );
+
+    rerender(<AutomationBindingsSection repoId="repo-b" {...props} />);
+    await waitFor(() =>
+      expect(listAutomationBindingsMock).toHaveBeenCalledWith("repo-b")
+    );
+
+    // 旧仓库的迟到响应必须丢弃：配置名不得写入新仓库视图。
+    const repoAView = boundView(null);
+    repoAView.bindings[0].configurationName = "RepoA-Only";
+    await act(async () => {
+      stale.resolve(repoAView);
+      await stale.promise;
+    });
+    expect(screen.queryByText("RepoA-Only")).toBeNull();
+
+    const repoBView = boundView(null);
+    repoBView.bindings[0].configurationName = "RepoB-Only";
+    await act(async () => {
+      fresh.resolve(repoBView);
+      await fresh.promise;
+    });
+    expect(await screen.findByText("RepoB-Only")).toBeTruthy();
+    expect(screen.queryByText("RepoA-Only")).toBeNull();
   });
 });

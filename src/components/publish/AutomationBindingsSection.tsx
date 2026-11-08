@@ -121,6 +121,11 @@ export function AutomationBindingsSection({
   useEffect(() => {
     translationsRef.current = translations;
   }, [translations]);
+  // 异步请求的仓库归属：切换仓库后，迟到响应不得写回新仓库的视图。
+  const repoIdRef = useRef(repoId);
+  useEffect(() => {
+    repoIdRef.current = repoId;
+  }, [repoId]);
   const [view, setView] = useState<AutomationBindingsView | null>(null);
   const [loading, setLoading] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
@@ -139,6 +144,23 @@ export function AutomationBindingsSection({
   const [dispatching, setDispatching] = useState(false);
   const [cancellingRunId, setCancellingRunId] = useState<number | null>(null);
 
+  // 仓库切换即时丢弃全部仓库范围状态：旧数据在新仓库下不再是合法上下文，
+  // 继续展示会误导后续确认/派发操作。
+  const [prevRepoId, setPrevRepoId] = useState(repoId);
+  if (prevRepoId !== repoId) {
+    setPrevRepoId(repoId);
+    setView(null);
+    setLoading(false);
+    setPending(null);
+    setRemoteEvidence(null);
+    setSyncingRemote(false);
+    setDispatchBindingId(null);
+    setDispatchVersion("");
+    setDispatching(false);
+    setCancellingRunId(null);
+    setInstallOpen(false);
+  }
+
   // #63 只迁移现有 Tauri workflow；第二 Provider 的远端投影由后续 Ticket 扩展。
   const activeProfiles = profiles.filter(
     (profile) => profile.providerId === "tauri"
@@ -149,16 +171,22 @@ export function AutomationBindingsSection({
       setView(null);
       return;
     }
+    const requestedRepo = repoId;
     setLoading(true);
     try {
-      setView(await listAutomationBindings(repoId));
+      const next = await listAutomationBindings(repoId);
+      if (repoIdRef.current !== requestedRepo) return;
+      setView(next);
     } catch (error) {
+      if (repoIdRef.current !== requestedRepo) return;
       setView(null);
       toast.error(configPanelT.automationLoadFailed || "自动化绑定加载失败", {
         description: localizeInvokeError(error, translationsRef.current),
       });
     } finally {
-      setLoading(false);
+      if (repoIdRef.current === requestedRepo) {
+        setLoading(false);
+      }
     }
   }, [repoId, configPanelT]);
 
@@ -170,8 +198,10 @@ export function AutomationBindingsSection({
   const requestPreview = useCallback(
     async (change: AutomationChangeRequest) => {
       if (!repoId) return;
+      const requestedRepo = repoId;
       try {
         const preview = await previewAutomationChange(repoId, change);
+        if (repoIdRef.current !== requestedRepo) return;
         setPending({ preview, applying: false });
       } catch (error) {
         toast.error(
@@ -208,16 +238,22 @@ export function AutomationBindingsSection({
 
   const syncRemoteEvidence = useCallback(async () => {
     if (!repoId) return;
+    const requestedRepo = repoId;
     setSyncingRemote(true);
     try {
-      setRemoteEvidence(await synchronizeRemoteEvidence(repoId));
+      const evidence = await synchronizeRemoteEvidence(repoId);
+      if (repoIdRef.current !== requestedRepo) return;
+      setRemoteEvidence(evidence);
     } catch (error) {
+      if (repoIdRef.current !== requestedRepo) return;
       toast.error(
         configPanelT.automationRemoteSyncFailed || "远端发布记录同步失败",
         { description: localizeInvokeError(error, translationsRef.current) }
       );
     } finally {
-      setSyncingRemote(false);
+      if (repoIdRef.current === requestedRepo) {
+        setSyncingRemote(false);
+      }
     }
   }, [repoId, configPanelT]);
 
