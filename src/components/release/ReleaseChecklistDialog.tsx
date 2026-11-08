@@ -129,16 +129,23 @@ export function ReleaseChecklistDialog({
   useEffect(() => {
     if (!open) return;
 
+    let disposed = false;
     getUpdaterConfigHealth()
       .then((health) => {
+        if (disposed) return;
         setUpdaterHealth(health);
       })
       .catch((err) => {
+        if (disposed) return;
         setUpdaterError(localizeInvokeError(err, translationsRef.current));
       })
       .finally(() => {
+        if (disposed) return;
         setUpdaterLoading(false);
       });
+    return () => {
+      disposed = true;
+    };
   }, [open]);
 
   const checklistItems = useMemo<ChecklistItem[]>(() => {

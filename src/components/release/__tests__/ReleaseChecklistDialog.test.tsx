@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReleaseChecklistDialog } from "@/components/release/ReleaseChecklistDialog";
@@ -76,5 +82,52 @@ describe("ReleaseChecklistDialog 错误展示", () => {
         updater: { health: null, error: "updater plugin is not initialized" },
       }),
     });
+  });
+
+  it("关闭再打开后，迟到响应不得覆盖新一轮检测结果", async () => {
+    const deferred = <T,>() => {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((res) => {
+        resolve = res;
+      });
+      return { promise, resolve };
+    };
+    const stale = deferred<{ configured: boolean; message: string }>();
+    const fresh = deferred<{ configured: boolean; message: string }>();
+    mocks.getUpdaterConfigHealth
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(fresh.promise);
+
+    const props = {
+      onOpenChange: vi.fn(),
+      publishResult: null,
+      environmentResult: null,
+      packageResult: null,
+      signResult: null,
+    };
+    const { rerender } = render(<ReleaseChecklistDialog open {...props} />);
+    expect(mocks.getUpdaterConfigHealth).toHaveBeenCalledTimes(1);
+
+    rerender(<ReleaseChecklistDialog open={false} {...props} />);
+    rerender(<ReleaseChecklistDialog open {...props} />);
+    expect(mocks.getUpdaterConfigHealth).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole("button", { name: /Updater 配置/ }));
+
+    // 第一轮的迟到响应必须被丢弃：既不渲染其文案，也不把 loading 清掉。
+    await act(async () => {
+      stale.resolve({ configured: true, message: "stale-updater-message" });
+      await stale.promise;
+    });
+    expect(screen.queryByText("stale-updater-message")).not.toBeInTheDocument();
+    expect(screen.getByText(/正在检测 updater 配置/)).toBeInTheDocument();
+
+    await act(async () => {
+      fresh.resolve({ configured: true, message: "fresh-updater-message" });
+      await fresh.promise;
+    });
+    expect(
+      await screen.findByText("fresh-updater-message")
+    ).toBeInTheDocument();
   });
 });
