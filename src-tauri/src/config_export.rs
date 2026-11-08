@@ -262,6 +262,15 @@ pub fn validate_import(config: &ConfigExport) -> Result<(), ImportError> {
     let registry = crate::provider::registry::ProviderRegistry::new();
 
     for profile in &config.profiles {
+        // 空白名称/Provider 的配置落库后不可选、修订不可解析——在导入校验
+        // 边界拒绝，而不是把损坏数据交给 merge。
+        if profile.name.trim().is_empty() || profile.provider_id.trim().is_empty() {
+            return Err(ImportError::ValidationFailed(format!(
+                "profile '{}' has a blank name or provider id",
+                profile.name
+            )));
+        }
+
         if profile_contains_sensitive_field(profile) {
             return Err(ImportError::ValidationFailed(format!(
                 "profile '{}' contains credential fields",
@@ -738,6 +747,30 @@ mod tests {
         };
 
         assert!(validate_import(&config).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_blank_name_or_provider() {
+        for (name, provider_id) in [(" ", "dotnet"), ("Test", " ")] {
+            let profile = ConfigProfile {
+                name: name.to_string(),
+                provider_id: provider_id.to_string(),
+                parameters: BTreeMap::new(),
+                profile_group: None,
+                created_at: Utc::now(),
+                is_system_default: false,
+                ..ConfigProfile::default()
+            };
+
+            let config = ConfigExport {
+                version: CONFIG_VERSION,
+                exported_at: Utc::now(),
+                profiles: vec![profile],
+            };
+
+            let error = validate_import(&config).expect_err("blank name/provider must be rejected");
+            assert!(matches!(error, ImportError::ValidationFailed(_)));
+        }
     }
 
     #[test]
