@@ -207,7 +207,7 @@ fn resolve_cleanup_decision(
         });
     }
 
-    validate_cleanup_target(&output_path, output_dir, &spec.project_path)?;
+    validate_cleanup_target(&output_path, output_dir, spec)?;
 
     Ok(PublishOutputCleanupDecision::Clean {
         output_dir: output_dir.to_string(),
@@ -217,14 +217,14 @@ fn resolve_cleanup_decision(
 fn validate_cleanup_target(
     output_path: &Path,
     output_dir: &str,
-    project_path: &str,
+    spec: &PublishSpec,
 ) -> Result<(), crate::errors::AppError> {
     let canonical_output = output_path
         .canonicalize()
         .unwrap_or_else(|_| output_path.to_path_buf());
 
-    if !project_path.is_empty() {
-        validate_cleanup_target_against_project(&canonical_output, output_dir, project_path)?;
+    if !spec.project_path.is_empty() {
+        validate_cleanup_target_against_project(&canonical_output, output_dir, spec)?;
     }
 
     if canonical_output.parent().is_none() {
@@ -247,15 +247,33 @@ fn validate_cleanup_target(
     Ok(())
 }
 
+/// project_path 形态随 Provider 而异：ProjectFile 取文件所在目录，
+/// RepositoryRoot（cargo/go/java_gradle）本身就是项目目录——再取 parent
+/// 会把仓库上一级当作项目根，导致仓库内任何输出目录都被误判为 inside_project。
+/// 未知 Provider 按 ProjectFile 处理，得到的 project_dir 范围更大、拒绝更保守。
+fn cleanup_project_dir(spec: &PublishSpec) -> PathBuf {
+    let project_path = Path::new(&spec.project_path);
+    let kind = crate::provider::registry::provider_registry()
+        .get(&spec.provider_id)
+        .ok()
+        .map(|provider| provider.catalog().project_path_kind);
+    match kind {
+        Some(crate::provider::ProviderProjectPathKind::RepositoryRoot) => {
+            project_path.to_path_buf()
+        }
+        _ => project_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default(),
+    }
+}
+
 fn validate_cleanup_target_against_project(
     canonical_output: &Path,
     output_dir: &str,
-    project_path: &str,
+    spec: &PublishSpec,
 ) -> Result<(), crate::errors::AppError> {
-    let project_dir = Path::new(project_path)
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_default();
+    let project_dir = cleanup_project_dir(spec);
     if project_dir.as_os_str().is_empty() {
         return Ok(());
     }
@@ -347,12 +365,16 @@ mod tests {
     use std::collections::BTreeMap;
 
     fn cleanup_spec(project_path: &str) -> PublishSpec {
+        cleanup_spec_for("dotnet", project_path)
+    }
+
+    fn cleanup_spec_for(provider_id: &str, project_path: &str) -> PublishSpec {
         let mut parameters = BTreeMap::new();
         parameters.insert("delete_existing_files".to_string(), SpecValue::Bool(true));
 
         PublishSpec {
             version: SPEC_VERSION,
-            provider_id: "dotnet".to_string(),
+            provider_id: provider_id.to_string(),
             project_path: project_path.to_string(),
             parameters,
         }
@@ -424,6 +446,81 @@ mod tests {
             PublishOutputCleanupDecision::Clean {
                 output_dir: output_dir_string
             }
+        );
+    }
+
+    #[test]
+    fn cleanup_policy_allows_approved_subdirectory_under_repository_root() {
+        // RepositoryRoot provider：project_path 即仓库目录本身，而非文件。
+        let root = tempfile::tempdir().expect("create temp root");
+        let repo_dir = root.path().join("myrepo");
+        let output_dir = repo_dir.join("publish");
+        std::fs::create_dir_all(&output_dir).expect("create output dir");
+        let spec = cleanup_spec_for("cargo", &repo_dir.to_string_lossy());
+        let output_dir_string = output_dir.to_string_lossy().to_string();
+
+        let decision =
+            resolve_cleanup_decision(&spec, &output_dir_string).expect("cleanup decision");
+
+        assert_eq!(
+            decision,
+            PublishOutputCleanupDecision::Clean {
+                output_dir: output_dir_string
+            }
+        );
+    }
+
+    #[test]
+    fn cleanup_policy_rejects_repository_root_itself() {
+        let root = tempfile::tempdir().expect("create temp root");
+        let repo_dir = root.path().join("myrepo");
+        std::fs::create_dir_all(&repo_dir).expect("create repo dir");
+        let spec = cleanup_spec_for("go", &repo_dir.to_string_lossy());
+        let output_dir_string = repo_dir.to_string_lossy().to_string();
+
+        let error = resolve_cleanup_decision(&spec, &output_dir_string)
+            .expect_err("repository root output must be rejected");
+
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_safety_project_overlap")
+        );
+    }
+
+    #[test]
+    fn cleanup_policy_rejects_repository_parent_that_contains_project() {
+        // 输出目录是仓库上级目录时同样命中 project_overlap——不能因
+        // RepositoryRoot 语义放宽而把父目录放行。
+        let root = tempfile::tempdir().expect("create temp root");
+        let repo_dir = root.path().join("myrepo");
+        std::fs::create_dir_all(&repo_dir).expect("create repo dir");
+        let spec = cleanup_spec_for("cargo", &repo_dir.to_string_lossy());
+        let output_dir_string = root.path().to_string_lossy().to_string();
+
+        let error = resolve_cleanup_decision(&spec, &output_dir_string)
+            .expect_err("repository parent output must be rejected");
+
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_safety_project_overlap")
+        );
+    }
+
+    #[test]
+    fn cleanup_policy_rejects_unapproved_subdirectory_under_repository_root() {
+        let root = tempfile::tempdir().expect("create temp root");
+        let repo_dir = root.path().join("myrepo");
+        let output_dir = repo_dir.join("src");
+        std::fs::create_dir_all(&output_dir).expect("create output dir");
+        let spec = cleanup_spec_for("java_gradle", &repo_dir.to_string_lossy());
+        let output_dir_string = output_dir.to_string_lossy().to_string();
+
+        let error = resolve_cleanup_decision(&spec, &output_dir_string)
+            .expect_err("unapproved in-repo output should be rejected");
+
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_safety_inside_project")
         );
     }
 
