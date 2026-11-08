@@ -377,6 +377,43 @@ pub fn markdown_link(path: &str) -> String {
     format!("[{}](<{}>)", label, path)
 }
 
+/// `links` 由渲染进程提交的索引负载提供，HTML/Markdown 会把它们落成可点击
+/// 目标。只允许路径形值与 file/http(s) URI——`javascript:`、`data:` 等
+/// 可执行 scheme 一律降级为不可点击文本，与 open_url 的 scheme 白名单一致。
+pub fn is_safe_link_target(value: &str) -> bool {
+    let Some(colon) = value.find(':') else {
+        return true;
+    };
+    if let Some(slash) = value.find(['/', '\\']) {
+        if slash < colon {
+            return true;
+        }
+    }
+    let scheme = &value[..colon];
+    // Windows 驱动器号形如 `C:\` 或 `C:/`：单字母 scheme 后跟分隔符按路径处理。
+    if scheme.len() == 1
+        && scheme
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic())
+    {
+        return matches!(value.as_bytes().get(colon + 1), Some(b'\\') | Some(b'/'));
+    }
+    matches!(
+        scheme.to_ascii_lowercase().as_str(),
+        "http" | "https" | "file"
+    )
+}
+
+/// 不可点击的降级呈现：inline code 包住原值，含反引号时改用双反引号 span。
+fn markdown_code_span(value: &str) -> String {
+    if value.contains('`') {
+        format!("`` {value} ``")
+    } else {
+        format!("`{value}`")
+    }
+}
+
 pub fn render_diagnostics_index_markdown(index: &Value) -> Result<String, crate::errors::AppError> {
     let generated_at = index
         .get("generatedAt")
@@ -412,7 +449,11 @@ pub fn render_diagnostics_index_markdown(index: &Value) -> Result<String, crate:
             lines.push("- (none)".to_string());
         } else {
             for item in items {
-                lines.push(format!("- {}", markdown_link(item)));
+                if is_safe_link_target(item) {
+                    lines.push(format!("- {}", markdown_link(item)));
+                } else {
+                    lines.push(format!("- {}", markdown_code_span(item)));
+                }
             }
         }
     };
@@ -444,6 +485,51 @@ pub fn render_diagnostics_index_markdown(index: &Value) -> Result<String, crate:
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn safe_link_target_accepts_paths_and_browser_schemes() {
+        for value in [
+            "/tmp/exports/a.md",
+            "relative/out/report.md",
+            "out\\windows\\style.md",
+            "C:\\exports\\a.md",
+            "c:/exports/a.md",
+            "https://example.com/x",
+            "HTTP://example.com",
+            "file:///tmp/a.md",
+            "/tmp/posix:name.md",
+            "\\\\server\\share\\a.md",
+        ] {
+            assert!(is_safe_link_target(value), "expected safe: {value}");
+        }
+    }
+
+    #[test]
+    fn safe_link_target_rejects_executable_schemes() {
+        for value in [
+            "javascript:alert(1)",
+            "JAVASCRIPT:alert(1)",
+            "data:text/html,<script>x</script>",
+            "vbscript:msgbox(1)",
+            "about:blank",
+            "ssh://host/path",
+            "a:relative.md",
+            "x:y",
+        ] {
+            assert!(!is_safe_link_target(value), "expected unsafe: {value}");
+        }
+    }
+
+    #[test]
+    fn diagnostics_index_markdown_degrades_executable_links_to_code() {
+        let index = json!({
+            "links": { "snapshots": ["javascript:alert(1)", "/tmp/ok.md"] }
+        });
+        let markdown = render_diagnostics_index_markdown(&index).expect("markdown");
+        assert!(markdown.contains("- `javascript:alert(1)`"));
+        assert!(markdown.contains("[/tmp/ok.md](</tmp/ok.md>)"));
+        assert!(!markdown.contains("](<javascript:"));
+    }
 
     #[test]
     fn markdown_link_escapes_label_but_keeps_url_raw() {

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::markdown::{collect_link_paths, summary_u64};
+use super::markdown::{collect_link_paths, is_safe_link_target, summary_u64};
 
 fn html_escape(value: &str) -> String {
     value
@@ -28,7 +28,13 @@ pub fn render_diagnostics_index_html(index: &Value) -> String {
         } else {
             for item in items {
                 let escaped = html_escape(item);
-                out.push_str(&format!("<li><a href=\"{}\">{}</a></li>", escaped, escaped));
+                // href 是可执行上下文：可执行 scheme（javascript:/data: 等）
+                // 降级为纯文本，只保留转义后的可读值。
+                if is_safe_link_target(item) {
+                    out.push_str(&format!("<li><a href=\"{}\">{}</a></li>", escaped, escaped));
+                } else {
+                    out.push_str(&format!("<li>{}</li>", escaped));
+                }
             }
         }
         out.push_str("</ul>");
@@ -64,4 +70,33 @@ pub fn render_diagnostics_index_html(index: &Value) -> String {
         "</body></html>".to_string(),
     ]
     .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_diagnostics_index_html;
+    use serde_json::json;
+
+    #[test]
+    fn executable_link_schemes_render_as_plain_text() {
+        let index = json!({
+            "generatedAt": "2026-02-08T12:00:00Z",
+            "links": {
+                "snapshots": ["javascript:alert(1)", "/tmp/ok.md"],
+            }
+        });
+        let html = render_diagnostics_index_html(&index);
+        assert!(!html.contains("href=\"javascript:"));
+        assert!(html.contains("<li>javascript:alert(1)</li>"));
+        assert!(html.contains("<a href=\"/tmp/ok.md\">/tmp/ok.md</a>"));
+    }
+
+    #[test]
+    fn windows_drive_paths_stay_clickable() {
+        let index = json!({
+            "links": { "bundles": ["C:\\exports\\bundle.zip"] }
+        });
+        let html = render_diagnostics_index_html(&index);
+        assert!(html.contains("<a href=\"C:\\exports\\bundle.zip\">"));
+    }
 }
