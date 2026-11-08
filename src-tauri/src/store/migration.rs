@@ -393,7 +393,18 @@ fn sanitize_state_with_migration(mut state: AppState) -> (AppState, bool) {
         normalize_environment_provider_ids(state.environment_provider_ids);
     sanitize_recent_publish_state(&mut state);
 
-    (state, profiles_migrated)
+    // 与 recent_repo_ids 同一约定：悬空选中引用在清理阶段丢弃——写入路径已
+    // 拒绝未知 id，但迁移与外部编辑留下的存量悬空引用没有其它修复路径。
+    let selection_orphaned = state
+        .selected_repo_id
+        .as_deref()
+        .is_some_and(|repo_id| !state.repositories.iter().any(|repo| repo.id == repo_id));
+    if selection_orphaned {
+        log::warn!("selected_repo_id 指向不存在的仓库，已清理");
+        state.selected_repo_id = None;
+    }
+
+    (state, profiles_migrated || selection_orphaned)
 }
 
 pub(crate) fn sanitize_state(state: AppState) -> AppState {
@@ -1207,6 +1218,24 @@ mod stored_state_tests {
             .expect("command line retained");
         assert!(!command_line.contains("hunter2"));
         assert!(command_line.contains("Password="));
+    }
+
+    #[test]
+    fn sanitize_drops_orphaned_selected_repo_id() {
+        let mut state = crate::store::types::AppState::default();
+        state.repositories.push(test_repo("a", Some("dotnet")));
+        state.selected_repo_id = Some("ghost".to_string());
+
+        let (state, migrated) = sanitize_stored_state(state);
+        assert!(migrated, "悬空选中应计入需要回写的修复");
+        assert_eq!(state.selected_repo_id, None);
+
+        // 合法选中保持不变。
+        let mut state = crate::store::types::AppState::default();
+        state.repositories.push(test_repo("a", Some("dotnet")));
+        state.selected_repo_id = Some("a".to_string());
+        let (state, _) = sanitize_stored_state(state);
+        assert_eq!(state.selected_repo_id.as_deref(), Some("a"));
     }
 
     #[test]
