@@ -10,6 +10,7 @@ import {
   analyzePublishExecutionFailure,
   extractInvokeErrorCode,
   extractInvokeErrorDetails,
+  extractInvokeErrorKind,
   extractInvokeErrorMessage,
   localizeInvokeError,
   type BranchRefreshFailureReason,
@@ -160,6 +161,41 @@ describe("extractInvokeErrorDetails", () => {
   });
 });
 
+describe("extractInvokeErrorKind", () => {
+  it("object 顶层 kind 返回小写化结果", () => {
+    expect(extractInvokeErrorKind({ kind: "Validation" })).toBe("validation");
+  });
+
+  it("支持 data.kind 与 details.kind 嵌套", () => {
+    expect(extractInvokeErrorKind({ data: { kind: "Store" } })).toBe("store");
+    expect(extractInvokeErrorKind({ details: { kind: "Tray" } })).toBe("tray");
+  });
+
+  it("顶层 kind 优先于嵌套 kind", () => {
+    expect(
+      extractInvokeErrorKind({
+        kind: "publish",
+        data: { kind: "repository" },
+      })
+    ).toBe("publish");
+  });
+
+  it("形似 JSON 的 string 会被 parse 后提取 kind", () => {
+    expect(extractInvokeErrorKind('{"kind":"render_error"}')).toBe(
+      "render_error"
+    );
+  });
+
+  it("kind 缺失、空白或非字符串时返回 null", () => {
+    expect(extractInvokeErrorKind({ message: "no kind" })).toBeNull();
+    expect(extractInvokeErrorKind({ kind: "   " })).toBeNull();
+    expect(extractInvokeErrorKind({ kind: 7 })).toBeNull();
+    expect(extractInvokeErrorKind("{not valid json}")).toBeNull();
+    expect(extractInvokeErrorKind("plain failure")).toBeNull();
+    expect(extractInvokeErrorKind(null)).toBeNull();
+  });
+});
+
 describe("localizeInvokeError", () => {
   const CJK_PATTERN = /[\u3400-\u9fff]/;
   const translations = {
@@ -220,6 +256,44 @@ describe("localizeInvokeError", () => {
         translations
       )
     ).toBe("raw message | detail");
+  });
+
+  it("兜底路径附加 kind 分类以区分不同失败类别", () => {
+    expect(
+      localizeInvokeError(
+        {
+          kind: "unsupported_spec_version",
+          code: "unregistered_code",
+          message: "unsupported spec version",
+        },
+        translations
+      )
+    ).toBe("unsupported spec version | kind: unsupported_spec_version");
+  });
+
+  it("kind 为 unknown 或缺失时兜底不附加分类后缀", () => {
+    expect(
+      localizeInvokeError(
+        { kind: "unknown", message: "raw message" },
+        translations
+      )
+    ).toBe("raw message");
+    expect(localizeInvokeError({ message: "raw message" }, translations)).toBe(
+      "raw message"
+    );
+  });
+
+  it("已登记 code 的本地化路径不受 kind 影响", () => {
+    expect(
+      localizeInvokeError(
+        {
+          kind: "repository",
+          code: "automation_preview_stale",
+          message: "raw",
+        },
+        translations
+      )
+    ).toBe("Preview again and confirm.");
   });
 
   it("没有 code 或翻译尚未加载时回退到原始消息", () => {

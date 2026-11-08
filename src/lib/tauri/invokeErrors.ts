@@ -91,6 +91,60 @@ export function extractInvokeErrorCode(error: unknown): string | null {
   return extractCodeFromObject(error);
 }
 
+/**
+ * 提取 AppError 的 `kind` 分类（snake_case 序列化）：顶层 kind 优先，
+ * 其次 data / details 嵌套，与 extractInvokeErrorCode 同一套查找约定。
+ * 返回值小写化便于比较；kind 缺失或非字符串时返回 null。
+ */
+export function extractInvokeErrorKind(error: unknown): string | null {
+  const extractKindFromObject = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    const payload = value as {
+      kind?: unknown;
+      data?: unknown;
+      details?: unknown;
+    };
+
+    if (typeof payload.kind === "string" && payload.kind.trim().length > 0) {
+      return payload.kind.trim().toLowerCase();
+    }
+
+    if (payload.data && typeof payload.data === "object") {
+      const nestedKind = (payload.data as { kind?: unknown }).kind;
+      if (typeof nestedKind === "string" && nestedKind.trim().length > 0) {
+        return nestedKind.trim().toLowerCase();
+      }
+    }
+
+    if (payload.details && typeof payload.details === "object") {
+      const nestedKind = (payload.details as { kind?: unknown }).kind;
+      if (typeof nestedKind === "string" && nestedKind.trim().length > 0) {
+        return nestedKind.trim().toLowerCase();
+      }
+    }
+
+    return null;
+  };
+
+  if (typeof error === "string") {
+    const trimmed = error.trim();
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        return extractKindFromObject(JSON.parse(trimmed));
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  return extractKindFromObject(error);
+}
+
 export function extractInvokeErrorDetails(error: unknown): string | null {
   const extractDetailsFromObject = (value: unknown): string | null => {
     if (!value || typeof value !== "object") {
@@ -136,6 +190,10 @@ export interface InvokeErrorTranslations {
  * 按后端稳定错误码（AppError.code / 阻断诊断 code）取 `errors.<code>` 文案；
  * 后端 message 语言不受界面语言控制，只作为未登记错误码时的兜底。
  * details 约定为语言中立的技术细节（路径、分支、底层错误），本地化后原样附加。
+ *
+ * 兜底路径附上 AppError.kind 分类（`kind: <snake_case>`）：错误码未登记时
+ * 不同失败类别（repository / store / unsupported_spec_version 等）在 toast
+ * 中仍可区分，而不是全部塌进同一段后端文案。kind 为 unknown 或缺失时不追加。
  */
 export function localizeInvokeError(
   error: unknown,
@@ -144,7 +202,9 @@ export function localizeInvokeError(
   const code = extractInvokeErrorCode(error);
   const localized = code ? translations?.errors?.[code] : undefined;
   if (typeof localized !== "string" || localized.length === 0) {
-    return extractInvokeErrorMessage(error);
+    const message = extractInvokeErrorMessage(error);
+    const kind = extractInvokeErrorKind(error);
+    return kind && kind !== "unknown" ? `${message} | kind: ${kind}` : message;
   }
 
   const details = extractInvokeErrorDetails(error);
