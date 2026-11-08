@@ -194,12 +194,15 @@ export function useProfiles({
         await deleteProfileById(selectedRepoId, profileId);
       } catch (err) {
         console.error("删除配置文件失败:", err);
-        toast.error(profileT.deleteFailed || "删除配置文件失败", {
-          description: localizeInvokeError(err, getCurrentTranslations()),
-        });
+        // 删除目标在调用时固定；失败后仓库已切换则不为旧仓库弹错。
+        if (isCurrentRepo(selectedRepoId)) {
+          toast.error(profileT.deleteFailed || "删除配置文件失败", {
+            description: localizeInvokeError(err, getCurrentTranslations()),
+          });
+        }
       }
     },
-    [deleteProfileById, profileT.deleteFailed, selectedRepoId]
+    [deleteProfileById, isCurrentRepo, profileT.deleteFailed, selectedRepoId]
   );
 
   const profileManagement = useMemo<ProfileManagementActions>(

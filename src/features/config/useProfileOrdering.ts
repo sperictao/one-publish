@@ -69,13 +69,13 @@ export function useProfileOrdering({
           } catch (err) {
             console.error("保存配置排序失败:", err);
 
+            // 排序目标在入队时固定；失败后仓库已切换则既不重载也不弹错。
             if (selectedRepoIdRef.current === repoId) {
               await onReorderFailed();
+              toast.error(profileT.quickEditFailed || "更新配置文件失败", {
+                description: localizeInvokeError(err, translations),
+              });
             }
-
-            toast.error(profileT.quickEditFailed || "更新配置文件失败", {
-              description: localizeInvokeError(err, translations),
-            });
           }
         });
     },

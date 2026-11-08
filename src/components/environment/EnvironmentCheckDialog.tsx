@@ -304,9 +304,12 @@ export function EnvironmentCheckContent({
     try {
       setRunningFix(true);
       const res = await applyFix(fix);
+      // 与 handleCheck 一致：已关闭/已卸载的修复不再落地结果与 toast。
+      if (!mountedRef.current || !activeRef.current) return;
       setLastFixResult(res);
       toast.success(translations.environment?.opened || "已打开页面");
     } catch (err) {
+      if (!mountedRef.current || !activeRef.current) return;
       toast.error(translations.environment?.fixFailed || "修复失败", {
         description: localizeInvokeError(err, translations),
       });
@@ -320,6 +323,8 @@ export function EnvironmentCheckContent({
     try {
       setRunningFix(true);
       const res = await applyFix(pendingRun);
+      // 与 handleCheck 一致：已关闭/已卸载的修复不再落地结果与 toast。
+      if (!mountedRef.current || !activeRef.current) return;
       setLastFixResult(res);
       if (res.result === "CommandExecuted" && res.data.exit_code === 0) {
         toast.success(translations.environment?.runSuccess || "命令执行完成");
@@ -328,6 +333,7 @@ export function EnvironmentCheckContent({
       }
       await handleCheck();
     } catch (err) {
+      if (!mountedRef.current || !activeRef.current) return;
       toast.error(translations.environment?.runFailed || "命令执行失败", {
         description: localizeInvokeError(err, translations),
       });

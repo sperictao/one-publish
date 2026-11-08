@@ -229,6 +229,9 @@ export function CompositionEditorDialog({
         }
       })
       .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
         toast.error(t.catalogFailed || "加载可用 Adapter 目录失败", {
           description: localizeInvokeError(error, translationsRef.current),
         });
