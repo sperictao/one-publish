@@ -6,6 +6,10 @@ import type {
   TranslationMap,
 } from "@/features/publish/publishTransaction";
 import { usePublishStore } from "@/stores/publishStore";
+import {
+  lastKnownSequenceFor,
+  lastKnownSequenceForAttempt,
+} from "@/features/publish/publishRuntimeHighWater";
 import { useI18n } from "@/hooks/useI18n";
 import { createPublishExecutionRecord } from "@/features/history/publishExecutionRecord";
 import { exportExecutionSnapshot } from "@/features/history/executionSnapshot";
@@ -218,6 +222,10 @@ export function usePublishExecute({
       repositoryPath: selectedRepoPath,
       configurationRevisionId: currentConfigurationRevisionId,
       events: [],
+      lastKnownSequence: lastKnownSequenceFor(
+        selectedRepoPath,
+        currentConfigurationRevisionId
+      ),
     })
       .then((report) => {
         logMissingSyncRanges(report);
@@ -495,11 +503,23 @@ export function usePublishExecute({
           selectedRepoPath
         ) {
           try {
+            const recoveryAttemptId =
+              extractInvokeErrorDetails(err) || undefined;
             const synchronized = await synchronizePublishRuntime({
               repositoryPath: selectedRepoPath,
               configurationRevisionId: ready.configurationRevisionId,
-              attemptId: extractInvokeErrorDetails(err) || undefined,
+              attemptId: recoveryAttemptId,
               events: [],
+              lastKnownSequence: recoveryAttemptId
+                ? lastKnownSequenceForAttempt(
+                    selectedRepoPath,
+                    ready.configurationRevisionId,
+                    recoveryAttemptId
+                  )
+                : lastKnownSequenceFor(
+                    selectedRepoPath,
+                    ready.configurationRevisionId
+                  ),
             });
             logMissingSyncRanges(synchronized);
             if (
@@ -761,6 +781,11 @@ export function usePublishExecute({
             configurationRevisionId: currentConfigurationRevisionId,
             attemptId,
             events: [],
+            lastKnownSequence: lastKnownSequenceForAttempt(
+              selectedRepoPath,
+              currentConfigurationRevisionId,
+              attemptId
+            ),
           });
           logMissingSyncRanges(synchronized);
           if (synchronized.result) {

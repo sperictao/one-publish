@@ -60,6 +60,7 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::publish_runtime::StartPublishRuntimeRequest>(&mut declarations);
     push_contract::<crate::publish_runtime::ResumePublishRuntimeRequest>(&mut declarations);
     push_contract::<crate::publish_runtime::RuntimePublishEvent>(&mut declarations);
+    push_contract::<crate::publish_runtime::PublishRuntimeEventEnvelope>(&mut declarations);
     push_contract::<crate::publish_runtime::RuntimeArtifactManifestEntry>(&mut declarations);
     push_contract::<crate::publish_runtime::RuntimeArtifactManifest>(&mut declarations);
     push_contract::<crate::publish_runtime::SynchronizePublishRuntimeRequest>(&mut declarations);

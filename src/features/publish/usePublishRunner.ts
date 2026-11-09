@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import type { TranslationMap } from "@/features/publish/publishTransaction";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { type ExecutionRecord } from "@/lib/store/types";
@@ -12,6 +14,7 @@ import type { ParameterValue } from "@/types/parameters";
 import { usePublishNotify } from "@/features/publish/usePublishNotify";
 import { usePublishValidate } from "@/features/publish/usePublishValidate";
 import { usePublishExecute } from "@/features/publish/usePublishExecute";
+import { startPublishRuntimeEventTracking } from "@/features/publish/publishRuntimeHighWater";
 
 interface UsePublishRunnerParams {
   appT: TranslationMap;
@@ -63,6 +66,11 @@ export function usePublishRunner({
   configurationRevisionId,
   currentConfigurationBlockedReason,
 }: UsePublishRunnerParams) {
+  // --- Runtime event high-water tracker (idempotent singleton, #360) ---
+  useEffect(() => {
+    startPublishRuntimeEventTracking();
+  }, []);
+
   // --- Log stream (shared, called once) ---
   const {
     outputLog,
