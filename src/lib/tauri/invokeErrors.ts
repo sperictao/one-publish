@@ -91,6 +91,55 @@ export function extractInvokeErrorCode(error: unknown): string | null {
   return extractCodeFromObject(error);
 }
 
+export function extractInvokeErrorKind(error: unknown): string | null {
+  const extractKindFromObject = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    const payload = value as {
+      kind?: unknown;
+      data?: unknown;
+      details?: unknown;
+    };
+
+    if (typeof payload.kind === "string" && payload.kind.trim().length > 0) {
+      return payload.kind.trim().toLowerCase();
+    }
+
+    if (payload.data && typeof payload.data === "object") {
+      const nestedKind = (payload.data as { kind?: unknown }).kind;
+      if (typeof nestedKind === "string" && nestedKind.trim().length > 0) {
+        return nestedKind.trim().toLowerCase();
+      }
+    }
+
+    if (payload.details && typeof payload.details === "object") {
+      const nestedKind = (payload.details as { kind?: unknown }).kind;
+      if (typeof nestedKind === "string" && nestedKind.trim().length > 0) {
+        return nestedKind.trim().toLowerCase();
+      }
+    }
+
+    return null;
+  };
+
+  if (typeof error === "string") {
+    const trimmed = error.trim();
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        return extractKindFromObject(JSON.parse(trimmed));
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  return extractKindFromObject(error);
+}
+
 export function extractInvokeErrorDetails(error: unknown): string | null {
   const extractDetailsFromObject = (value: unknown): string | null => {
     if (!value || typeof value !== "object") {
@@ -143,12 +192,14 @@ export function localizeInvokeError(
 ): string {
   const code = extractInvokeErrorCode(error);
   const localized = code ? translations?.errors?.[code] : undefined;
-  if (typeof localized !== "string" || localized.length === 0) {
-    return extractInvokeErrorMessage(error);
+  if (typeof localized === "string" && localized.length > 0) {
+    const details = extractInvokeErrorDetails(error);
+    return details ? `${localized} | ${details}` : localized;
   }
 
-  const details = extractInvokeErrorDetails(error);
-  return details ? `${localized} | ${details}` : localized;
+  const message = extractInvokeErrorMessage(error);
+  const kind = extractInvokeErrorKind(error);
+  return kind ? `${message} | [${kind}]` : message;
 }
 
 export function analyzeBranchRefreshFailure(
